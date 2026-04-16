@@ -1,0 +1,322 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Hotel {
+  id        Int      @id @default(autoincrement())
+  name      String
+  nameEn    String?
+  location  String
+  city      String?
+  country   String   @default("Saudi Arabia")
+  stars     Int?
+  type      String?
+  group     String?  // muhaidib_serviced | awa_hotels | grand_plaza
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  clients    Client[]
+  contracts  Contract[]
+  userHotels UserHotel[]
+}
+
+model User {
+  id             Int      @id @default(autoincrement())
+  name           String
+  email          String   @unique
+  password       String
+  role           String
+  managerId      Int?
+  isActive       Boolean  @default(true)
+  phone          String?
+  commissionRate Float?   @default(0)
+  smtpHost       String?
+  smtpPort       Int?     @default(587)
+  smtpEmail      String?
+  smtpPassword   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  manager         User?   @relation("UserManager", fields: [managerId], references: [id])
+  subordinates    User[]  @relation("UserManager")
+  assignedClients Client[]
+  contracts       Contract[]
+  approvals       ContractApproval[]
+  visits          Visit[]
+  activities      Activity[]
+  hotels          UserHotel[]
+  pulseScores     DealPulseScore[]
+  payments        Payment[]
+  targets         SalesTarget[]  @relation("TargetUser")
+  setTargets      SalesTarget[]  @relation("TargetSetBy")
+  notifications   Notification[]
+  tasksAssigned   Task[]         @relation("TaskAssignee")
+  tasksCreated    Task[]         @relation("TaskCreator")
+  performanceScores PerformanceScore[] @relation("PerfUser")
+  performanceRatings PerformanceScore[] @relation("PerfRatedBy")
+  emailLogs       EmailLog[]
+  reminders       Reminder[]
+}
+
+model UserHotel {
+  userId  Int
+  hotelId Int
+  user    User  @relation(fields: [userId], references: [id])
+  hotel   Hotel @relation(fields: [hotelId], references: [id])
+
+  @@id([userId, hotelId])
+}
+
+model Client {
+  id             Int      @id @default(autoincrement())
+  companyName    String
+  companyNameEn  String?
+  contactPerson  String
+  phone          String?
+  email          String?
+  address        String?
+  industry       String?
+  clientType     String   @default("lead")
+  source         String?
+  salesRepId     Int
+  hotelId        Int?
+  estimatedRooms Int?
+  annualBudget   Float?
+  website        String?
+  notes          String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  salesRep    User       @relation(fields: [salesRepId], references: [id])
+  hotel       Hotel?     @relation(fields: [hotelId], references: [id])
+  contracts   Contract[]
+  visits      Visit[]
+  activities  Activity[]
+  pulseScore  DealPulseScore?
+  payments    Payment[]
+  tasks       Task[]
+  emailLogs   EmailLog[]
+  reminders   Reminder[]
+}
+
+
+model Contract {
+  id             Int       @id @default(autoincrement())
+  clientId       Int
+  hotelId        Int
+  salesRepId     Int
+  fileUrl        String?
+  fileName       String?
+  roomsCount     Int?
+  ratePerRoom    Float?
+  startDate      DateTime?
+  endDate        DateTime?
+  totalValue     Float?
+  collectedAmount Float?   @default(0)
+  status         String    @default("pending")
+  notes          String?
+  contractRef    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  client    Client             @relation(fields: [clientId], references: [id])
+  hotel     Hotel              @relation(fields: [hotelId], references: [id])
+  salesRep  User               @relation(fields: [salesRepId], references: [id])
+  approvals ContractApproval[]
+  payments  Payment[]
+  tasks     Task[]
+}
+
+model ContractApproval {
+  id         Int      @id @default(autoincrement())
+  contractId Int
+  approvedBy Int
+  status     String
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  contract Contract @relation(fields: [contractId], references: [id])
+  approver User     @relation(fields: [approvedBy], references: [id])
+}
+
+model Visit {
+  id           Int       @id @default(autoincrement())
+  clientId     Int
+  salesRepId   Int
+  visitDate    DateTime
+  visitType    String?
+  purpose      String?
+  outcome      String?
+  nextFollowUp DateTime?
+  notes        String?
+  createdAt    DateTime  @default(now())
+
+  client   Client @relation(fields: [clientId], references: [id])
+  salesRep User   @relation(fields: [salesRepId], references: [id])
+}
+
+model Activity {
+  id          Int      @id @default(autoincrement())
+  clientId    Int
+  userId      Int
+  type        String
+  description String
+  createdAt   DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+// === PAYMENT / COLLECTION TRACKING ===
+model Payment {
+  id          Int      @id @default(autoincrement())
+  contractId  Int
+  clientId    Int
+  amount      Float
+  paymentDate DateTime
+  paymentType String?  // cash | bank_transfer | check | online
+  reference   String?
+  notes       String?
+  collectedBy Int
+  createdAt   DateTime @default(now())
+
+  contract  Contract @relation(fields: [contractId], references: [id])
+  client    Client   @relation(fields: [clientId], references: [id])
+  collector User     @relation(fields: [collectedBy], references: [id])
+}
+
+// === SALES TARGETS ===
+model SalesTarget {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  setById         Int
+  period          String   // monthly | quarterly
+  month           Int?     // 1-12 for monthly
+  quarter         Int?     // 1-4 for quarterly
+  year            Int
+  targetContracts Int?     @default(0)
+  targetRevenue   Float?   @default(0)
+  targetVisits    Int?     @default(0)
+  targetClients   Int?     @default(0)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user  User @relation("TargetUser", fields: [userId], references: [id])
+  setBy User @relation("TargetSetBy", fields: [setById], references: [id])
+
+  @@unique([userId, period, year, month])
+  @@unique([userId, period, year, quarter])
+}
+
+// === DEAL PULSE INTELLIGENCE ===
+model DealPulseScore {
+  id                 Int      @id @default(autoincrement())
+  clientId           Int      @unique
+  salesRepId         Int
+  engagementScore    Int      @default(0)
+  visitScore         Int      @default(0)
+  contractScore      Int      @default(0)
+  recencyScore       Int      @default(0)
+  trend              String   @default("stable")
+  riskLevel          String   @default("low")
+  lastCalculated     DateTime @default(now())
+  daysSinceLastVisit Int?
+  suggestedAction    String?
+
+  client   Client @relation(fields: [clientId], references: [id])
+  salesRep User   @relation(fields: [salesRepId], references: [id])
+}
+
+// === CALENDAR REMINDERS ===
+model Reminder {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  clientId    Int?
+  title       String
+  description String?
+  reminderDate DateTime
+  reminderTime String?  // HH:mm
+  type        String   @default("general") // call | visit | meeting | follow_up | general
+  isCompleted Boolean  @default(false)
+  notified    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id])
+  client Client? @relation(fields: [clientId], references: [id])
+}
+
+// === EMAIL LOG ===
+model EmailLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  clientId  Int?
+  to        String
+  subject   String
+  body      String
+  status    String   @default("sent") // sent | failed
+  createdAt DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id])
+  client Client? @relation(fields: [clientId], references: [id])
+}
+
+// === NOTIFICATIONS ===
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  type      String   // contract_expiring | target_missed | pending_approval | client_inactive | task_assigned | general
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// === TASK MANAGEMENT ===
+model Task {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  assigneeId  Int
+  createdById Int
+  clientId    Int?
+  contractId  Int?
+  priority    String    @default("normal") // urgent | normal
+  status      String    @default("new")    // new | in_progress | completed
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  assignee  User      @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdBy User      @relation("TaskCreator", fields: [createdById], references: [id])
+  client    Client?   @relation(fields: [clientId], references: [id])
+  contract  Contract? @relation(fields: [contractId], references: [id])
+}
+
+// === PERFORMANCE & GAMIFICATION ===
+model PerformanceScore {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  ratedById   Int
+  month       Int
+  year        Int
+  points      Int      @default(0)
+  rating      Int?     // 1-5
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  user    User @relation("PerfUser", fields: [userId], references: [id])
+  ratedBy User @relation("PerfRatedBy", fields: [ratedById], references: [id])
+
+  @@unique([userId, month, year])
+}

@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+**/dist/
+**/build/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+
+# Database
+*.db
+*.db-journal
+**/*.db
+**/*.db-journal
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Uploads (user-uploaded files)
+backend/uploads/
+**/uploads/
+
+# Prisma
+backend/prisma/migrations/
+**/migrations/
+
+# OS
+Thumbs.db
+desktop.ini
