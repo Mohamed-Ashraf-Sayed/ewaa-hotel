@@ -1,0 +1,14 @@
+{
+  "name": "ewaa-hotel-crm",
+  "version": "1.0.0",
+  "description": "Ewaa Hotels CRM",
+  "scripts": {
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "build": "cd frontend && npm install && npm run build && cd ../backend && npm install && npx prisma generate && npx prisma db push",
+    "start": "cd backend && node src/app.js",
+    "postinstall": "npm run install:all"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

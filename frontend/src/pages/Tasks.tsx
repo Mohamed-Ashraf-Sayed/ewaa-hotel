@@ -5,7 +5,7 @@ import Modal from '../components/Modal';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { format, parseISO, isPast } from 'date-fns';
-import { arSA } from 'date-fns/locale';
+import { arSA, enUS } from 'date-fns/locale';
 
 interface Task {
   id: number; title: string; description?: string; priority: string; status: string;
@@ -130,7 +130,7 @@ export default function Tasks() {
                         {task.client && <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{task.client.companyName}</span>}
                         {task.dueDate && (
                           <span className={overdue ? 'text-red-600 font-bold' : ''}>
-                            📅 {format(parseISO(task.dueDate), 'dd MMM', { locale: arSA })}
+                            📅 {format(parseISO(task.dueDate), 'dd MMM', { locale: isAr ? arSA : enUS })}
                             {overdue && (isAr ? ' (متأخر)' : ' (overdue)')}
                           </span>
                         )}

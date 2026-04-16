@@ -12,6 +12,7 @@ interface LeaderEntry {
 }
 
 const MONTHS_AR = ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+const MONTHS_EN = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export default function Leaderboard() {
   const { lang } = useLanguage();
@@ -69,7 +70,7 @@ export default function Leaderboard() {
       <div className="card p-4">
         <div className="flex items-center justify-center gap-4">
           <button onClick={prevMonth} className="p-2 rounded-lg hover:bg-brand-50 text-brand-500"><ChevronRight className="w-5 h-5" /></button>
-          <h2 className="text-lg font-bold text-brand-900 min-w-[180px] text-center">{MONTHS_AR[month]} {year}</h2>
+          <h2 className="text-lg font-bold text-brand-900 min-w-[180px] text-center">{(isAr ? MONTHS_AR : MONTHS_EN)[month]} {year}</h2>
           <button onClick={nextMonth} className="p-2 rounded-lg hover:bg-brand-50 text-brand-500"><ChevronLeft className="w-5 h-5" /></button>
         </div>
       </div>
@@ -169,10 +170,10 @@ export default function Leaderboard() {
         <h3 className="font-bold text-brand-900 text-sm mb-3 text-right">{isAr ? 'كيف تُحسب النقاط؟' : 'How points are calculated'}</h3>
         <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 text-center text-xs ${isAr ? 'flex-row-reverse' : ''}`}>
           {[
-            { label: isAr ? 'كل عقد' : 'Per contract', pts: '50 نقطة', color: 'bg-brand-50 text-brand-700' },
-            { label: isAr ? 'كل عميل جديد' : 'Per new client', pts: '30 نقطة', color: 'bg-sky-50 text-sky-700' },
-            { label: isAr ? 'كل زيارة' : 'Per visit', pts: '10 نقاط', color: 'bg-emerald-50 text-emerald-700' },
-            { label: isAr ? 'كل 10K إيرادات' : 'Per 10K revenue', pts: '1 نقطة', color: 'bg-amber-50 text-amber-700' },
+            { label: isAr ? 'كل عقد' : 'Per contract', pts: isAr ? '50 نقطة' : '50 pts', color: 'bg-brand-50 text-brand-700' },
+            { label: isAr ? 'كل عميل جديد' : 'Per new client', pts: isAr ? '30 نقطة' : '30 pts', color: 'bg-sky-50 text-sky-700' },
+            { label: isAr ? 'كل زيارة' : 'Per visit', pts: isAr ? '10 نقاط' : '10 pts', color: 'bg-emerald-50 text-emerald-700' },
+            { label: isAr ? 'كل 10K إيرادات' : 'Per 10K revenue', pts: isAr ? '1 نقطة' : '1 pt', color: 'bg-amber-50 text-amber-700' },
           ].map(p => (
             <div key={p.label} className={`p-3 rounded-lg ${p.color}`}>
               <p className="font-bold">{p.pts}</p>

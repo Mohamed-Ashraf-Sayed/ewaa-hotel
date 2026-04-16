@@ -4,7 +4,7 @@ import { remindersApi, clientsApi } from '../services/api';
 import Modal from '../components/Modal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { format, parseISO, isToday, isTomorrow, isPast, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay } from 'date-fns';
-import { arSA } from 'date-fns/locale';
+import { arSA, enUS } from 'date-fns/locale';
 
 interface Reminder {
   id: number; title: string; description?: string; reminderDate: string;
@@ -12,20 +12,32 @@ interface Reminder {
   client?: { id: number; companyName: string };
 }
 
-const TYPES = [
+const TYPES_AR = [
   { value: 'call', label: 'مكالمة', icon: '📞', color: 'bg-blue-50 text-blue-700 border-blue-200' },
   { value: 'visit', label: 'زيارة', icon: '📍', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   { value: 'meeting', label: 'اجتماع', icon: '🤝', color: 'bg-violet-50 text-violet-700 border-violet-200' },
   { value: 'follow_up', label: 'متابعة', icon: '🔄', color: 'bg-amber-50 text-amber-700 border-amber-200' },
   { value: 'general', label: 'تذكير عام', icon: '🔔', color: 'bg-brand-50 text-brand-700 border-brand-200' },
 ];
+const TYPES_EN = [
+  { value: 'call', label: 'Call', icon: '📞', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  { value: 'visit', label: 'Visit', icon: '📍', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  { value: 'meeting', label: 'Meeting', icon: '🤝', color: 'bg-violet-50 text-violet-700 border-violet-200' },
+  { value: 'follow_up', label: 'Follow-up', icon: '🔄', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  { value: 'general', label: 'General', icon: '🔔', color: 'bg-brand-50 text-brand-700 border-brand-200' },
+];
 
 const DAYS_AR = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+const DAYS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS_AR = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export default function Calendar() {
   const { lang } = useLanguage();
   const isAr = lang === 'ar';
+  const TYPES = isAr ? TYPES_AR : TYPES_EN;
+  const DAYS = isAr ? DAYS_AR : DAYS_EN;
+  const MONTHS = isAr ? MONTHS_AR : MONTHS_EN;
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -143,13 +155,13 @@ export default function Calendar() {
           {/* Month Nav */}
           <div className="flex items-center justify-between mb-5">
             <button onClick={nextMonth} className="p-2 rounded-lg hover:bg-brand-50 text-brand-500"><ChevronLeft className="w-5 h-5" /></button>
-            <h2 className="text-lg font-bold text-brand-900">{MONTHS_AR[month - 1]} {year}</h2>
+            <h2 className="text-lg font-bold text-brand-900">{MONTHS[month - 1]} {year}</h2>
             <button onClick={prevMonth} className="p-2 rounded-lg hover:bg-brand-50 text-brand-500"><ChevronRight className="w-5 h-5" /></button>
           </div>
 
           {/* Days header */}
           <div className="grid grid-cols-7 gap-1 mb-2">
-            {DAYS_AR.map(d => (
+            {DAYS.map(d => (
               <div key={d} className="text-center text-xs font-semibold text-brand-400 py-1">{d}</div>
             ))}
           </div>
@@ -209,7 +221,7 @@ export default function Calendar() {
                       <div className="flex-1 min-w-0 text-right">
                         <p className="font-semibold text-sm text-brand-900 truncate">{r.title}</p>
                         <p className="text-xs text-brand-400 mt-0.5">
-                          {tomorrow ? (isAr ? 'غداً' : 'Tomorrow') : format(d, 'dd MMM', { locale: arSA })}
+                          {tomorrow ? (isAr ? 'غداً' : 'Tomorrow') : format(d, 'dd MMM', { locale: isAr ? arSA : enUS })}
                           {r.reminderTime ? ` · ${r.reminderTime}` : ''}
                         </p>
                         {r.client && <p className="text-xs text-brand-400">{r.client.companyName}</p>}

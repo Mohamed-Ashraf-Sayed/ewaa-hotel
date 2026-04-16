@@ -76,9 +76,10 @@ export default function Header({ onMenuClick }: Props) {
 
   const timeAgo = (d: string) => {
     const mins = Math.round((Date.now() - new Date(d).getTime()) / 60000);
-    if (mins < 60) return `${mins} د`;
-    if (mins < 1440) return `${Math.round(mins / 60)} س`;
-    return `${Math.round(mins / 1440)} ي`;
+    const isAr = lang === 'ar';
+    if (mins < 60) return isAr ? `${mins} د` : `${mins}m`;
+    if (mins < 1440) return isAr ? `${Math.round(mins / 60)} س` : `${Math.round(mins / 60)}h`;
+    return isAr ? `${Math.round(mins / 1440)} ي` : `${Math.round(mins / 1440)}d`;
   };
 
   return (
