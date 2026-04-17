@@ -55,6 +55,17 @@
 ::-webkit-scrollbar-thumb { @apply bg-brand-200 rounded-full; }
 ::-webkit-scrollbar-thumb:hover { @apply bg-brand-300; }
 
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .card { @apply rounded-lg; }
+  table { font-size: 12px; }
+  th, td { @apply px-2 py-2; }
+  .btn-primary, .btn-secondary { @apply px-3 py-2 text-xs; }
+  .input { @apply text-sm py-2; }
+  .ql-toolbar { @apply flex-wrap; }
+  .ql-editor { min-height: 120px !important; }
+}
+
 /* Quill Editor */
 .ql-container { font-family: 'Cairo', sans-serif !important; min-height: 180px; font-size: 14px; }
 .ql-toolbar { border-color: #d9e2ec !important; background: #f0f4f8; }

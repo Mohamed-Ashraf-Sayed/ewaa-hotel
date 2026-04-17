@@ -83,8 +83,8 @@ export default function Header({ onMenuClick }: Props) {
   };
 
   return (
-    <header className="h-14 bg-white border-b border-brand-100 flex items-center justify-between px-6 flex-shrink-0">
-      <div className="flex items-center gap-3">
+    <header className="h-14 bg-white border-b border-brand-100 flex items-center justify-between px-3 sm:px-6 flex-shrink-0">
+      <div className="flex items-center gap-1.5 sm:gap-3">
         {/* Language toggle */}
         <button
           onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}
@@ -111,7 +111,7 @@ export default function Header({ onMenuClick }: Props) {
           </button>
 
           {showNotifs && (
-            <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-elevated border border-brand-100 z-50 overflow-hidden">
+            <div className="fixed sm:absolute left-0 sm:left-auto right-0 top-14 sm:top-full sm:mt-2 w-full sm:w-80 bg-white sm:rounded-xl shadow-elevated border border-brand-100 z-50 overflow-hidden">
               <div className="flex items-center justify-between p-3 border-b border-brand-100">
                 <button onClick={handleMarkAllRead} className="text-xs text-brand-500 hover:text-brand-700 font-semibold">
                   {lang === 'ar' ? 'قراءة الكل' : 'Mark all read'}
