@@ -244,7 +244,22 @@ async function main() {
       }
     })
   ]);
-  console.log('✅ Created org hierarchy: GM → Vice GM → 2 Directors → 6 Sales Reps + Contract Officer');
+  // Reservations user
+  await prisma.user.create({
+    data: { name: 'قسم الحجوزات', email: 'reservations@hotelcrm.com', password: await hash('res123'), role: 'reservations' }
+  });
+
+  // Credit Manager
+  await prisma.user.create({
+    data: { name: 'محمد العتيبي', email: 'credit@hotelcrm.com', password: await hash('credit123'), role: 'credit_manager', managerId: vgm.id }
+  });
+
+  // Credit Officer
+  await prisma.user.create({
+    data: { name: 'سعد الحربي', email: 'creditofficer@hotelcrm.com', password: await hash('credit123'), role: 'credit_officer', managerId: vgm.id }
+  });
+
+  console.log('✅ Created org hierarchy: GM → Vice GM → 2 Directors → 6 Sales Reps + Contract Officer + Reservations + Credit Manager + Credit Officer');
 
   // === Clients (Saudi companies) ===
   const riyadhHotel = riyadhHotels[0];
