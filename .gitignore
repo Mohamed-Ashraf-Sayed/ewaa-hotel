@@ -15,10 +15,8 @@ build/
 **/.env
 **/.env.local
 
-# Database
-*.db
+# Database journals
 *.db-journal
-**/*.db
 **/*.db-journal
 
 # Logs
