@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Ewaa Hotels CRM",
   "scripts": {
-    "build": "cd frontend && npm install && npm run build && cd ../backend && npm install && npx prisma generate && npx prisma db push --accept-data-loss",
+    "build": "cd frontend && npm install && npm run build && cd ../backend && npm install && npx prisma generate && npx prisma db push --accept-data-loss && node src/seed.js",
     "start": "cd backend && node src/app.js"
   },
   "engines": {
