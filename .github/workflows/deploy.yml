@@ -10,9 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          timeout: 60s
+          command_timeout: 15m
+          script: /var/www/ewaahotels/deploy.sh
+        continue-on-error: false
+
+      - name: Retry deploy on failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          timeout: 90s
+          command_timeout: 15m
           script: /var/www/ewaahotels/deploy.sh
