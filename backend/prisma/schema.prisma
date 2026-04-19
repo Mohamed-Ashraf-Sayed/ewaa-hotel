@@ -291,6 +291,7 @@ model Task {
   id          Int       @id @default(autoincrement())
   title       String
   description String?
+  taskType    String    @default("general") // visit | call | meeting | follow_up | general
   assigneeId  Int
   createdById Int
   clientId    Int?
@@ -299,6 +300,8 @@ model Task {
   status      String    @default("new")    // new | in_progress | completed
   dueDate     DateTime?
   completedAt DateTime?
+  completionNotes String?
+  generatedVisitId Int?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
