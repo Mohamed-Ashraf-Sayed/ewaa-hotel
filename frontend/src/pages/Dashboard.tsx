@@ -437,6 +437,9 @@ function ReservationsDashboard() {
   const [confirming, setConfirming] = useState<number | null>(null);
   const [confirmModal, setConfirmModal] = useState<any>(null);
   const [bookingNotes, setBookingNotes] = useState('');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all');
+  const [hotelFilter, setHotelFilter] = useState<string>('');
 
   const loadContracts = () => {
     contractsApi.getAll({ status: 'approved' }).then(r => {
@@ -445,6 +448,22 @@ function ReservationsDashboard() {
     }).finally(() => setLoading(false));
   };
   useEffect(() => { loadContracts(); }, []);
+
+  // Apply filters
+  const filtered = contracts.filter(c => {
+    if (statusFilter === 'pending' && c.bookingConfirmed) return false;
+    if (statusFilter === 'confirmed' && !c.bookingConfirmed) return false;
+    if (hotelFilter && c.hotel?.name !== hotelFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (c.client?.companyName || '').toLowerCase().includes(q)
+        || (c.contractRef || '').toLowerCase().includes(q)
+        || (c.hotel?.name || '').toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  const uniqueHotels = Array.from(new Set(contracts.map(c => c.hotel?.name).filter(Boolean)));
 
   const handleConfirm = async () => {
     if (!confirmModal) return;
@@ -459,8 +478,6 @@ function ReservationsDashboard() {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const pendingBooking = contracts.filter(c => !c.bookingConfirmed);
-  const newContracts = contracts.filter(c => new Date(c.createdAt) >= sevenDaysAgo);
-  const olderContracts = contracts.filter(c => new Date(c.createdAt) < sevenDaysAgo);
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -551,29 +568,43 @@ function ReservationsDashboard() {
         </div>
       </div>
 
-      {newContracts.length > 0 && (
-        <div>
-          <div className={`flex items-center gap-2 mb-3 ${isAr ? 'flex-row-reverse' : ''}`}>
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <h2 className="font-bold text-brand-900">{isAr ? 'عقود جديدة (آخر 7 أيام)' : 'New contracts (last 7 days)'}</h2>
-            <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md font-bold">{newContracts.length}</span>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {newContracts.map(c => <ContractCard key={c.id} c={c} isNew={true} />)}
-          </div>
+      {/* Search & Filters */}
+      <div className="card p-4 flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-48">
+          <input className={`input ${isAr ? 'pr-9 text-right' : 'pl-9'}`}
+            placeholder={isAr ? 'ابحث باسم الشركة أو رقم العقد أو الفندق...' : 'Search by company, contract ref or hotel...'}
+            value={search} onChange={e => setSearch(e.target.value)} />
+          <span className={`absolute ${isAr ? 'right-3' : 'left-3'} top-2.5 text-brand-400`}>🔍</span>
         </div>
-      )}
+        <select className="input w-44" value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
+          <option value="all">{isAr ? 'كل الحالات' : 'All statuses'}</option>
+          <option value="pending">{isAr ? '⏳ في انتظار الحجز' : '⏳ Pending booking'}</option>
+          <option value="confirmed">{isAr ? '✓ تم تأكيد الحجز' : '✓ Booking confirmed'}</option>
+        </select>
+        <select className="input w-52" value={hotelFilter} onChange={e => setHotelFilter(e.target.value)}>
+          <option value="">{isAr ? 'كل الفنادق' : 'All hotels'}</option>
+          {uniqueHotels.map(h => <option key={h} value={h}>{h}</option>)}
+        </select>
+        {(search || statusFilter !== 'all' || hotelFilter) && (
+          <button className="btn-secondary text-xs" onClick={() => { setSearch(''); setStatusFilter('all'); setHotelFilter(''); }}>
+            {isAr ? 'مسح الفلاتر' : 'Clear filters'}
+          </button>
+        )}
+      </div>
 
+      {/* Results */}
       <div>
-        <h2 className={`font-bold text-brand-900 mb-3 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'كل العقود المعتمدة' : 'All Approved Contracts'}</h2>
-        {contracts.length === 0 ? (
+        <h2 className={`font-bold text-brand-900 mb-3 ${isAr ? 'text-right' : 'text-left'}`}>
+          {isAr ? `النتائج (${filtered.length})` : `Results (${filtered.length})`}
+        </h2>
+        {filtered.length === 0 ? (
           <div className="card py-16 text-center">
             <FileText className="w-12 h-12 text-brand-200 mx-auto mb-3" />
-            <p className="text-brand-400">{isAr ? 'لا توجد عقود معتمدة' : 'No approved contracts'}</p>
+            <p className="text-brand-400">{isAr ? 'لا توجد نتائج' : 'No results'}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {olderContracts.map(c => <ContractCard key={c.id} c={c} isNew={false} />)}
+            {filtered.map(c => <ContractCard key={c.id} c={c} isNew={new Date(c.createdAt) >= sevenDaysAgo} />)}
           </div>
         )}
       </div>

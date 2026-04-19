@@ -481,6 +481,88 @@ const confirmBooking = async (req, res) => {
       });
     }
 
+    // Send email to client company confirming booking + readiness
+    const sender = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const clientEmail = contract.client.email;
+    if (clientEmail && sender.smtpHost && sender.smtpEmail && sender.smtpPassword) {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: sender.smtpHost,
+          port: sender.smtpPort || 587,
+          secure: (sender.smtpPort || 587) === 465,
+          auth: { user: sender.smtpEmail, pass: sender.smtpPassword },
+          tls: { rejectUnauthorized: false },
+        });
+
+        const dateRange = contract.startDate && contract.endDate
+          ? `${new Date(contract.startDate).toLocaleDateString('ar-EG')} → ${new Date(contract.endDate).toLocaleDateString('ar-EG')}`
+          : '-';
+
+        const html = `
+<div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f0f4f8;">
+  <div style="background: linear-gradient(135deg, #2d6a4f, #1a2f44); color: white; padding: 25px; border-radius: 8px 8px 0 0; text-align: center;">
+    <h2 style="margin: 0; font-size: 22px;">✓ تأكيد الحجز</h2>
+    <p style="margin: 8px 0 0; opacity: 0.9; font-size: 14px;">الفندق جاهز ومؤكد لاستقبال النزلاء</p>
+  </div>
+  <div style="background: white; padding: 25px; border-radius: 0 0 8px 8px; border: 1px solid #d9e2ec;">
+    <p style="font-size: 15px; color: #243b53; line-height: 1.7;">
+      السادة/ <strong>${contract.client.companyName}</strong>،<br><br>
+      يسرنا إعلامكم بأنه تم <strong style="color: #2d6a4f;">تأكيد حجز الغرف</strong> الخاصة بعقدكم،
+      وأن الفندق <strong>جاهز تماماً لاستقبال النزلاء</strong> وفقاً للتفاصيل المتفق عليها.
+    </p>
+
+    <div style="background: #f0f4f8; border-radius: 8px; padding: 15px; margin: 20px 0;">
+      <h3 style="margin: 0 0 12px; color: #1a2f44; font-size: 14px;">تفاصيل الحجز:</h3>
+      <table style="width: 100%; font-size: 13px; color: #334e68;">
+        <tr><td style="padding: 5px 0;">رقم العقد:</td><td style="font-weight: bold; text-align: left;">${contract.contractRef || '#' + id}</td></tr>
+        <tr><td style="padding: 5px 0;">الفندق:</td><td style="font-weight: bold; text-align: left;">${contract.hotel?.name || '-'}</td></tr>
+        <tr><td style="padding: 5px 0;">عدد الغرف:</td><td style="font-weight: bold; text-align: left;">${contract.roomsCount || '-'}</td></tr>
+        <tr><td style="padding: 5px 0;">سعر الغرفة/ليلة:</td><td style="font-weight: bold; text-align: left;">${contract.ratePerRoom ? contract.ratePerRoom + ' ر.س' : '-'}</td></tr>
+        <tr><td style="padding: 5px 0;">فترة الحجز:</td><td style="font-weight: bold; text-align: left;">${dateRange}</td></tr>
+      </table>
+    </div>
+
+    ${bookingNotes ? `
+    <div style="background: #fff8e6; border-right: 4px solid #f0b429; padding: 12px 15px; border-radius: 4px; margin: 15px 0;">
+      <p style="margin: 0; font-size: 13px; color: #8d2b0b;"><strong>ملاحظات إضافية:</strong> ${bookingNotes}</p>
+    </div>
+    ` : ''}
+
+    <p style="font-size: 14px; color: #486581; line-height: 1.6;">
+      نتشرف بخدمتكم ونؤكد لكم جاهزيتنا التامة لاستقبال نزلائكم في الموعد المحدد.
+      لأي استفسار يرجى التواصل مع مندوبكم: <strong>${contract.salesRep?.name || ''}</strong>.
+    </p>
+
+    <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #d9e2ec; text-align: center;">
+      <p style="color: #1a2f44; font-weight: bold; margin: 0;">فنادق إيواء — Ewaa Hotels</p>
+      <p style="color: #829ab1; font-size: 12px; margin: 5px 0 0;">رسالة تلقائية من نظام إدارة العقود والحجوزات</p>
+    </div>
+  </div>
+</div>`;
+
+        await transporter.sendMail({
+          from: `"${sender.name} - فنادق إيواء" <${sender.smtpEmail}>`,
+          to: clientEmail,
+          subject: `تأكيد حجز الغرف - الفندق جاهز لاستقبال النزلاء - ${contract.contractRef || '#' + id}`,
+          html,
+        });
+
+        // Log email
+        await prisma.emailLog.create({
+          data: {
+            userId: req.user.id,
+            clientId: contract.client.id,
+            to: clientEmail,
+            subject: `تأكيد حجز الغرف - الفندق جاهز لاستقبال النزلاء`,
+            body: html,
+            status: 'sent',
+          }
+        });
+      } catch (mailErr) {
+        console.error('[Booking Email] Failed:', mailErr.message);
+      }
+    }
+
     res.json(updated);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
