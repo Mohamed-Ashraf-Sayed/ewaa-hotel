@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Building2, FileText, MapPin, Clock, AlertTriangle, TrendingUp, Users, ArrowLeft } from 'lucide-react';
 import { dashboardApi, contractsApi } from '../services/api';
+import Modal from '../components/Modal';
 import { DashboardData } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -433,15 +434,31 @@ function ReservationsDashboard() {
   const [contracts, setContracts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const [confirming, setConfirming] = useState<number | null>(null);
+  const [confirmModal, setConfirmModal] = useState<any>(null);
+  const [bookingNotes, setBookingNotes] = useState('');
+
+  const loadContracts = () => {
     contractsApi.getAll({ status: 'approved' }).then(r => {
       const sorted = r.data.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setContracts(sorted);
     }).finally(() => setLoading(false));
-  }, []);
+  };
+  useEffect(() => { loadContracts(); }, []);
+
+  const handleConfirm = async () => {
+    if (!confirmModal) return;
+    setConfirming(confirmModal.id);
+    try {
+      await contractsApi.confirmBooking(confirmModal.id, bookingNotes);
+      setConfirmModal(null); setBookingNotes(''); loadContracts();
+    } catch { alert(isAr ? 'فشل التأكيد' : 'Failed'); }
+    finally { setConfirming(null); }
+  };
 
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const pendingBooking = contracts.filter(c => !c.bookingConfirmed);
   const newContracts = contracts.filter(c => new Date(c.createdAt) >= sevenDaysAgo);
   const olderContracts = contracts.filter(c => new Date(c.createdAt) < sevenDaysAgo);
 
@@ -452,11 +469,17 @@ function ReservationsDashboard() {
   );
 
   const ContractCard = ({ c, isNew }: { c: any; isNew: boolean }) => (
-    <div className={`card p-5 ${isNew ? (isAr ? 'border-r-4 border-r-emerald-500' : 'border-l-4 border-l-emerald-500') : ''}`}>
+    <div className={`card p-5 ${c.bookingConfirmed ? (isAr ? 'border-r-4 border-r-emerald-500 bg-emerald-50/20' : 'border-l-4 border-l-emerald-500 bg-emerald-50/20') : isNew ? (isAr ? 'border-r-4 border-r-amber-500' : 'border-l-4 border-l-amber-500') : ''}`}>
       <div className={`flex items-start justify-between ${isAr ? 'flex-row-reverse' : ''}`}>
         <div className={`flex-1 ${isAr ? 'text-right' : 'text-left'}`}>
-          <div className={`flex items-center gap-2 ${isAr ? 'justify-end' : 'justify-start'}`}>
-            {isNew && <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md">{isAr ? 'جديد' : 'New'}</span>}
+          <div className={`flex items-center gap-2 flex-wrap ${isAr ? 'justify-end' : 'justify-start'}`}>
+            {c.bookingConfirmed ? (
+              <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">✓ {isAr ? 'تم تأكيد الحجز' : 'Booking Confirmed'}</span>
+            ) : isNew ? (
+              <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md">{isAr ? 'جديد - يحتاج حجز' : 'New - Needs Booking'}</span>
+            ) : (
+              <span className="text-[10px] font-bold bg-brand-50 text-brand-600 px-2 py-0.5 rounded-md">{isAr ? 'في انتظار الحجز' : 'Pending Booking'}</span>
+            )}
             <p className="font-bold text-brand-900">{c.client?.companyName}</p>
           </div>
           <p className="text-xs text-brand-400 mt-1">{c.hotel?.name} · {c.contractRef || `#${c.id}`}</p>
@@ -482,6 +505,22 @@ function ReservationsDashboard() {
         <span>📅 {c.startDate ? format(parseISO(c.startDate), 'dd MMM yyyy', { locale }) : '—'} → {c.endDate ? format(parseISO(c.endDate), 'dd MMM yyyy', { locale }) : '—'}</span>
         <span>👤 {c.salesRep?.name}</span>
       </div>
+
+      {c.bookingConfirmed ? (
+        <div className={`mt-3 p-2.5 rounded-lg bg-emerald-50 border border-emerald-100 text-xs ${isAr ? 'text-right' : 'text-left'}`}>
+          <p className="text-emerald-700 font-semibold">
+            {isAr ? '✓ تم تأكيد الحجز في ' : '✓ Booking confirmed on '}
+            {c.bookingConfirmedAt ? format(parseISO(c.bookingConfirmedAt), 'dd MMM yyyy', { locale }) : ''}
+          </p>
+          {c.bookingNotes && <p className="text-emerald-600 mt-1">{c.bookingNotes}</p>}
+        </div>
+      ) : (
+        <button
+          onClick={() => { setConfirmModal(c); setBookingNotes(''); }}
+          className="w-full mt-3 px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+          ✓ {isAr ? 'تأكيد حجز الغرف' : 'Confirm Room Booking'}
+        </button>
+      )}
     </div>
   );
 
@@ -495,13 +534,18 @@ function ReservationsDashboard() {
           </div>
           <div className="flex items-center gap-6">
             <div className="text-center text-white">
-              <p className="text-2xl font-bold">{newContracts.length}</p>
-              <p className="text-xs text-brand-200">{isAr ? 'عقد جديد' : 'New contracts'}</p>
+              <p className="text-2xl font-bold text-amber-300">{pendingBooking.length}</p>
+              <p className="text-xs text-brand-200">{isAr ? 'في انتظار الحجز' : 'Pending booking'}</p>
+            </div>
+            <div className="w-px h-10 bg-white/20" />
+            <div className="text-center text-white">
+              <p className="text-2xl font-bold text-emerald-300">{contracts.filter(c => c.bookingConfirmed).length}</p>
+              <p className="text-xs text-brand-200">{isAr ? 'تم حجزها' : 'Booked'}</p>
             </div>
             <div className="w-px h-10 bg-white/20" />
             <div className="text-center text-white">
               <p className="text-2xl font-bold">{contracts.length}</p>
-              <p className="text-xs text-brand-200">{isAr ? 'إجمالي العقود' : 'Total contracts'}</p>
+              <p className="text-xs text-brand-200">{isAr ? 'الإجمالي' : 'Total'}</p>
             </div>
           </div>
         </div>
@@ -533,6 +577,34 @@ function ReservationsDashboard() {
           </div>
         )}
       </div>
+
+      {/* Confirm Booking Modal */}
+      <Modal open={!!confirmModal} onClose={() => setConfirmModal(null)} title={isAr ? 'تأكيد حجز الغرف' : 'Confirm Room Booking'}>
+        {confirmModal && (
+          <div className="space-y-4">
+            <div className={`p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm ${isAr ? 'text-right' : 'text-left'}`}>
+              <p className="font-bold text-emerald-800">{confirmModal.client?.companyName}</p>
+              <p className="text-xs text-emerald-700 mt-1">{confirmModal.hotel?.name} · {confirmModal.contractRef || `#${confirmModal.id}`}</p>
+              <p className="text-xs text-emerald-600 mt-1">
+                {confirmModal.roomsCount} {isAr ? 'غرفة' : 'rooms'} × {confirmModal.ratePerRoom} {isAr ? 'ر.س/ليلة' : 'SAR/night'}
+              </p>
+            </div>
+            <div>
+              <label className="label">{isAr ? 'ملاحظات الحجز (رقم الحجز، التواريخ، إلخ)' : 'Booking Notes (booking ref, dates, etc.)'}</label>
+              <textarea className="input resize-none" rows={4} value={bookingNotes}
+                onChange={e => setBookingNotes(e.target.value)}
+                placeholder={isAr ? 'مثال: رقم الحجز BK-12345، تاريخ الوصول...' : 'e.g. Booking ref BK-12345, check-in date...'} />
+            </div>
+            <div className="flex gap-3">
+              <button className="btn-secondary" onClick={() => setConfirmModal(null)}>{isAr ? 'إلغاء' : 'Cancel'}</button>
+              <button className="btn-primary flex-1 justify-center bg-emerald-600 hover:bg-emerald-700"
+                onClick={handleConfirm} disabled={confirming === confirmModal.id}>
+                {confirming === confirmModal.id ? (isAr ? 'جاري التأكيد...' : 'Confirming...') : `✓ ${isAr ? 'تأكيد الحجز' : 'Confirm Booking'}`}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

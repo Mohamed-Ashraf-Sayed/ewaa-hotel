@@ -121,6 +121,10 @@ model Contract {
   totalValue     Float?
   collectedAmount Float?   @default(0)
   status         String    @default("pending")
+  bookingConfirmed Boolean  @default(false)
+  bookingConfirmedAt DateTime?
+  bookingConfirmedBy Int?
+  bookingNotes   String?
   notes          String?
   contractRef    String?
   createdAt      DateTime  @default(now())

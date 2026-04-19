@@ -427,4 +427,64 @@ const recalculatePulse = async (clientId) => {
   }
 };
 
-module.exports = { getContracts, getContract, uploadContract, approveContract, getExpiringContracts, downloadContract, recalculatePulse };
+// PUT /contracts/:id/confirm-booking — reservations confirms booking
+const confirmBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { bookingNotes } = req.body;
+
+    const contract = await prisma.contract.findUnique({
+      where: { id: parseInt(id) },
+      include: { client: true, hotel: true, salesRep: true }
+    });
+    if (!contract) return res.status(404).json({ message: 'Contract not found' });
+    if (contract.status !== 'approved') {
+      return res.status(400).json({ message: 'العقد لم يتم اعتماده نهائياً بعد' });
+    }
+
+    const updated = await prisma.contract.update({
+      where: { id: parseInt(id) },
+      data: {
+        bookingConfirmed: true,
+        bookingConfirmedAt: new Date(),
+        bookingConfirmedBy: req.user.id,
+        bookingNotes: bookingNotes || null,
+      }
+    });
+
+    // Activity log
+    await prisma.activity.create({
+      data: {
+        clientId: contract.client.id,
+        userId: req.user.id,
+        type: 'contract_approval',
+        description: `تم تأكيد حجز الغرف لعقد ${contract.contractRef || '#' + id} بواسطة ${req.user.name}${bookingNotes ? ': ' + bookingNotes : ''}`
+      }
+    });
+
+    // Notify sales rep + management
+    const recipients = [contract.salesRepId];
+    const managers = await prisma.user.findMany({
+      where: { role: { in: ['general_manager', 'vice_gm', 'sales_director'] }, isActive: true }
+    });
+    managers.forEach(m => recipients.push(m.id));
+
+    for (const userId of [...new Set(recipients)]) {
+      await prisma.notification.create({
+        data: {
+          userId,
+          type: 'general',
+          title: 'تأكيد حجز الغرف',
+          message: `تم تأكيد حجز الغرف لعقد ${contract.contractRef || '#' + id} - ${contract.client.companyName}`,
+          link: '/contracts',
+        }
+      });
+    }
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+module.exports = { getContracts, getContract, uploadContract, approveContract, confirmBooking, getExpiringContracts, downloadContract, recalculatePulse };

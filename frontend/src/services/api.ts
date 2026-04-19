@@ -66,6 +66,8 @@ export const contractsApi = {
   upload: (formData: FormData) => api.post('/contracts', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   approve: (id: number, status: 'approved' | 'rejected', notes?: string) =>
     api.put(`/contracts/${id}/approve`, { status, notes }),
+  confirmBooking: (id: number, bookingNotes?: string) =>
+    api.put(`/contracts/${id}/confirm-booking`, { bookingNotes }),
   download: (id: number) => api.get(`/contracts/${id}/download`, { responseType: 'blob' })
 };
 
