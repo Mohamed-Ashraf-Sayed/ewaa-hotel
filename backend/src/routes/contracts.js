@@ -10,6 +10,6 @@ router.get('/:id', authenticate, getContract);
 router.get('/:id/download', authenticate, downloadContract);
 router.post('/', authenticate, authorize('sales_rep', 'sales_director'), upload.single('file'), uploadContract);
 router.put('/:id/approve', authenticate, authorize('sales_director', 'contract_officer', 'credit_manager', 'general_manager', 'vice_gm'), approveContract);
-router.put('/:id/confirm-booking', authenticate, authorize('reservations', 'general_manager', 'vice_gm'), confirmBooking);
+router.put('/:id/confirm-booking', authenticate, authorize('reservations', 'general_manager', 'vice_gm'), upload.single('confirmationLetter'), confirmBooking);
 
 module.exports = router;

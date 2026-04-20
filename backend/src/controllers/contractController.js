@@ -442,14 +442,20 @@ const confirmBooking = async (req, res) => {
       return res.status(400).json({ message: 'العقد لم يتم اعتماده نهائياً بعد' });
     }
 
+    const data = {
+      bookingConfirmed: true,
+      bookingConfirmedAt: new Date(),
+      bookingConfirmedBy: req.user.id,
+      bookingNotes: bookingNotes || null,
+    };
+    if (req.file) {
+      data.confirmationLetterUrl = `/uploads/${req.file.filename}`;
+      data.confirmationLetterName = req.file.originalname;
+    }
+
     const updated = await prisma.contract.update({
       where: { id: parseInt(id) },
-      data: {
-        bookingConfirmed: true,
-        bookingConfirmedAt: new Date(),
-        bookingConfirmedBy: req.user.id,
-        bookingNotes: bookingNotes || null,
-      }
+      data
     });
 
     // Activity log
@@ -528,6 +534,14 @@ const confirmBooking = async (req, res) => {
     </div>
     ` : ''}
 
+    ${req.file ? `
+    <div style="background: #e6f4ea; border-right: 4px solid #2d6a4f; padding: 12px 15px; border-radius: 4px; margin: 15px 0;">
+      <p style="margin: 0; font-size: 13px; color: #1a4d2e;">
+        📎 <strong>ملف تأكيد الحجز مرفق</strong> (Confirmation Letter من نظام Opera Cloud)
+      </p>
+    </div>
+    ` : ''}
+
     <p style="font-size: 14px; color: #486581; line-height: 1.6;">
       نتشرف بخدمتكم ونؤكد لكم جاهزيتنا التامة لاستقبال نزلائكم في الموعد المحدد.
       لأي استفسار يرجى التواصل مع مندوبكم: <strong>${contract.salesRep?.name || ''}</strong>.
@@ -540,12 +554,22 @@ const confirmBooking = async (req, res) => {
   </div>
 </div>`;
 
-        await transporter.sendMail({
+        const mailOptions = {
           from: `"${sender.name} - فنادق إيواء" <${sender.smtpEmail}>`,
           to: clientEmail,
           subject: `تأكيد حجز الغرف - الفندق جاهز لاستقبال النزلاء - ${contract.contractRef || '#' + id}`,
           html,
-        });
+        };
+
+        // Attach confirmation letter if uploaded
+        if (req.file) {
+          mailOptions.attachments = [{
+            filename: req.file.originalname,
+            path: path.join(__dirname, '../../uploads', req.file.filename),
+          }];
+        }
+
+        await transporter.sendMail(mailOptions);
 
         // Log email
         await prisma.emailLog.create({

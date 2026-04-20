@@ -62,6 +62,7 @@ model User {
   performanceRatings PerformanceScore[] @relation("PerfRatedBy")
   emailLogs       EmailLog[]
   reminders       Reminder[]
+  uploadedAttachments ClientAttachment[]
 }
 
 model UserHotel {
@@ -104,6 +105,23 @@ model Client {
   tasks       Task[]
   emailLogs   EmailLog[]
   reminders   Reminder[]
+  attachments ClientAttachment[]
+}
+
+model ClientAttachment {
+  id           Int      @id @default(autoincrement())
+  clientId     Int
+  uploadedById Int
+  type         String   // commercial_register | tax_card | id_copy | contract | other
+  fileName     String
+  fileUrl      String
+  fileSize     Int?
+  mimeType     String?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  client     Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  uploadedBy User   @relation(fields: [uploadedById], references: [id])
 }
 
 
@@ -125,6 +143,8 @@ model Contract {
   bookingConfirmedAt DateTime?
   bookingConfirmedBy Int?
   bookingNotes   String?
+  confirmationLetterUrl String?
+  confirmationLetterName String?
   notes          String?
   contractRef    String?
   createdAt      DateTime  @default(now())

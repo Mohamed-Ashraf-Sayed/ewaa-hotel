@@ -66,8 +66,12 @@ export const contractsApi = {
   upload: (formData: FormData) => api.post('/contracts', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   approve: (id: number, status: 'approved' | 'rejected', notes?: string) =>
     api.put(`/contracts/${id}/approve`, { status, notes }),
-  confirmBooking: (id: number, bookingNotes?: string) =>
-    api.put(`/contracts/${id}/confirm-booking`, { bookingNotes }),
+  confirmBooking: (id: number, bookingNotes?: string, file?: File) => {
+    const fd = new FormData();
+    if (bookingNotes) fd.append('bookingNotes', bookingNotes);
+    if (file) fd.append('confirmationLetter', file);
+    return api.put(`/contracts/${id}/confirm-booking`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
   download: (id: number) => api.get(`/contracts/${id}/download`, { responseType: 'blob' })
 };
 
@@ -150,6 +154,15 @@ export const emailApi = {
     return api.post('/email/send', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   getLogs: (params?: any) => api.get('/email/logs', { params }),
+};
+
+// Client Attachments
+export const attachmentsApi = {
+  list: (clientId: number) => api.get(`/clients/${clientId}/attachments`),
+  upload: (clientId: number, formData: FormData) =>
+    api.post(`/clients/${clientId}/attachments`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  delete: (id: number) => api.delete(`/attachments/${id}`),
+  download: (id: number) => api.get(`/attachments/${id}/download`, { responseType: 'blob' }),
 };
 
 // Reminders / Calendar

@@ -28,6 +28,7 @@ app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/gamification', require('./routes/gamification'));
 app.use('/api/email', require('./routes/email'));
 app.use('/api/reminders', require('./routes/reminders'));
+app.use('/api', require('./routes/attachments'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
 

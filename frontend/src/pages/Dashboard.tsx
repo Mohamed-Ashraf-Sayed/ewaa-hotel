@@ -437,6 +437,7 @@ function ReservationsDashboard() {
   const [confirming, setConfirming] = useState<number | null>(null);
   const [confirmModal, setConfirmModal] = useState<any>(null);
   const [bookingNotes, setBookingNotes] = useState('');
+  const [confirmationFile, setConfirmationFile] = useState<File | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all');
   const [hotelFilter, setHotelFilter] = useState<string>('');
@@ -469,8 +470,8 @@ function ReservationsDashboard() {
     if (!confirmModal) return;
     setConfirming(confirmModal.id);
     try {
-      await contractsApi.confirmBooking(confirmModal.id, bookingNotes);
-      setConfirmModal(null); setBookingNotes(''); loadContracts();
+      await contractsApi.confirmBooking(confirmModal.id, bookingNotes, confirmationFile || undefined);
+      setConfirmModal(null); setBookingNotes(''); setConfirmationFile(null); loadContracts();
     } catch { alert(isAr ? 'فشل التأكيد' : 'Failed'); }
     finally { setConfirming(null); }
   };
@@ -530,10 +531,16 @@ function ReservationsDashboard() {
             {c.bookingConfirmedAt ? format(parseISO(c.bookingConfirmedAt), 'dd MMM yyyy', { locale }) : ''}
           </p>
           {c.bookingNotes && <p className="text-emerald-600 mt-1">{c.bookingNotes}</p>}
+          {c.confirmationLetterUrl && (
+            <a href={c.confirmationLetterUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 mt-2 text-emerald-700 hover:text-emerald-900 font-semibold underline">
+              📎 {c.confirmationLetterName || (isAr ? 'ملف التأكيد' : 'Confirmation Letter')}
+            </a>
+          )}
         </div>
       ) : (
         <button
-          onClick={() => { setConfirmModal(c); setBookingNotes(''); }}
+          onClick={() => { setConfirmModal(c); setBookingNotes(''); setConfirmationFile(null); }}
           className="w-full mt-3 px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
           ✓ {isAr ? 'تأكيد حجز الغرف' : 'Confirm Room Booking'}
         </button>
@@ -622,9 +629,23 @@ function ReservationsDashboard() {
             </div>
             <div>
               <label className="label">{isAr ? 'ملاحظات الحجز (رقم الحجز، التواريخ، إلخ)' : 'Booking Notes (booking ref, dates, etc.)'}</label>
-              <textarea className="input resize-none" rows={4} value={bookingNotes}
+              <textarea className="input resize-none" rows={3} value={bookingNotes}
                 onChange={e => setBookingNotes(e.target.value)}
                 placeholder={isAr ? 'مثال: رقم الحجز BK-12345، تاريخ الوصول...' : 'e.g. Booking ref BK-12345, check-in date...'} />
+            </div>
+            <div>
+              <label className="label">
+                📎 {isAr ? 'ملف تأكيد الحجز (Confirmation Letter من Opera Cloud)' : 'Confirmation Letter (from Opera Cloud)'}
+              </label>
+              <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                onChange={e => setConfirmationFile(e.target.files?.[0] || null)}
+                className="w-full text-sm text-brand-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-emerald-200 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 file:cursor-pointer" />
+              {confirmationFile && (
+                <p className="text-xs text-emerald-600 mt-1">✓ {confirmationFile.name} ({(confirmationFile.size / 1024).toFixed(0)} KB)</p>
+              )}
+              <p className="text-[11px] text-brand-400 mt-1">
+                {isAr ? '💡 الملف ده هيتبعت كمرفق مع إيميل تأكيد الحجز للعميل' : '💡 This file will be attached to the booking confirmation email'}
+              </p>
             </div>
             <div className="flex gap-3">
               <button className="btn-secondary" onClick={() => setConfirmModal(null)}>{isAr ? 'إلغاء' : 'Cancel'}</button>

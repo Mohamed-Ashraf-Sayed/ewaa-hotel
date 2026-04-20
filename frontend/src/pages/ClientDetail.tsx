@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowRight, FileText, Plus, Clock, MapPin, CreditCard, Receipt, Mail } from 'lucide-react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
-import { clientsApi, visitsApi, activitiesApi, contractsApi, hotelsApi, paymentsApi, pdfApi, emailApi } from '../services/api';
+import { clientsApi, visitsApi, activitiesApi, contractsApi, hotelsApi, paymentsApi, pdfApi, emailApi, attachmentsApi } from '../services/api';
 import { Client, Visit, Activity, Contract, Hotel, Payment } from '../types';
 import Modal from '../components/Modal';
 
@@ -26,8 +26,13 @@ export default function ClientDetail() {
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'visits' | 'contracts' | 'activities' | 'payments' | 'emails'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'visits' | 'contracts' | 'activities' | 'payments' | 'emails' | 'attachments'>('overview');
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
+  const [attachments, setAttachments] = useState<any[]>([]);
+  const [showAttachmentModal, setShowAttachmentModal] = useState(false);
+  const [attachmentForm, setAttachmentForm] = useState({ type: 'commercial_register', notes: '' });
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [uploadingAtt, setUploadingAtt] = useState(false);
   const [showVisitModal, setShowVisitModal] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [showContractModal, setShowContractModal] = useState(false);
@@ -77,15 +82,41 @@ export default function ClientDetail() {
   const [paymentForm, setPaymentForm] = useState({ contractId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'bank_transfer', reference: '', notes: '' });
 
   const load = async () => {
-    const [clientRes, paymentsRes, emailRes] = await Promise.all([
+    const [clientRes, paymentsRes, emailRes, attRes] = await Promise.all([
       clientsApi.getOne(parseInt(id!)),
       paymentsApi.getAll({ clientId: parseInt(id!) }),
       emailApi.getLogs({ clientId: id }),
+      attachmentsApi.list(parseInt(id!)).catch(() => ({ data: [] })),
     ]);
     setClient(clientRes.data);
     setPayments(paymentsRes.data);
     setEmailLogs(emailRes.data);
+    setAttachments(attRes.data);
     setLoading(false);
+  };
+
+  const handleUploadAttachment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!attachmentFile) { alert(isAr ? 'اختر ملف' : 'Choose a file'); return; }
+    setUploadingAtt(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', attachmentFile);
+      fd.append('type', attachmentForm.type);
+      if (attachmentForm.notes) fd.append('notes', attachmentForm.notes);
+      await attachmentsApi.upload(parseInt(id!), fd);
+      setShowAttachmentModal(false);
+      setAttachmentForm({ type: 'commercial_register', notes: '' });
+      setAttachmentFile(null);
+      load();
+    } catch { alert(isAr ? 'فشل الرفع' : 'Upload failed'); }
+    finally { setUploadingAtt(false); }
+  };
+
+  const deleteAttachment = async (attId: number) => {
+    if (!confirm(isAr ? 'حذف المرفق؟' : 'Delete attachment?')) return;
+    await attachmentsApi.delete(attId);
+    load();
   };
 
   useEffect(() => { load(); hotelsApi.getAll().then(r => setHotels(r.data)); }, [id]);
@@ -152,6 +183,7 @@ export default function ClientDetail() {
     { key: 'activities', label: `${t('tab_activities')} (${clientData.activities?.length || 0})` },
     { key: 'payments', label: `${t('tab_payments')} (${payments.length})` },
     { key: 'emails', label: `${isAr ? 'الإيميلات' : 'Emails'} (${emailLogs.length})` },
+    { key: 'attachments', label: `${isAr ? 'المرفقات' : 'Attachments'} (${attachments.length})` },
   ];
 
   const approvedContracts = clientData.contracts?.filter((c: Contract) => c.status === 'approved') || [];
@@ -448,6 +480,129 @@ export default function ClientDetail() {
           )}
         </div>
       )}
+
+      {/* Attachments Tab */}
+      {activeTab === 'attachments' && (() => {
+        const ATT_TYPES_AR: Record<string, { label: string; icon: string; color: string }> = {
+          commercial_register: { label: 'السجل التجاري', icon: '📋', color: 'bg-brand-50 text-brand-700' },
+          tax_card: { label: 'البطاقة الضريبية', icon: '🧾', color: 'bg-amber-50 text-amber-700' },
+          id_copy: { label: 'صورة الهوية', icon: '🪪', color: 'bg-sky-50 text-sky-700' },
+          contract: { label: 'عقد', icon: '📄', color: 'bg-violet-50 text-violet-700' },
+          other: { label: 'أخرى', icon: '📎', color: 'bg-brand-50 text-brand-500' },
+        };
+        const ATT_TYPES_EN: Record<string, { label: string; icon: string; color: string }> = {
+          commercial_register: { label: 'Commercial Register', icon: '📋', color: 'bg-brand-50 text-brand-700' },
+          tax_card: { label: 'Tax Card', icon: '🧾', color: 'bg-amber-50 text-amber-700' },
+          id_copy: { label: 'ID Copy', icon: '🪪', color: 'bg-sky-50 text-sky-700' },
+          contract: { label: 'Contract', icon: '📄', color: 'bg-violet-50 text-violet-700' },
+          other: { label: 'Other', icon: '📎', color: 'bg-brand-50 text-brand-500' },
+        };
+        const ATT_TYPES = isAr ? ATT_TYPES_AR : ATT_TYPES_EN;
+
+        return (
+          <div>
+            <div className={`flex items-center justify-between mb-4 ${isAr ? 'flex-row-reverse' : ''}`}>
+              <h3 className={`font-bold text-brand-900 ${isAr ? 'text-right' : ''}`}>
+                {isAr ? 'مرفقات العميل' : 'Client Attachments'}
+              </h3>
+              <button className="btn-primary text-sm" onClick={() => setShowAttachmentModal(true)}>
+                <Plus className="w-4 h-4" /> {isAr ? 'إضافة مرفق' : 'Add Attachment'}
+              </button>
+            </div>
+            {attachments.length === 0 ? (
+              <div className="card py-16 text-center">
+                <FileText className="w-12 h-12 text-brand-200 mx-auto mb-3" />
+                <p className="text-brand-400 font-semibold">{isAr ? 'لا توجد مرفقات' : 'No attachments yet'}</p>
+                <p className="text-xs text-brand-400 mt-2">
+                  {isAr ? 'ارفع السجل التجاري، البطاقة الضريبية، وأي وثائق أخرى' : 'Upload commercial register, tax card, and other documents'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {attachments.map((att: any) => {
+                  const ti = ATT_TYPES[att.type] || ATT_TYPES.other;
+                  const isImage = att.mimeType?.startsWith('image/');
+                  return (
+                    <div key={att.id} className="card p-4 hover:border-brand-300 transition-all">
+                      <div className={`flex items-start justify-between mb-3 ${isAr ? 'flex-row-reverse' : ''}`}>
+                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-2xl ${ti.color}`}>
+                          {ti.icon}
+                        </div>
+                        <button onClick={() => deleteAttachment(att.id)}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-brand-300 hover:text-red-500 transition-colors">
+                          🗑
+                        </button>
+                      </div>
+                      <div className={isAr ? 'text-right' : 'text-left'}>
+                        <p className={`text-[11px] font-bold px-2 py-0.5 rounded-md inline-block ${ti.color}`}>{ti.label}</p>
+                        <p className="font-semibold text-sm text-brand-900 mt-2 truncate" title={att.fileName}>{att.fileName}</p>
+                        <p className="text-[11px] text-brand-400 mt-1">
+                          {att.fileSize ? `${(att.fileSize / 1024).toFixed(0)} KB` : ''} · {format(parseISO(att.createdAt), 'dd MMM yyyy', { locale })}
+                        </p>
+                        <p className="text-[10px] text-brand-400 mt-0.5">{att.uploadedBy?.name}</p>
+                        {att.notes && <p className="text-xs text-brand-500 mt-2 italic">{att.notes}</p>}
+                      </div>
+                      <div className={`flex gap-2 mt-3 ${isAr ? 'flex-row-reverse' : ''}`}>
+                        <a href={att.fileUrl} target="_blank" rel="noopener noreferrer"
+                          className="flex-1 text-center px-3 py-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-700 text-xs font-semibold">
+                          {isImage ? '👁 ' + (isAr ? 'معاينة' : 'View') : '📄 ' + (isAr ? 'فتح' : 'Open')}
+                        </a>
+                        <a href={att.fileUrl} download={att.fileName}
+                          className="flex-1 text-center px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                          ⬇ {isAr ? 'تحميل' : 'Download'}
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Attachment Upload Modal */}
+      <Modal open={showAttachmentModal} onClose={() => setShowAttachmentModal(false)}
+        title={isAr ? 'إضافة مرفق جديد' : 'Add New Attachment'}>
+        <form onSubmit={handleUploadAttachment} className="space-y-4">
+          <div>
+            <label className="label">{isAr ? 'نوع المرفق' : 'Attachment Type'} *</label>
+            <select className="input" required value={attachmentForm.type}
+              onChange={e => setAttachmentForm(p => ({ ...p, type: e.target.value }))}>
+              <option value="commercial_register">{isAr ? '📋 السجل التجاري' : '📋 Commercial Register'}</option>
+              <option value="tax_card">{isAr ? '🧾 البطاقة الضريبية' : '🧾 Tax Card'}</option>
+              <option value="id_copy">{isAr ? '🪪 صورة الهوية' : '🪪 ID Copy'}</option>
+              <option value="contract">{isAr ? '📄 عقد / اتفاقية' : '📄 Contract / Agreement'}</option>
+              <option value="other">{isAr ? '📎 أخرى' : '📎 Other'}</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">{isAr ? 'الملف' : 'File'} *</label>
+            <input type="file" required accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+              onChange={e => setAttachmentFile(e.target.files?.[0] || null)}
+              className="w-full text-sm text-brand-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-brand-200 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 file:cursor-pointer" />
+            {attachmentFile && (
+              <p className="text-xs text-brand-500 mt-1">✓ {attachmentFile.name} ({(attachmentFile.size / 1024).toFixed(0)} KB)</p>
+            )}
+            <p className="text-[11px] text-brand-400 mt-1">
+              {isAr ? 'الأنواع المدعومة: PDF, Word, JPG, PNG (حد أقصى 20MB)' : 'Supported: PDF, Word, JPG, PNG (max 20MB)'}
+            </p>
+          </div>
+          <div>
+            <label className="label">{isAr ? 'ملاحظات (اختياري)' : 'Notes (optional)'}</label>
+            <textarea className="input resize-none" rows={2} value={attachmentForm.notes}
+              onChange={e => setAttachmentForm(p => ({ ...p, notes: e.target.value }))} />
+          </div>
+          <div className="flex gap-3">
+            <button type="button" className="btn-secondary" onClick={() => setShowAttachmentModal(false)}>
+              {isAr ? 'إلغاء' : 'Cancel'}
+            </button>
+            <button type="submit" className="btn-primary flex-1 justify-center" disabled={uploadingAtt}>
+              {uploadingAtt ? (isAr ? 'جاري الرفع...' : 'Uploading...') : (isAr ? 'رفع المرفق' : 'Upload')}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Visit Modal */}
       <Modal open={showVisitModal} onClose={() => setShowVisitModal(false)} title={t('log_visit')}>
