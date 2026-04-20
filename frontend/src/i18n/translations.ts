@@ -13,6 +13,8 @@ const translations = {
   nav_tasks: { ar: 'المهام', en: 'Tasks' },
   nav_leaderboard: { ar: 'الصدارة', en: 'Leaderboard' },
   nav_calendar: { ar: 'التقويم', en: 'Calendar' },
+  nav_reports: { ar: 'التقارير', en: 'Reports' },
+  nav_org_chart: { ar: 'الهيكل التنظيمي', en: 'Org Chart' },
 
   // === Auth ===
   login_title: { ar: 'تسجيل الدخول', en: 'Sign In' },
@@ -172,9 +174,11 @@ const translations = {
   user_contracts_count: { ar: 'عقود', en: 'contracts' },
 
   // === Roles ===
+  role_admin: { ar: 'مدير النظام (IT)', en: 'IT Admin' },
   role_general_manager: { ar: 'مدير عام', en: 'General Manager' },
   role_vice_gm: { ar: 'نائب المدير العام', en: 'Vice General Manager' },
   role_sales_director: { ar: 'مدير مبيعات', en: 'Sales Director' },
+  role_assistant_sales: { ar: 'مساعد مدير المبيعات', en: 'Assistant Sales Manager' },
   role_sales_rep: { ar: 'مندوب مبيعات', en: 'Sales Representative' },
   role_contract_officer: { ar: 'مسئول العقود', en: 'Contract Officer' },
   role_reservations: { ar: 'قسم الحجوزات', en: 'Reservations' },

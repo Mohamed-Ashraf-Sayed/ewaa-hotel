@@ -29,6 +29,9 @@ export default function ClientDetail() {
   const [activeTab, setActiveTab] = useState<'overview' | 'visits' | 'contracts' | 'activities' | 'payments' | 'emails' | 'attachments'>('overview');
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ contactPerson: '', countryCode: '+966', phoneNumber: '', email: '', address: '', notes: '' });
+  const [savingEdit, setSavingEdit] = useState(false);
   const [showAttachmentModal, setShowAttachmentModal] = useState(false);
   const [attachmentForm, setAttachmentForm] = useState({ type: 'commercial_register', notes: '' });
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
@@ -119,6 +122,54 @@ export default function ClientDetail() {
     load();
   };
 
+  // Parse phone into country code and number
+  const parsePhone = (phone?: string): { countryCode: string; number: string } => {
+    if (!phone) return { countryCode: '+966', number: '' };
+    const cleaned = phone.replace(/\s/g, '');
+    if (cleaned.startsWith('+966')) return { countryCode: '+966', number: cleaned.slice(4) };
+    if (cleaned.startsWith('00966')) return { countryCode: '+966', number: cleaned.slice(5) };
+    if (cleaned.startsWith('+20')) return { countryCode: '+20', number: cleaned.slice(3) };
+    if (cleaned.startsWith('+971')) return { countryCode: '+971', number: cleaned.slice(4) };
+    if (cleaned.startsWith('+965')) return { countryCode: '+965', number: cleaned.slice(4) };
+    if (cleaned.startsWith('+974')) return { countryCode: '+974', number: cleaned.slice(4) };
+    if (cleaned.startsWith('+973')) return { countryCode: '+973', number: cleaned.slice(4) };
+    if (cleaned.startsWith('+968')) return { countryCode: '+968', number: cleaned.slice(4) };
+    if (cleaned.startsWith('+')) return { countryCode: '+966', number: cleaned };
+    return { countryCode: '+966', number: cleaned };
+  };
+
+  const openEditClient = () => {
+    if (!client) return;
+    const { countryCode, number } = parsePhone(client.phone);
+    setEditForm({
+      contactPerson: client.contactPerson || '',
+      countryCode,
+      phoneNumber: number,
+      email: client.email || '',
+      address: client.address || '',
+      notes: client.notes || '',
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingEdit(true);
+    try {
+      await clientsApi.update(parseInt(id!), {
+        contactPerson: editForm.contactPerson,
+        phone: `${editForm.countryCode}${editForm.phoneNumber}`,
+        email: editForm.email,
+        address: editForm.address,
+        notes: editForm.notes,
+      });
+      setShowEditModal(false);
+      load();
+    } catch (err: any) {
+      alert(err.response?.data?.message || (isAr ? 'فشل الحفظ' : 'Failed'));
+    } finally { setSavingEdit(false); }
+  };
+
   useEffect(() => { load(); hotelsApi.getAll().then(r => setHotels(r.data)); }, [id]);
 
   const submitVisit = async (e: React.FormEvent) => {
@@ -195,7 +246,15 @@ export default function ClientDetail() {
         <div className="flex-1">
           <div className={`flex items-start justify-between flex-wrap gap-3 ${isAr ? 'flex-row-reverse text-right' : ''}`}>
             <div className={isAr ? 'text-right' : 'text-left'}>
-              <h1 className="text-2xl font-bold text-brand-900">{client.companyName}</h1>
+              <div className={`flex items-center gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+                <h1 className="text-2xl font-bold text-brand-900">{client.companyName}</h1>
+                {hasRole('sales_rep', 'sales_director', 'assistant_sales', 'general_manager', 'vice_gm', 'admin') && (
+                  <button onClick={openEditClient}
+                    className="text-xs px-2 py-1 rounded-md bg-brand-50 text-brand-600 hover:bg-brand-100 font-semibold">
+                    ✎ {isAr ? 'تعديل' : 'Edit'}
+                  </button>
+                )}
+              </div>
               {(client as any).companyNameEn && isAr && (
                 <p className="text-sm text-brand-400 mt-0.5">{(client as any).companyNameEn}</p>
               )}
@@ -247,8 +306,8 @@ export default function ClientDetail() {
       <div className="card p-5">
         <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 ${isAr ? 'text-right' : 'text-left'}`}>
           <div><p className="text-xs text-brand-400 mb-1">{t('client_contact')}</p><p className="font-medium text-brand-900">{client.contactPerson}</p></div>
-          {client.phone && <div><p className="text-xs text-brand-400 mb-1">{t('client_phone')}</p><a href={`tel:${client.phone}`} className="font-medium text-brand-600 dir-ltr">{client.phone}</a></div>}
-          {client.email && <div><p className="text-xs text-brand-400 mb-1">{t('client_email')}</p><a href={`mailto:${client.email}`} className="font-medium text-brand-600 truncate block text-xs">{client.email}</a></div>}
+          {client.phone && <div><p className="text-xs text-brand-400 mb-1">{t('client_phone')}</p><a href={`tel:${client.phone}`} dir="ltr" style={{ unicodeBidi: 'plaintext' }} className="font-medium text-brand-600 inline-block">{client.phone}</a></div>}
+          {client.email && <div><p className="text-xs text-brand-400 mb-1">{t('client_email')}</p><a href={`mailto:${client.email}`} dir="ltr" className="font-medium text-brand-600 truncate block text-xs">{client.email}</a></div>}
           {client.estimatedRooms && <div><p className="text-xs text-brand-400 mb-1">{t('client_estimated_rooms')}</p><p className="font-medium text-brand-900">{client.estimatedRooms}</p></div>}
           {client.annualBudget && <div><p className="text-xs text-brand-400 mb-1">{t('client_budget')}</p><p className="font-medium text-brand-900">{client.annualBudget.toLocaleString()} {t('sar')}</p></div>}
           {client.salesRep && <div><p className="text-xs text-brand-400 mb-1">{t('contract_rep')}</p><p className="font-medium text-brand-900">{client.salesRep.name}</p></div>}
@@ -263,7 +322,7 @@ export default function ClientDetail() {
       </div>
 
       {/* Action buttons */}
-      {hasRole('sales_rep', 'sales_director') && (
+      {hasRole('sales_rep', 'sales_director', 'assistant_sales') && (
         <div className={`flex gap-3 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
           <button className="btn-primary text-sm" onClick={() => setShowContractModal(true)}>
             <FileText className="w-4 h-4" /> {t('upload_contract')}
@@ -812,6 +871,65 @@ export default function ClientDetail() {
             </button>
             <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving}>
               {saving ? (isAr ? 'جاري الإنشاء...' : 'Generating...') : (isAr ? 'إنشاء وتحميل PDF' : 'Generate & Download PDF')}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Client Modal */}
+      <Modal open={showEditModal} onClose={() => setShowEditModal(false)} title={isAr ? 'تعديل بيانات العميل' : 'Edit Client Info'}>
+        <form onSubmit={handleSaveEdit} className="space-y-4">
+          <div className={`p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs ${isAr ? 'text-right' : ''}`}>
+            ℹ️ {isAr ? 'يمكن تعديل بيانات التواصل (الهاتف، الإيميل، العنوان، جهة الاتصال)' : 'You can update contact info (phone, email, address, contact person)'}
+          </div>
+          <div>
+            <label className="label">{isAr ? 'جهة الاتصال' : 'Contact Person'} *</label>
+            <input className="input" required minLength={2} maxLength={100} pattern="[^<>{}\[\]\\]+"
+              value={editForm.contactPerson}
+              onChange={e => setEditForm(p => ({ ...p, contactPerson: e.target.value }))} />
+          </div>
+          <div>
+            <label className="label">{isAr ? 'رقم الهاتف' : 'Phone Number'} *</label>
+            <div className="flex gap-2" dir="ltr">
+              <select className="input w-28" value={editForm.countryCode}
+                onChange={e => setEditForm(p => ({ ...p, countryCode: e.target.value }))}>
+                <option value="+966">🇸🇦 +966</option>
+                <option value="+20">🇪🇬 +20</option>
+                <option value="+971">🇦🇪 +971</option>
+                <option value="+965">🇰🇼 +965</option>
+                <option value="+974">🇶🇦 +974</option>
+                <option value="+973">🇧🇭 +973</option>
+                <option value="+968">🇴🇲 +968</option>
+              </select>
+              <input className="input flex-1" type="tel" required pattern="[\d\s\-]{6,15}"
+                placeholder="5XXXXXXXX" value={editForm.phoneNumber}
+                onChange={e => setEditForm(p => ({ ...p, phoneNumber: e.target.value.replace(/[^\d\s\-]/g, '') }))} />
+            </div>
+          </div>
+          <div>
+            <label className="label">{isAr ? 'البريد الإلكتروني' : 'Email'} *</label>
+            <input className="input" type="email" required dir="ltr"
+              value={editForm.email}
+              onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} />
+          </div>
+          <div>
+            <label className="label">{isAr ? 'العنوان' : 'Address'} *</label>
+            <input className="input" required minLength={2} maxLength={300}
+              value={editForm.address}
+              onChange={e => setEditForm(p => ({ ...p, address: e.target.value }))} />
+          </div>
+          <div>
+            <label className="label">{isAr ? 'ملاحظات' : 'Notes'}</label>
+            <textarea className="input resize-none" rows={2}
+              value={editForm.notes}
+              onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} />
+          </div>
+          <div className="flex gap-3">
+            <button type="button" className="btn-secondary" onClick={() => setShowEditModal(false)}>
+              {isAr ? 'إلغاء' : 'Cancel'}
+            </button>
+            <button type="submit" className="btn-primary flex-1 justify-center" disabled={savingEdit}>
+              {savingEdit ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? '✓ حفظ التعديلات' : '✓ Save Changes')}
             </button>
           </div>
         </form>

@@ -13,7 +13,7 @@ const getLeaderboard = async (req, res) => {
 
     // Get all active sales reps and directors
     const users = await prisma.user.findMany({
-      where: { role: { in: ['sales_rep', 'sales_director'] }, isActive: true },
+      where: { role: { in: ['sales_rep', 'sales_director', 'assistant_sales'] }, isActive: true },
       select: { id: true, name: true, role: true, commissionRate: true },
     });
 

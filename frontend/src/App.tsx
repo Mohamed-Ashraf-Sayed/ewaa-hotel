@@ -16,6 +16,8 @@ import Targets from './pages/Targets';
 import Tasks from './pages/Tasks';
 import Leaderboard from './pages/Leaderboard';
 import Calendar from './pages/Calendar';
+import Reports from './pages/Reports';
+import OrgChart from './pages/OrgChart';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -47,6 +49,8 @@ function AppRoutes() {
         <Route path="tasks" element={<Tasks />} />
         <Route path="leaderboard" element={<Leaderboard />} />
         <Route path="calendar" element={<Calendar />} />
+        <Route path="reports" element={<Reports />} />
+        <Route path="org-chart" element={<OrgChart />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

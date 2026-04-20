@@ -7,7 +7,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 
 const ROLE_COLORS: Record<string, string> = {
+  admin: 'bg-slate-900 text-white',
   general_manager: 'bg-purple-100 text-purple-800',
+  assistant_sales: 'bg-cyan-100 text-cyan-800',
   vice_gm: 'bg-indigo-100 text-indigo-800',
   sales_director: 'bg-blue-100 text-blue-800',
   sales_rep: 'bg-green-100 text-green-800',
@@ -32,9 +34,11 @@ export default function Users() {
   const { hasRole, user: currentUser } = useAuth();
 
   const ROLES = [
+    { value: 'admin', label: t('role_admin') },
     { value: 'general_manager', label: t('role_general_manager') },
     { value: 'vice_gm', label: t('role_vice_gm') },
     { value: 'sales_director', label: t('role_sales_director') },
+    { value: 'assistant_sales', label: t('role_assistant_sales') },
     { value: 'sales_rep', label: t('role_sales_rep') },
     { value: 'contract_officer', label: t('role_contract_officer') },
     { value: 'reservations', label: t('role_reservations') },

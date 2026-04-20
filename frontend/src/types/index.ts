@@ -1,4 +1,4 @@
-export type Role = 'general_manager' | 'vice_gm' | 'sales_director' | 'sales_rep' | 'contract_officer' | 'reservations' | 'credit_manager' | 'credit_officer';
+export type Role = 'admin' | 'general_manager' | 'vice_gm' | 'sales_director' | 'assistant_sales' | 'sales_rep' | 'contract_officer' | 'reservations' | 'credit_manager' | 'credit_officer';
 
 export interface User {
   id: number;

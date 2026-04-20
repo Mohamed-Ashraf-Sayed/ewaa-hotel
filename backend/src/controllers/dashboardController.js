@@ -2,7 +2,7 @@ const { PrismaClient } = require('@prisma/client');
 const { getSubordinateIds } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
-const ADMIN_ROLES = ['general_manager', 'vice_gm'];
+const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
 
 const getDashboard = async (req, res) => {
   try {
@@ -17,6 +17,12 @@ const getDashboard = async (req, res) => {
       contractFilter = {};
       visitFilter = {};
       teamIds = (await prisma.user.findMany({ select: { id: true } })).map(u => u.id);
+    } else if (role === 'assistant_sales' && req.user.managerId) {
+      const subs = await getSubordinateIds(req.user.managerId);
+      teamIds = [req.user.managerId, ...subs];
+      clientFilter = { salesRepId: { in: teamIds } };
+      contractFilter = { salesRepId: { in: teamIds } };
+      visitFilter = { salesRepId: { in: teamIds } };
     } else if (role === 'sales_director') {
       const subIds = await getSubordinateIds(userId);
       teamIds = [userId, ...subIds];
@@ -93,7 +99,7 @@ const getDashboard = async (req, res) => {
       // Team performance (only for managers/admins)
       (ADMIN_ROLES.includes(role) || role === 'sales_director')
         ? prisma.user.findMany({
-            where: { id: { in: teamIds }, role: 'sales_rep', isActive: true },
+            where: { id: { in: teamIds }, role: { in: ['sales_rep', 'assistant_sales'] }, isActive: true },
             select: {
               id: true, name: true,
               _count: { select: { assignedClients: true, contracts: true, visits: true } }

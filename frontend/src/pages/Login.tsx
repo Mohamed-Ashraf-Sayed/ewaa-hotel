@@ -99,9 +99,11 @@ export default function Login() {
               <p className="text-xs text-brand-400 mb-3 font-semibold text-right">دخول سريع للتجربة</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
+                  { label: 'مدير النظام (IT)', e: 'admin@hotelcrm.com', p: 'admin123' },
                   { label: 'مدير عام', e: 'gm@hotelcrm.com', p: 'gm123' },
                   { label: 'نائب المدير العام', e: 'vgm@hotelcrm.com', p: 'vgm123' },
                   { label: 'مدير مبيعات', e: 'dir1@hotelcrm.com', p: 'dir123' },
+                  { label: 'مساعد مدير مبيعات', e: 'asst1@hotelcrm.com', p: 'asst123' },
                   { label: 'مندوب مبيعات', e: 'omar@hotelcrm.com', p: 'sales123' },
                   { label: 'مسئول العقود', e: 'contracts@hotelcrm.com', p: 'contracts123' },
                   { label: 'قسم الحجوزات', e: 'reservations@hotelcrm.com', p: 'res123' },

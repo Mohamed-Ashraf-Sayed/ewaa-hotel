@@ -3,14 +3,17 @@ const { getSubordinateIds } = require('../middleware/auth');
 const { recalculatePulse } = require('./contractController');
 const prisma = new PrismaClient();
 
-const ADMIN_ROLES = ['general_manager', 'vice_gm'];
+const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
 
 const getVisits = async (req, res) => {
   try {
     const { clientId, upcoming } = req.query;
     let salesRepFilter = {};
     if (!ADMIN_ROLES.includes(req.user.role)) {
-      if (req.user.role === 'sales_director') {
+      if (req.user.role === 'assistant_sales' && req.user.managerId) {
+        const teamIds = await getSubordinateIds(req.user.managerId);
+        salesRepFilter = { salesRepId: { in: [req.user.managerId, ...teamIds] } };
+      } else if (req.user.role === 'sales_director') {
         const subIds = await getSubordinateIds(req.user.id);
         salesRepFilter = { salesRepId: { in: [req.user.id, ...subIds] } };
       } else {
@@ -100,7 +103,10 @@ const getUpcomingFollowUps = async (req, res) => {
     const future = new Date();
     future.setDate(future.getDate() + days);
     let salesRepFilter = { salesRepId: req.user.id };
-    if (req.user.role === 'sales_director') {
+    if (req.user.role === 'assistant_sales' && req.user.managerId) {
+      const teamIds = await getSubordinateIds(req.user.managerId);
+      salesRepFilter = { salesRepId: { in: [req.user.managerId, ...teamIds] } };
+    } else if (req.user.role === 'sales_director') {
       const subIds = await getSubordinateIds(req.user.id);
       salesRepFilter = { salesRepId: { in: [req.user.id, ...subIds] } };
     } else if (ADMIN_ROLES.includes(req.user.role)) {

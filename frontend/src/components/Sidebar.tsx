@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, FileText, MapPin,
-  Hotel, CreditCard, Target, CheckSquare, Trophy, CalendarDays, X
+  Hotel, CreditCard, Target, CheckSquare, Trophy, CalendarDays, X, BarChart3, Network
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -11,16 +11,18 @@ interface NavItem { to: string; icon: any; labelKey: TranslationKey; badge?: str
 
 const navItems: NavItem[] = [
   { to: '/', icon: LayoutDashboard, labelKey: 'nav_dashboard' },
-  { to: '/clients', icon: Building2, labelKey: 'nav_clients', roles: ['general_manager', 'vice_gm', 'sales_director', 'sales_rep', 'contract_officer'] },
+  { to: '/clients', icon: Building2, labelKey: 'nav_clients', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer'] },
   { to: '/contracts', icon: FileText, labelKey: 'nav_contracts' },
-  { to: '/visits', icon: MapPin, labelKey: 'nav_visits', roles: ['general_manager', 'vice_gm', 'sales_director', 'sales_rep', 'contract_officer'] },
-  { to: '/payments', icon: CreditCard, labelKey: 'nav_payments', roles: ['general_manager', 'vice_gm', 'sales_director', 'sales_rep', 'contract_officer'] },
-  { to: '/targets', icon: Target, labelKey: 'nav_targets', roles: ['general_manager', 'vice_gm', 'sales_director', 'sales_rep'] },
+  { to: '/visits', icon: MapPin, labelKey: 'nav_visits', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer'] },
+  { to: '/payments', icon: CreditCard, labelKey: 'nav_payments', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer'] },
+  { to: '/targets', icon: Target, labelKey: 'nav_targets', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep'] },
   { to: '/calendar', icon: CalendarDays, labelKey: 'nav_calendar' },
-  { to: '/tasks', icon: CheckSquare, labelKey: 'nav_tasks', roles: ['general_manager', 'vice_gm', 'sales_director', 'sales_rep'] },
-  { to: '/leaderboard', icon: Trophy, labelKey: 'nav_leaderboard', roles: ['general_manager', 'vice_gm', 'sales_director', 'sales_rep'] },
-  { to: '/users', icon: Users, labelKey: 'nav_users', roles: ['general_manager', 'vice_gm', 'sales_director'] },
-  { to: '/hotels', icon: Hotel, labelKey: 'nav_hotels', roles: ['general_manager', 'vice_gm'] },
+  { to: '/tasks', icon: CheckSquare, labelKey: 'nav_tasks', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep'] },
+  { to: '/leaderboard', icon: Trophy, labelKey: 'nav_leaderboard', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep'] },
+  { to: '/reports', icon: BarChart3, labelKey: 'nav_reports', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales'] },
+  { to: '/users', icon: Users, labelKey: 'nav_users', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales'] },
+  { to: '/org-chart', icon: Network, labelKey: 'nav_org_chart', roles: ['admin', 'general_manager', 'vice_gm'] },
+  { to: '/hotels', icon: Hotel, labelKey: 'nav_hotels', roles: ['admin', 'general_manager', 'vice_gm'] },
 ];
 
 interface SidebarProps { open: boolean; isMobile?: boolean; onClose?: () => void }

@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const { getSubordinateIds } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
-const ADMIN_ROLES = ['general_manager', 'vice_gm'];
+const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
 
 const getUsers = async (req, res) => {
   try {

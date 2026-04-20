@@ -214,9 +214,12 @@ const generateClientReport = async (req, res) => {
     if (type) where.clientType = type;
     if (hotelId) where.hotelId = parseInt(hotelId);
 
-    const ADMIN_ROLES = ['general_manager', 'vice_gm'];
+    const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
     if (!ADMIN_ROLES.includes(req.user.role) && req.user.role !== 'contract_officer') {
-      if (req.user.role === 'sales_director') {
+      if (req.user.role === 'assistant_sales' && req.user.managerId) {
+        const subs = await prisma.user.findMany({ where: { managerId: req.user.managerId }, select: { id: true } });
+        where.salesRepId = { in: [req.user.managerId, ...subs.map(s => s.id)] };
+      } else if (req.user.role === 'sales_director') {
         const subs = await prisma.user.findMany({ where: { managerId: req.user.id }, select: { id: true } });
         where.salesRepId = { in: [req.user.id, ...subs.map(s => s.id)] };
       } else {

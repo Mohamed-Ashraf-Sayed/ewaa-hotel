@@ -15,9 +15,11 @@ import {
 } from 'recharts';
 
 const ROLE_LABELS_AR: Record<string, string> = {
+  admin: 'مدير النظام',
   general_manager: 'مدير عام',
   vice_gm: 'نائب المدير العام',
   sales_director: 'مدير مبيعات',
+  assistant_sales: 'مساعد مدير المبيعات',
   sales_rep: 'مندوب مبيعات',
   contract_officer: 'مسئول العقود',
   reservations: 'قسم الحجوزات',
@@ -25,9 +27,11 @@ const ROLE_LABELS_AR: Record<string, string> = {
   credit_officer: 'موظف ائتمان'
 };
 const ROLE_LABELS_EN: Record<string, string> = {
+  admin: 'System Admin',
   general_manager: 'General Manager',
   vice_gm: 'Vice GM',
   sales_director: 'Sales Director',
+  assistant_sales: 'Assistant Sales',
   sales_rep: 'Sales Rep',
   contract_officer: 'Contract Officer',
   reservations: 'Reservations',

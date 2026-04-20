@@ -49,7 +49,7 @@ export default function Clients() {
   const { hasRole } = useAuth();
 
   const emptyForm = {
-    companyName: '', contactPerson: '', phone: '', email: '', address: '',
+    companyName: '', contactPerson: '', countryCode: '+966', phoneNumber: '', email: '', address: '',
     industry: '', clientType: 'lead', source: '', hotelId: '',
     estimatedRooms: '', annualBudget: '', website: '', notes: ''
   };
@@ -74,7 +74,9 @@ export default function Clients() {
     e.preventDefault();
     setSaving(true);
     try {
-      await clientsApi.create(form);
+      const { countryCode, phoneNumber, ...rest } = form;
+      const payload = { ...rest, phone: `${countryCode}${phoneNumber.replace(/[^\d]/g, '')}` };
+      await clientsApi.create(payload);
       setShowModal(false);
       setForm(emptyForm);
       loadClients();
@@ -99,16 +101,18 @@ export default function Clients() {
           <p className="text-brand-400 text-sm mt-0.5">{isAr ? 'الإجمالي: ' : 'Total: '}{clients.length}</p>
         </div>
         <div className="flex gap-2">
-          <button className="btn-secondary" onClick={async () => {
-            try {
-              const res = await pdfApi.clientReport({ type: typeFilter || undefined });
-              const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
-              const a = document.createElement('a'); a.href = url; a.download = 'Client_Report.pdf';
-              document.body.appendChild(a); a.click(); document.body.removeChild(a);
-            } catch { alert(isAr ? 'خطأ في إنشاء التقرير' : 'Error generating report'); }
-          }}>
-            <Download className="w-4 h-4" /> {isAr ? 'تقرير PDF' : 'PDF Report'}
-          </button>
+          {hasRole('general_manager', 'vice_gm', 'sales_director') && (
+            <button className="btn-secondary" onClick={async () => {
+              try {
+                const res = await pdfApi.clientReport({ type: typeFilter || undefined });
+                const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+                const a = document.createElement('a'); a.href = url; a.download = 'Client_Report.pdf';
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+              } catch { alert(isAr ? 'خطأ في إنشاء التقرير' : 'Error generating report'); }
+            }}>
+              <Download className="w-4 h-4" /> {isAr ? 'تقرير PDF' : 'PDF Report'}
+            </button>
+          )}
           {!hasRole('contract_officer') && (
             <button className="btn-primary" onClick={() => setShowModal(true)}>
               <Plus className="w-4 h-4" /> {isAr ? 'إضافة عميل' : 'Add Client'}
@@ -192,7 +196,7 @@ export default function Clients() {
                       {c.contactPerson}
                       {isAr && <User className="w-3 h-3 text-brand-400" />}
                     </div>
-                    {c.phone && <div className="text-xs text-brand-400">{c.phone}</div>}
+                    {c.phone && <div className="text-xs text-brand-400" dir="ltr" style={{ unicodeBidi: 'plaintext' }}>{c.phone}</div>}
                   </td>
                 );
                 const companyCell = (
@@ -232,10 +236,24 @@ export default function Clients() {
                 value={form.contactPerson} onChange={e => setForm(p => ({ ...p, contactPerson: e.target.value }))} />
             </div>
             <div>
-              <label className="label">{isAr ? 'الهاتف' : 'Phone'} *</label>
-              <input className="input" type="tel" required pattern="[+\d\s\-()]{6,20}"
-                title={isAr ? 'أرقام فقط (6-20 رقم)' : 'Numbers only (6-20 digits)'}
-                value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} dir="ltr" />
+              <label className="label">{isAr ? 'رقم الهاتف' : 'Phone Number'} *</label>
+              <div className="flex gap-2" dir="ltr">
+                <select className="input w-28" value={form.countryCode}
+                  onChange={e => setForm(p => ({ ...p, countryCode: e.target.value }))}>
+                  <option value="+966">🇸🇦 +966</option>
+                  <option value="+20">🇪🇬 +20</option>
+                  <option value="+971">🇦🇪 +971</option>
+                  <option value="+965">🇰🇼 +965</option>
+                  <option value="+974">🇶🇦 +974</option>
+                  <option value="+973">🇧🇭 +973</option>
+                  <option value="+968">🇴🇲 +968</option>
+                </select>
+                <input className="input flex-1" type="tel" required pattern="[\d\s\-]{6,15}"
+                  placeholder="5XXXXXXXX"
+                  title={isAr ? 'أرقام فقط (بدون كود الدولة)' : 'Numbers only (no country code)'}
+                  value={form.phoneNumber}
+                  onChange={e => setForm(p => ({ ...p, phoneNumber: e.target.value.replace(/[^\d\s\-]/g, '') }))} />
+              </div>
             </div>
             <div>
               <label className="label">{isAr ? 'البريد الإلكتروني' : 'Email'} *</label>

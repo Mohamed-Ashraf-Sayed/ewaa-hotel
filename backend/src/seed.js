@@ -116,6 +116,11 @@ async function main() {
   const eastHotels = hotels.filter(h => ['الدمام', 'الخبر', 'الجبيل'].includes(h.city));
   const otherHotels = hotels.filter(h => !['الرياض', 'جدة', 'الدمام', 'الخبر', 'الجبيل'].includes(h.city));
 
+  // === IT Admin (top level) ===
+  await prisma.user.create({
+    data: { name: 'مدير النظام (IT)', email: 'admin@hotelcrm.com', password: await hash('admin123'), role: 'admin' }
+  });
+
   // === Org Hierarchy ===
   const gm = await prisma.user.create({
     data: {
@@ -155,7 +160,7 @@ async function main() {
     }
   });
 
-  // Sales Director 1 - Riyadh & West Region
+  // Sales Director 1 - المهيدب للشقق المخدومة
   const dir1 = await prisma.user.create({
     data: {
       name: 'خالد بن ناصر المنصور',
@@ -165,11 +170,11 @@ async function main() {
       managerId: vgm.id,
       phone: '0511000001',
       commissionRate: 1.5,
-      hotels: { create: [...riyadhHotels.slice(0, 5), ...jeddahHotels.slice(0, 3)].map(h => ({ hotelId: h.id })) }
+      hotels: { create: muhaidibHotels.map(h => ({ hotelId: h.id })) }
     }
   });
 
-  // Sales Director 2 - East Region & Others
+  // Sales Director 2 - جراند بلازا + إيواء اكسبريس
   const dir2 = await prisma.user.create({
     data: {
       name: 'فيصل بن عمر الحربي',
@@ -179,11 +184,27 @@ async function main() {
       managerId: vgm.id,
       phone: '0511000002',
       commissionRate: 1.5,
-      hotels: { create: [...eastHotels.slice(0, 3), ...otherHotels.slice(0, 3)].map(h => ({ hotelId: h.id })) }
+      hotels: { create: [...grandPlazaHotels, ...awaHotels].map(h => ({ hotelId: h.id })) }
     }
   });
 
-  // Sales Reps - Team 1 (Riyadh)
+  // === مساعدي مديري المبيعات ===
+  await prisma.user.create({
+    data: {
+      name: 'محمد بن خالد المنصور', email: 'asst1@hotelcrm.com',
+      password: await hash('asst123'), role: 'assistant_sales',
+      managerId: dir1.id, phone: '0512000001', commissionRate: 1.0,
+    }
+  });
+  await prisma.user.create({
+    data: {
+      name: 'بدر بن عمر الحربي', email: 'asst2@hotelcrm.com',
+      password: await hash('asst123'), role: 'assistant_sales',
+      managerId: dir2.id, phone: '0512000002', commissionRate: 1.0,
+    }
+  });
+
+  // === فريق المهيدب (تحت dir1) ===
   const [rep1, rep2, rep3] = await Promise.all([
     prisma.user.create({
       data: {
@@ -191,7 +212,7 @@ async function main() {
         password: await hash('sales123'), role: 'sales_rep',
         managerId: dir1.id, phone: '0521000001',
         commissionRate: 2.5,
-        hotels: { create: riyadhHotels.slice(0, 4).map(h => ({ hotelId: h.id })) }
+        hotels: { create: muhaidibHotels.slice(0, 7).map(h => ({ hotelId: h.id })) }
       }
     }),
     prisma.user.create({
@@ -200,7 +221,7 @@ async function main() {
         password: await hash('sales123'), role: 'sales_rep',
         managerId: dir1.id, phone: '0521000002',
         commissionRate: 2.5,
-        hotels: { create: jeddahHotels.slice(0, 4).map(h => ({ hotelId: h.id })) }
+        hotels: { create: muhaidibHotels.slice(7, 14).map(h => ({ hotelId: h.id })) }
       }
     }),
     prisma.user.create({
@@ -209,12 +230,12 @@ async function main() {
         password: await hash('sales123'), role: 'sales_rep',
         managerId: dir1.id, phone: '0521000003',
         commissionRate: 2.0,
-        hotels: { create: [...riyadhHotels.slice(4, 7), ...jeddahHotels.slice(3, 5)].map(h => ({ hotelId: h.id })) }
+        hotels: { create: muhaidibHotels.slice(14, 20).map(h => ({ hotelId: h.id })) }
       }
     })
   ]);
 
-  // Sales Reps - Team 2 (East + Other)
+  // === فريق جراند بلازا + إيواء (تحت dir2) ===
   const [rep4, rep5, rep6] = await Promise.all([
     prisma.user.create({
       data: {
@@ -222,7 +243,7 @@ async function main() {
         password: await hash('sales123'), role: 'sales_rep',
         managerId: dir2.id, phone: '0531000001',
         commissionRate: 2.5,
-        hotels: { create: eastHotels.slice(0, 4).map(h => ({ hotelId: h.id })) }
+        hotels: { create: grandPlazaHotels.slice(0, 10).map(h => ({ hotelId: h.id })) }
       }
     }),
     prisma.user.create({
@@ -231,7 +252,7 @@ async function main() {
         password: await hash('sales123'), role: 'sales_rep',
         managerId: dir2.id, phone: '0531000002',
         commissionRate: 2.0,
-        hotels: { create: [...eastHotels.slice(2, 5), ...otherHotels.slice(0, 2)].map(h => ({ hotelId: h.id })) }
+        hotels: { create: [...grandPlazaHotels.slice(10, 20), ...awaHotels.slice(0, 5)].map(h => ({ hotelId: h.id })) }
       }
     }),
     prisma.user.create({
@@ -240,7 +261,7 @@ async function main() {
         password: await hash('sales123'), role: 'sales_rep',
         managerId: dir2.id, phone: '0531000003',
         commissionRate: 2.0,
-        hotels: { create: otherHotels.slice(0, 4).map(h => ({ hotelId: h.id })) }
+        hotels: { create: awaHotels.slice(5, 20).map(h => ({ hotelId: h.id })) }
       }
     })
   ]);

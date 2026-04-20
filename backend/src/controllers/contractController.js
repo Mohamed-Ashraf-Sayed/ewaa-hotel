@@ -53,10 +53,14 @@ const buildEmailTemplate = (title, message, contractRef, clientName, hotelName, 
   </div>
 </div>`;
 
-const ADMIN_ROLES = ['general_manager', 'vice_gm'];
+const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
 
 const buildContractFilter = async (user) => {
   if (ADMIN_ROLES.includes(user.role) || user.role === 'contract_officer' || user.role === 'reservations' || user.role === 'credit_manager' || user.role === 'credit_officer') return {};
+  if (user.role === 'assistant_sales' && user.managerId) {
+    const teamIds = await getSubordinateIds(user.managerId);
+    return { salesRepId: { in: [user.managerId, ...teamIds] } };
+  }
   if (user.role === 'sales_director') {
     const subIds = await getSubordinateIds(user.id);
     return { salesRepId: { in: [user.id, ...subIds] } };

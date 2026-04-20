@@ -1,7 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-const ADMIN_ROLES = ['general_manager', 'vice_gm'];
+const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
 
 const getSubordinateIds = async (userId) => {
   const subs = await prisma.user.findMany({ where: { managerId: userId }, select: { id: true } });
@@ -18,7 +18,13 @@ const getTasks = async (req, res) => {
     if (assigneeId) where.assigneeId = parseInt(assigneeId);
 
     if (!ADMIN_ROLES.includes(req.user.role)) {
-      if (req.user.role === 'sales_director') {
+      if (req.user.role === 'assistant_sales' && req.user.managerId) {
+        const teamIds = await getSubordinateIds(req.user.managerId);
+        where.OR = [
+          { assigneeId: { in: [req.user.managerId, ...teamIds] } },
+          { createdById: req.user.id },
+        ];
+      } else if (req.user.role === 'sales_director') {
         const subIds = await getSubordinateIds(req.user.id);
         where.OR = [
           { assigneeId: { in: [req.user.id, ...subIds] } },

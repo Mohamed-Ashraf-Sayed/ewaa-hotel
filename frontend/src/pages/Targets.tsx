@@ -64,7 +64,7 @@ export default function Targets() {
     if (canManage) {
       usersApi.getAll().then(r => {
         const users = r.data.filter((u: TeamUser) =>
-          ['sales_rep', 'sales_director'].includes(u.role)
+          ['sales_rep', 'sales_director', 'assistant_sales'].includes(u.role)
         );
         setTeamUsers(users);
       });
