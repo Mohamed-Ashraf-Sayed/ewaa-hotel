@@ -39,8 +39,6 @@ backend/uploads/
 # Prisma
 backend/prisma/migrations/
 **/migrations/
-backend/prisma/dev.db
-**/*.db
 
 # OS
 Thumbs.db
