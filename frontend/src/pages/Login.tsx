@@ -69,6 +69,7 @@ export default function Login() {
                   <input
                     type="email" value={email} onChange={e => setEmail(e.target.value)}
                     className="input pr-10" placeholder="example@ewaahotels.com" required dir="ltr"
+                    maxLength={150} title="يجب أن يحتوي على @"
                   />
                   <Mail className="absolute right-3 top-3 w-4 h-4 text-brand-400" />
                 </div>

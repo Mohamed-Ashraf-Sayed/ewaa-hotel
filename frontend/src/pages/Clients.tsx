@@ -221,52 +221,63 @@ export default function Clients() {
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="label">{isAr ? 'اسم الشركة' : 'Company Name'} *</label>
-              <input className="input" required value={form.companyName} onChange={e => setForm(p => ({ ...p, companyName: e.target.value }))} />
+              <input className="input" required minLength={2} maxLength={200} pattern="[^<>{}\[\]\\]+"
+                title={isAr ? 'لا يجب أن يحتوي على رموز خاصة < > { } [ ] \\' : 'No special characters allowed'}
+                value={form.companyName} onChange={e => setForm(p => ({ ...p, companyName: e.target.value }))} />
             </div>
             <div>
               <label className="label">{isAr ? 'جهة الاتصال' : 'Contact Person'} *</label>
-              <input className="input" required value={form.contactPerson} onChange={e => setForm(p => ({ ...p, contactPerson: e.target.value }))} />
+              <input className="input" required minLength={2} maxLength={100} pattern="[^<>{}\[\]\\]+"
+                title={isAr ? 'لا يجب أن يحتوي على رموز خاصة' : 'No special characters'}
+                value={form.contactPerson} onChange={e => setForm(p => ({ ...p, contactPerson: e.target.value }))} />
             </div>
             <div>
-              <label className="label">{isAr ? 'الهاتف' : 'Phone'}</label>
-              <input className="input" type="tel" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} dir="ltr" />
+              <label className="label">{isAr ? 'الهاتف' : 'Phone'} *</label>
+              <input className="input" type="tel" required pattern="[+\d\s\-()]{6,20}"
+                title={isAr ? 'أرقام فقط (6-20 رقم)' : 'Numbers only (6-20 digits)'}
+                value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} dir="ltr" />
             </div>
             <div>
-              <label className="label">{isAr ? 'البريد الإلكتروني' : 'Email'}</label>
-              <input className="input" type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} dir="ltr" />
+              <label className="label">{isAr ? 'البريد الإلكتروني' : 'Email'} *</label>
+              <input className="input" type="email" required
+                title={isAr ? 'يجب أن يحتوي على @' : 'Must contain @'}
+                value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} dir="ltr" />
             </div>
             <div>
-              <label className="label">{isAr ? 'القطاع' : 'Industry'}</label>
-              <select className="input" value={form.industry} onChange={e => setForm(p => ({ ...p, industry: e.target.value }))}>
+              <label className="label">{isAr ? 'القطاع' : 'Industry'} *</label>
+              <select className="input" required value={form.industry} onChange={e => setForm(p => ({ ...p, industry: e.target.value }))}>
                 <option value="">{isAr ? 'اختر...' : 'Select...'}</option>
                 {INDUSTRY_OPTS.map(i => <option key={i} value={i}>{i}</option>)}
               </select>
             </div>
             <div>
-              <label className="label">{isAr ? 'النوع' : 'Type'}</label>
-              <select className="input" value={form.clientType} onChange={e => setForm(p => ({ ...p, clientType: e.target.value }))}>
+              <label className="label">{isAr ? 'النوع' : 'Type'} *</label>
+              <select className="input" required value={form.clientType} onChange={e => setForm(p => ({ ...p, clientType: e.target.value }))}>
                 <option value="lead">{isAr ? 'عميل محتمل' : 'Lead'}</option>
                 <option value="active">{isAr ? 'عميل نشط' : 'Active'}</option>
               </select>
             </div>
             <div>
-              <label className="label">{isAr ? 'مصدر العميل' : 'Lead Source'}</label>
-              <select className="input" value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))}>
+              <label className="label">{isAr ? 'مصدر العميل' : 'Lead Source'} *</label>
+              <select className="input" required value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))}>
                 <option value="">{isAr ? 'اختر...' : 'Select...'}</option>
                 {SOURCE_OPTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="label">{isAr ? 'عدد الغرف التقديري / سنة' : 'Estimated rooms / year'}</label>
-              <input className="input" type="number" value={form.estimatedRooms} onChange={e => setForm(p => ({ ...p, estimatedRooms: e.target.value }))} />
+              <label className="label">{isAr ? 'عدد الغرف التقديري / سنة' : 'Estimated rooms / year'} *</label>
+              <input className="input" type="number" required min="1" max="100000"
+                value={form.estimatedRooms} onChange={e => setForm(p => ({ ...p, estimatedRooms: e.target.value }))} />
             </div>
             <div>
-              <label className="label">{isAr ? 'الميزانية السنوية (ر.س)' : 'Annual Budget (SAR)'}</label>
-              <input className="input" type="number" value={form.annualBudget} onChange={e => setForm(p => ({ ...p, annualBudget: e.target.value }))} />
+              <label className="label">{isAr ? 'الميزانية السنوية (ر.س)' : 'Annual Budget (SAR)'} *</label>
+              <input className="input" type="number" required min="1"
+                value={form.annualBudget} onChange={e => setForm(p => ({ ...p, annualBudget: e.target.value }))} />
             </div>
             <div className="col-span-2">
-              <label className="label">{isAr ? 'العنوان' : 'Address'}</label>
-              <input className="input" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} />
+              <label className="label">{isAr ? 'العنوان' : 'Address'} *</label>
+              <input className="input" required minLength={2} maxLength={300} pattern="[^<>{}\[\]\\]+"
+                value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} />
             </div>
             <div className="col-span-2">
               <label className="label">{isAr ? 'ملاحظات' : 'Notes'}</label>

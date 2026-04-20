@@ -206,21 +206,29 @@ export default function Users() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">{t('user_name')} *</label>
-              <input className="input" required value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+              <input className="input" required minLength={2} maxLength={100} pattern="[^<>{}\[\]\\]+"
+                title={lang === 'ar' ? 'لا يجب أن يحتوي على رموز خاصة' : 'No special characters'}
+                value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
             </div>
             <div>
               <label className="label">{t('user_email')} *</label>
-              <input className="input" type="email" required value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} dir="ltr" />
+              <input className="input" type="email" required maxLength={150}
+                title={lang === 'ar' ? 'يجب أن يحتوي على @' : 'Must contain @'}
+                value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} dir="ltr" />
             </div>
             {!editUser && (
               <div>
                 <label className="label">{t('user_password')} *</label>
-                <input className="input" type="password" required value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} dir="ltr" />
+                <input className="input" type="password" required minLength={6} maxLength={100}
+                  title={lang === 'ar' ? '6 أحرف على الأقل' : 'Min 6 characters'}
+                  value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} dir="ltr" />
               </div>
             )}
             <div>
-              <label className="label">{t('user_phone')}</label>
-              <input className="input" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} dir="ltr" />
+              <label className="label">{t('user_phone')} *</label>
+              <input className="input" type="tel" required pattern="[+\d\s\-()]{6,20}"
+                title={lang === 'ar' ? 'أرقام فقط' : 'Numbers only'}
+                value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} dir="ltr" />
             </div>
             <div>
               <label className="label">{t('user_role')} *</label>

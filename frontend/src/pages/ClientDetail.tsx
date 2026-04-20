@@ -608,13 +608,19 @@ export default function ClientDetail() {
       <Modal open={showVisitModal} onClose={() => setShowVisitModal(false)} title={t('log_visit')}>
         <form onSubmit={submitVisit} className="space-y-4">
           <div><label className="label">{t('visit_date')} *</label><input className="input" type="datetime-local" required value={visitForm.visitDate} onChange={e => setVisitForm(p => ({ ...p, visitDate: e.target.value }))} /></div>
-          <div><label className="label">{t('visit_type')}</label>
-            <select className="input" value={visitForm.visitType} onChange={e => setVisitForm(p => ({ ...p, visitType: e.target.value }))}>
+          <div><label className="label">{t('visit_type')} *</label>
+            <select className="input" required value={visitForm.visitType} onChange={e => setVisitForm(p => ({ ...p, visitType: e.target.value }))}>
               {VISIT_TYPES.map(vt => <option key={vt.value} value={vt.value}>{vt.label}</option>)}
             </select>
           </div>
-          <div><label className="label">{t('visit_purpose')}</label><input className="input" value={visitForm.purpose} onChange={e => setVisitForm(p => ({ ...p, purpose: e.target.value }))} /></div>
-          <div><label className="label">{t('visit_outcome')}</label><textarea className="input resize-none" rows={2} value={visitForm.outcome} onChange={e => setVisitForm(p => ({ ...p, outcome: e.target.value }))} /></div>
+          <div><label className="label">{t('visit_purpose')} *</label>
+            <input className="input" required minLength={2} maxLength={500} pattern="[^<>]+"
+              value={visitForm.purpose} onChange={e => setVisitForm(p => ({ ...p, purpose: e.target.value }))} />
+          </div>
+          <div><label className="label">{t('visit_outcome')} *</label>
+            <textarea className="input resize-none" rows={2} required minLength={2} maxLength={1000}
+              value={visitForm.outcome} onChange={e => setVisitForm(p => ({ ...p, outcome: e.target.value }))} />
+          </div>
           <div><label className="label">{t('visit_followup')}</label><input className="input" type="datetime-local" value={visitForm.nextFollowUp} onChange={e => setVisitForm(p => ({ ...p, nextFollowUp: e.target.value }))} /></div>
           <div className="flex gap-3">
             <button type="button" className="btn-secondary" onClick={() => setShowVisitModal(false)}>{t('cancel')}</button>
@@ -626,12 +632,15 @@ export default function ClientDetail() {
       {/* Activity Modal */}
       <Modal open={showActivityModal} onClose={() => setShowActivityModal(false)} title={t('add_note')}>
         <form onSubmit={submitActivity} className="space-y-4">
-          <div><label className="label">{lang === 'ar' ? 'النوع' : 'Type'}</label>
-            <select className="input" value={actForm.type} onChange={e => setActForm(p => ({ ...p, type: e.target.value }))}>
+          <div><label className="label">{lang === 'ar' ? 'النوع' : 'Type'} *</label>
+            <select className="input" required value={actForm.type} onChange={e => setActForm(p => ({ ...p, type: e.target.value }))}>
               {ACTIVITY_TYPES.map(at => <option key={at.value} value={at.value}>{at.label}</option>)}
             </select>
           </div>
-          <div><label className="label">{lang === 'ar' ? 'التفاصيل *' : 'Details *'}</label><textarea className="input resize-none" rows={4} required value={actForm.description} onChange={e => setActForm(p => ({ ...p, description: e.target.value }))} /></div>
+          <div><label className="label">{lang === 'ar' ? 'التفاصيل *' : 'Details *'}</label>
+            <textarea className="input resize-none" rows={4} required minLength={2} maxLength={2000}
+              value={actForm.description} onChange={e => setActForm(p => ({ ...p, description: e.target.value }))} />
+          </div>
           <div className="flex gap-3">
             <button type="button" className="btn-secondary" onClick={() => setShowActivityModal(false)}>{t('cancel')}</button>
             <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving}>{saving ? t('saving') : t('save')}</button>
@@ -657,11 +666,26 @@ export default function ClientDetail() {
                 })}
               </select>
             </div>
-            <div><label className="label">{t('contract_ref')}</label><input className="input" value={contractForm.contractRef} onChange={e => setContractForm(p => ({ ...p, contractRef: e.target.value }))} placeholder="CTR-SA-..." dir="ltr" /></div>
-            <div><label className="label">{t('contract_rooms')}</label><input className="input" type="number" value={contractForm.roomsCount} onChange={e => setContractForm(p => ({ ...p, roomsCount: e.target.value }))} /></div>
-            <div><label className="label">{t('contract_rate')} ({t('sar')})</label><input className="input" type="number" value={contractForm.ratePerRoom} onChange={e => setContractForm(p => ({ ...p, ratePerRoom: e.target.value }))} /></div>
-            <div><label className="label">{t('contract_start')}</label><input className="input" type="date" value={contractForm.startDate} onChange={e => setContractForm(p => ({ ...p, startDate: e.target.value }))} /></div>
-            <div><label className="label">{t('contract_end')}</label><input className="input" type="date" value={contractForm.endDate} onChange={e => setContractForm(p => ({ ...p, endDate: e.target.value }))} /></div>
+            <div><label className="label">{t('contract_ref')} *</label>
+              <input className="input" required maxLength={50} pattern="[A-Za-z0-9\-_/]+"
+                value={contractForm.contractRef} onChange={e => setContractForm(p => ({ ...p, contractRef: e.target.value }))} placeholder="CTR-SA-..." dir="ltr" />
+            </div>
+            <div><label className="label">{t('contract_rooms')} *</label>
+              <input className="input" type="number" required min="1" max="100000"
+                value={contractForm.roomsCount} onChange={e => setContractForm(p => ({ ...p, roomsCount: e.target.value }))} />
+            </div>
+            <div><label className="label">{t('contract_rate')} ({t('sar')}) *</label>
+              <input className="input" type="number" required min="1" step="0.01"
+                value={contractForm.ratePerRoom} onChange={e => setContractForm(p => ({ ...p, ratePerRoom: e.target.value }))} />
+            </div>
+            <div><label className="label">{t('contract_start')} *</label>
+              <input className="input" type="date" required
+                value={contractForm.startDate} onChange={e => setContractForm(p => ({ ...p, startDate: e.target.value }))} />
+            </div>
+            <div><label className="label">{t('contract_end')} *</label>
+              <input className="input" type="date" required
+                value={contractForm.endDate} onChange={e => setContractForm(p => ({ ...p, endDate: e.target.value }))} />
+            </div>
             <div className="col-span-2"><label className="label">{t('contract_notes')}</label><textarea className="input resize-none" rows={2} value={contractForm.notes} onChange={e => setContractForm(p => ({ ...p, notes: e.target.value }))} /></div>
             <div className="col-span-2">
               <label className="label">{lang === 'ar' ? 'ملف العقد (PDF / Word / صورة)' : 'Contract File (PDF / Word / Image)'}</label>
@@ -696,13 +720,14 @@ export default function ClientDetail() {
               <input className="input" type="date" required value={paymentForm.paymentDate} onChange={e => setPaymentForm(p => ({ ...p, paymentDate: e.target.value }))} />
             </div>
           </div>
-          <div><label className="label">{t('payment_type')}</label>
-            <select className="input" value={paymentForm.paymentType} onChange={e => setPaymentForm(p => ({ ...p, paymentType: e.target.value }))}>
+          <div><label className="label">{t('payment_type')} *</label>
+            <select className="input" required value={paymentForm.paymentType} onChange={e => setPaymentForm(p => ({ ...p, paymentType: e.target.value }))}>
               {PAYMENT_TYPES.map(pt => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
             </select>
           </div>
-          <div><label className="label">{t('payment_reference')}</label>
-            <input className="input" value={paymentForm.reference} onChange={e => setPaymentForm(p => ({ ...p, reference: e.target.value }))} dir="ltr" />
+          <div><label className="label">{t('payment_reference')} *</label>
+            <input className="input" required maxLength={100} pattern="[A-Za-z0-9\-_/ ]+"
+              value={paymentForm.reference} onChange={e => setPaymentForm(p => ({ ...p, reference: e.target.value }))} dir="ltr" />
           </div>
           <div><label className="label">{t('client_notes')}</label>
             <textarea className="input resize-none" rows={2} value={paymentForm.notes} onChange={e => setPaymentForm(p => ({ ...p, notes: e.target.value }))} />
