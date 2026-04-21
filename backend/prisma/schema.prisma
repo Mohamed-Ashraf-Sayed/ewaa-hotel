@@ -168,6 +168,7 @@ model Contract {
   confirmationLetterName String?
   notes          String?
   contractRef    String?
+  paymentMethod  String?   // bank_transfer | cash | credit
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -229,6 +230,7 @@ model Payment {
   paymentType String?  // cash | bank_transfer | check | online
   reference   String?
   notes       String?
+  receiptUrl  String?  // uploaded receipt image/file filename
   collectedBy Int
   createdAt   DateTime @default(now())
 
@@ -343,6 +345,7 @@ model Task {
   completedAt DateTime?
   completionNotes String?
   generatedVisitId Int?
+  overdueNotified  Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -350,6 +353,19 @@ model Task {
   createdBy User      @relation("TaskCreator", fields: [createdById], references: [id])
   client    Client?   @relation(fields: [clientId], references: [id])
   contract  Contract? @relation(fields: [contractId], references: [id])
+}
+
+model PasswordResetCode {
+  id         Int      @id @default(autoincrement())
+  email      String
+  codeHash   String
+  expiresAt  DateTime
+  used       Boolean  @default(false)
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([email, used])
+  @@index([expiresAt])
 }
 
 // === PERFORMANCE & GAMIFICATION ===

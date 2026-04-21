@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -37,9 +37,18 @@ export default function Login() {
           style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'1\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")' }} />
         <div className="relative z-10 text-center px-12">
           <img src="/logo-white.svg" alt="Ewaa Hotels" className="h-28 mx-auto mb-8 object-contain drop-shadow-2xl" />
-          <h1 className="text-4xl font-bold text-white mb-3">Ewaa Hotels</h1>
-          <div className="w-16 h-0.5 bg-accent-400 mx-auto mb-4" />
-          <p className="text-brand-400 text-lg">نظام إدارة المبيعات والعقود</p>
+          <div className="pl-16 pr-0">
+            <h1 className="text-4xl font-bold text-white mb-3">Ewaa Hotels</h1>
+            <div className="w-16 h-0.5 bg-accent-400 mx-auto mb-4" />
+            <p className="text-brand-400 text-lg">نظام إدارة المبيعات والعقود</p>
+          </div>
+        </div>
+        <div className="absolute bottom-6 left-0 right-0 text-center px-6">
+          <p className="text-[11px] text-white leading-relaxed">
+            الجهة المنفذة
+            <span className="mx-1.5 text-white/70">•</span>
+            إدارة تقنية المعلومات بمجموعة المهيدب الاستثمارية
+          </p>
         </div>
       </div>
 
@@ -89,6 +98,11 @@ export default function Login() {
                   </button>
                 </div>
               </div>
+              <div className="text-left">
+                <Link to="/forgot-password" className="text-xs text-brand-500 hover:text-brand-700 hover:underline">
+                  نسيت كلمة المرور؟
+                </Link>
+              </div>
               <button type="submit" className="btn-primary w-full justify-center py-3 text-base" disabled={loading}>
                 {loading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
               </button>
@@ -118,6 +132,9 @@ export default function Login() {
               </div>
             </div>
           </div>
+          <p className="lg:hidden text-center text-[11px] text-white/50 mt-6 leading-relaxed">
+            الجهة المنفذة • إدارة تقنية المعلومات بمجموعة المهيدب الاستثمارية
+          </p>
         </div>
       </div>
     </div>

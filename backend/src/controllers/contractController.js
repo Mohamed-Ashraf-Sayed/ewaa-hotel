@@ -132,7 +132,7 @@ const getContract = async (req, res) => {
 
 const uploadContract = async (req, res) => {
   try {
-    const { clientId, hotelId, roomsCount, ratePerRoom, startDate, endDate, notes, contractRef } = req.body;
+    const { clientId, hotelId, roomsCount, ratePerRoom, startDate, endDate, notes, paymentMethod } = req.body;
 
     if (!clientId || !hotelId) {
       return res.status(400).json({ message: 'Client and Hotel are required' });
@@ -142,7 +142,18 @@ const uploadContract = async (req, res) => {
       ? parseFloat(roomsCount) * parseFloat(ratePerRoom) * 365
       : null;
 
-    const contractRef_ = contractRef || `CTR-${Date.now()}`;
+    // Auto-generate sequential contract ref: CTR-SA-NNN (based on highest existing)
+    const lastContract = await prisma.contract.findFirst({
+      where: { contractRef: { startsWith: 'CTR-SA-' } },
+      orderBy: { id: 'desc' },
+      select: { contractRef: true },
+    });
+    let nextSeq = 1;
+    if (lastContract?.contractRef) {
+      const match = lastContract.contractRef.match(/CTR-SA-(\d+)/);
+      if (match) nextSeq = parseInt(match[1], 10) + 1;
+    }
+    const contractRef_ = `CTR-SA-${String(nextSeq).padStart(3, '0')}`;
 
     // Check for previous contracts with same client for comparison data
     const previousContracts = await prisma.contract.findMany({
@@ -164,7 +175,8 @@ const uploadContract = async (req, res) => {
         endDate: endDate ? new Date(endDate) : null,
         totalValue,
         notes,
-        contractRef: contractRef_
+        contractRef: contractRef_,
+        paymentMethod: paymentMethod || null,
       },
       include: {
         client: { select: { companyName: true, contactPerson: true } },

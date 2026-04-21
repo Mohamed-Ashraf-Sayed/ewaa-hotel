@@ -52,6 +52,21 @@ const getTasks = async (req, res) => {
   }
 };
 
+// GET /tasks/count — pending tasks assigned to current user (for nav badge)
+const getTaskCount = async (req, res) => {
+  try {
+    const count = await prisma.task.count({
+      where: {
+        assigneeId: req.user.id,
+        status: { not: 'completed' },
+      },
+    });
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // POST /tasks
 const createTask = async (req, res) => {
   try {
@@ -122,7 +137,11 @@ const updateTask = async (req, res) => {
       if (status === 'completed') data.completedAt = new Date();
     }
     if (priority) data.priority = priority;
-    if (dueDate) data.dueDate = new Date(dueDate);
+    if (dueDate) {
+      data.dueDate = new Date(dueDate);
+      // If the new deadline is in the future, clear the overdue flag so it can fire again if missed
+      if (new Date(dueDate) > new Date()) data.overdueNotified = false;
+    }
     if (title) data.title = title;
     if (description !== undefined) data.description = description;
     if (completionNotes !== undefined) data.completionNotes = completionNotes;
@@ -199,4 +218,4 @@ const deleteTask = async (req, res) => {
   }
 };
 
-module.exports = { getTasks, createTask, updateTask, deleteTask };
+module.exports = { getTasks, getTaskCount, createTask, updateTask, deleteTask };

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, FileText, MapPin, Clock, AlertTriangle, TrendingUp, Users, ArrowLeft } from 'lucide-react';
+import { Building2, FileText, MapPin, Clock, AlertTriangle, TrendingUp, Users, ArrowLeft, Eye, Download } from 'lucide-react';
 import { dashboardApi, contractsApi } from '../services/api';
 import Modal from '../components/Modal';
 import { DashboardData } from '../types';
@@ -630,6 +630,57 @@ function ReservationsDashboard() {
               <p className="text-xs text-emerald-600 mt-1">
                 {confirmModal.roomsCount} {isAr ? 'غرفة' : 'rooms'} × {confirmModal.ratePerRoom} {isAr ? 'ر.س/ليلة' : 'SAR/night'}
               </p>
+            </div>
+
+            <div className={`flex items-center justify-between gap-2 p-3 rounded-lg border ${
+              (confirmModal as any).fileUrl ? 'bg-brand-50/60 border-brand-200' : 'bg-gray-50 border-gray-200'
+            } ${isAr ? 'flex-row-reverse' : ''}`}>
+              <div className={`flex items-center gap-2 min-w-0 ${isAr ? 'flex-row-reverse text-right' : ''}`}>
+                <FileText className={`w-4 h-4 flex-shrink-0 ${(confirmModal as any).fileUrl ? 'text-brand-600' : 'text-gray-400'}`} />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-brand-900">{isAr ? 'ملف العقد المرفوع' : 'Uploaded Contract File'}</p>
+                  <p className="text-[11px] text-brand-400 truncate">
+                    {(confirmModal as any).fileUrl
+                      ? ((confirmModal as any).fileName || (isAr ? 'العقد.pdf' : 'contract.pdf'))
+                      : (isAr ? 'لا يوجد ملف مرفوع' : 'No file uploaded')}
+                  </p>
+                </div>
+              </div>
+              <div className={`flex gap-1 flex-shrink-0 ${isAr ? 'flex-row-reverse' : ''}`}>
+                <button type="button"
+                  onClick={async () => {
+                    if (!(confirmModal as any).fileUrl) return;
+                    const res = await contractsApi.download(confirmModal.id);
+                    const ext = (confirmModal as any).fileName?.split('.').pop()?.toLowerCase();
+                    const mime = ext === 'pdf' ? 'application/pdf'
+                      : ext === 'png' ? 'image/png'
+                      : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
+                      : 'application/octet-stream';
+                    const url = URL.createObjectURL(new Blob([res.data], { type: mime }));
+                    window.open(url, '_blank');
+                  }}
+                  disabled={!(confirmModal as any).fileUrl}
+                  className="p-1.5 rounded-lg text-brand-500 enabled:hover:bg-emerald-50 enabled:hover:text-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title={isAr ? 'اطلاع' : 'Preview'}>
+                  <Eye className="w-4 h-4" />
+                </button>
+                <button type="button"
+                  onClick={async () => {
+                    if (!(confirmModal as any).fileUrl) return;
+                    const res = await contractsApi.download(confirmModal.id);
+                    const url = URL.createObjectURL(new Blob([res.data]));
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = (confirmModal as any).fileName || 'contract.pdf';
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }}
+                  disabled={!(confirmModal as any).fileUrl}
+                  className="p-1.5 rounded-lg text-brand-500 enabled:hover:bg-brand-100 enabled:hover:text-brand-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title={isAr ? 'تنزيل' : 'Download'}>
+                  <Download className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <div>
               <label className="label">{isAr ? 'ملاحظات الحجز (رقم الحجز، التواريخ، إلخ)' : 'Booking Notes (booking ref, dates, etc.)'}</label>

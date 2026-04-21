@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Download, Building2, FileText, TrendingUp, Users, MapPin, Target as TargetIcon, FileSpreadsheet, Filter } from 'lucide-react';
+import { Download, Building2, FileText, TrendingUp, Users, MapPin, Target as TargetIcon, FileSpreadsheet, Filter, CreditCard } from 'lucide-react';
 import { pdfApi, contractsApi, clientsApi, visitsApi, paymentsApi, usersApi } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import Modal from '../components/Modal';
 import { format, parseISO } from 'date-fns';
 import { arSA, enUS } from 'date-fns/locale';
 
-type FilterKey = 'type' | 'dateRange' | 'rep' | 'status' | 'visitType';
+type FilterKey = 'type' | 'dateRange' | 'rep' | 'status' | 'visitType' | 'paymentMethod';
 
 interface ReportCard {
   key: string;
@@ -51,10 +51,19 @@ const REPORTS: ReportCard[] = [
   {
     key: 'payments',
     title: { ar: 'تقرير التحصيل', en: 'Collections Report' },
-    description: { ar: 'كل المبالغ المحصلة من العملاء', en: 'All collected amounts from clients' },
+    description: { ar: 'كل المبالغ المحصلة من العملاء مع فلتر طريقة السداد', en: 'All collected amounts with payment method filter' },
     icon: TrendingUp,
     color: 'bg-amber-50',
     iconColor: 'text-amber-600',
+    filters: ['rep', 'paymentMethod', 'dateRange'],
+  },
+  {
+    key: 'paymentMethods',
+    title: { ar: 'طرق سداد العملاء للعقد', en: 'Client Payment Methods per Contract' },
+    description: { ar: 'بيان طرق السداد (كاش / تحويل بنكي / شيك) لكل عقد', en: 'Payment method breakdown (cash / bank / cheque) per contract' },
+    icon: CreditCard,
+    color: 'bg-indigo-50',
+    iconColor: 'text-indigo-600',
     filters: ['rep', 'dateRange'],
   },
   {
@@ -184,7 +193,10 @@ export default function Reports() {
       switch (key) {
         case 'clients':
           if (format === 'pdf') {
-            const res = await pdfApi.clientReport({ type: f.type || undefined });
+            const res = await pdfApi.clientReport({
+              type: f.type || undefined,
+              salesRepId: f.salesRepId || undefined,
+            });
             downloadFile(res.data, 'Clients_Report.pdf');
           } else {
             let { data } = await clientsApi.getAll({ type: f.type || undefined });
@@ -244,6 +256,7 @@ export default function Reports() {
         case 'payments': {
           let { data } = await paymentsApi.getAll();
           if (f.salesRepId) data = data.filter((p: any) => p.collector?.id === parseInt(f.salesRepId));
+          if (f.paymentMethod) data = data.filter((p: any) => p.paymentType === f.paymentMethod);
           data = applyDateRange(data, 'paymentDate', f.from, f.to);
           exportToCSV(data, 'Payments.csv', [
             { key: 'paymentDate', label: isAr ? 'التاريخ' : 'Date', transform: fmtDate },
@@ -253,6 +266,47 @@ export default function Reports() {
             { key: 'paymentType', label: isAr ? 'الطريقة' : 'Method', transform: v => isAr ? (PAYMENT_METHOD_AR[v] || v) : v },
             { key: 'reference', label: isAr ? 'المرجع' : 'Reference' },
             { key: 'collector.name', label: isAr ? 'المُحصِّل' : 'Collected By' },
+          ]);
+          break;
+        }
+        case 'paymentMethods': {
+          let { data: payments } = await paymentsApi.getAll();
+          if (f.salesRepId) payments = payments.filter((p: any) => p.collector?.id === parseInt(f.salesRepId));
+          payments = applyDateRange(payments, 'paymentDate', f.from, f.to);
+
+          // Group by contract, aggregate per method
+          const byContract: Record<string, any> = {};
+          for (const p of payments) {
+            const cid = p.contract?.id || p.contractId;
+            if (!cid) continue;
+            if (!byContract[cid]) {
+              byContract[cid] = {
+                contractRef: p.contract?.contractRef || `#${cid}`,
+                companyName: p.client?.companyName || '',
+                totalCollected: 0,
+                cash: 0, bank_transfer: 0, cheque: 0, card: 0, online: 0, check: 0,
+                count: 0,
+              };
+            }
+            byContract[cid].totalCollected += Number(p.amount || 0);
+            byContract[cid].count += 1;
+            const key = p.paymentType || 'other';
+            byContract[cid][key] = (byContract[cid][key] || 0) + Number(p.amount || 0);
+          }
+          const rows = Object.values(byContract);
+          if (rows.length === 0) {
+            alert(isAr ? 'لا توجد مدفوعات مطابقة للفلاتر' : 'No payments match filters');
+            break;
+          }
+          exportToCSV(rows, 'Payment_Methods_By_Contract.csv', [
+            { key: 'contractRef', label: isAr ? 'العقد' : 'Contract' },
+            { key: 'companyName', label: isAr ? 'الشركة' : 'Company' },
+            { key: 'count', label: isAr ? 'عدد الدفعات' : 'Payments #' },
+            { key: 'cash', label: isAr ? 'نقدي' : 'Cash', transform: fmtNum },
+            { key: 'bank_transfer', label: isAr ? 'تحويل بنكي' : 'Bank Transfer', transform: fmtNum },
+            { key: 'cheque', label: isAr ? 'شيك' : 'Cheque', transform: fmtNum },
+            { key: 'card', label: isAr ? 'بطاقة' : 'Card', transform: fmtNum },
+            { key: 'totalCollected', label: isAr ? 'إجمالي المحصل' : 'Total Collected', transform: fmtNum },
           ]);
           break;
         }
@@ -382,6 +436,19 @@ export default function Reports() {
                   {Object.entries(VISIT_TYPE_AR).map(([k, v]) => (
                     <option key={k} value={k}>{isAr ? v : k}</option>
                   ))}
+                </select>
+              </div>
+            )}
+
+            {current.filters?.includes('paymentMethod') && (
+              <div>
+                <label className="label">{isAr ? 'طريقة السداد' : 'Payment Method'}</label>
+                <select className="input" value={f.paymentMethod || ''} onChange={e => setF({ paymentMethod: e.target.value })}>
+                  <option value="">{isAr ? 'كل الطرق' : 'All methods'}</option>
+                  <option value="cash">{isAr ? 'نقدي' : 'Cash'}</option>
+                  <option value="bank_transfer">{isAr ? 'تحويل بنكي' : 'Bank Transfer'}</option>
+                  <option value="cheque">{isAr ? 'شيك' : 'Cheque'}</option>
+                  <option value="card">{isAr ? 'بطاقة' : 'Card'}</option>
                 </select>
               </div>
             )}

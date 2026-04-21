@@ -67,4 +67,8 @@ app.get('*', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Hotel CRM running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Hotel CRM running on port ${PORT}`);
+  // Background job: notify managers when tasks are overdue
+  require('./jobs/taskOverdueChecker').startTaskOverdueChecker();
+});

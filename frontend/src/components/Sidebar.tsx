@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, FileText, MapPin,
-  Hotel, CreditCard, Target, CheckSquare, Trophy, CalendarDays, X, BarChart3, Network, MessageCircle
+  Hotel, CreditCard, Target, CheckSquare, Trophy, CalendarDays, X, BarChart3, Network, MessageCircle, Wallet
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { TranslationKey } from '../i18n/translations';
-import { messagesApi } from '../services/api';
+import { messagesApi, tasksApi } from '../services/api';
 
 interface NavItem { to: string; icon: any; labelKey: TranslationKey; badge?: string; roles?: string[] }
 
@@ -16,7 +16,8 @@ const navItems: NavItem[] = [
   { to: '/clients', icon: Building2, labelKey: 'nav_clients', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer'] },
   { to: '/contracts', icon: FileText, labelKey: 'nav_contracts' },
   { to: '/visits', icon: MapPin, labelKey: 'nav_visits', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer'] },
-  { to: '/payments', icon: CreditCard, labelKey: 'nav_payments', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer'] },
+  { to: '/payments', icon: CreditCard, labelKey: 'nav_payments', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer', 'credit_manager', 'credit_officer'] },
+  { to: '/credit-payments', icon: Wallet, labelKey: 'nav_credit_payments', roles: ['admin', 'general_manager', 'vice_gm', 'credit_manager', 'credit_officer'] },
   { to: '/targets', icon: Target, labelKey: 'nav_targets', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep'] },
   { to: '/calendar', icon: CalendarDays, labelKey: 'nav_calendar' },
   { to: '/chat', icon: MessageCircle, labelKey: 'nav_chat' },
@@ -35,10 +36,12 @@ export default function Sidebar({ open, isMobile, onClose }: SidebarProps) {
   const { t, lang } = useLanguage();
   const isAr = lang === 'ar';
   const [unreadChat, setUnreadChat] = useState(0);
+  const [pendingTasks, setPendingTasks] = useState(0);
 
   useEffect(() => {
     const load = () => {
       messagesApi.getUnreadCount().then(r => setUnreadChat(r.data.count || 0)).catch(() => {});
+      tasksApi.getPendingCount().then(r => setPendingTasks(r.data.count || 0)).catch(() => {});
     };
     load();
     const interval = setInterval(load, 8000);
@@ -82,7 +85,9 @@ export default function Sidebar({ open, isMobile, onClose }: SidebarProps) {
           {isAr ? 'القائمة الرئيسية' : 'Main Menu'}
         </p>
         {visible.map(({ to, icon: Icon, labelKey, badge }) => {
-          const showChatBadge = to === '/chat' && unreadChat > 0;
+          const badgeCount =
+            to === '/chat' ? unreadChat :
+            to === '/tasks' ? pendingTasks : 0;
           return (
             <NavLink
               key={to}
@@ -93,9 +98,9 @@ export default function Sidebar({ open, isMobile, onClose }: SidebarProps) {
             >
               <Icon className="w-[18px] h-[18px] flex-shrink-0" />
               <span className="whitespace-nowrap flex-1">{t(labelKey)}{badge ? ` ${badge}` : ''}</span>
-              {showChatBadge && (
+              {badgeCount > 0 && (
                 <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-5 h-5 px-1.5 flex items-center justify-center">
-                  {unreadChat > 9 ? '9+' : unreadChat}
+                  {badgeCount > 9 ? '9+' : badgeCount}
                 </span>
               )}
             </NavLink>

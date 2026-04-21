@@ -18,6 +18,7 @@ export default function Contracts() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [salesRepFilter, setSalesRepFilter] = useState('');
+  const [bookingFilter, setBookingFilter] = useState<'all' | 'booked' | 'not_booked'>('all');
   const [search, setSearch] = useState('');
   const [approvalModal, setApprovalModal] = useState<Contract | null>(null);
   const [timelineModal, setTimelineModal] = useState<Contract | null>(null);
@@ -42,6 +43,13 @@ export default function Contracts() {
   };
 
   useEffect(() => { load(); }, [statusFilter, salesRepFilter, search]);
+
+  const visibleContracts = contracts.filter(c => {
+    if (bookingFilter === 'booked') return (c as any).bookingConfirmed === true;
+    if (bookingFilter === 'not_booked') return !(c as any).bookingConfirmed;
+    return true;
+  });
+  const bookedCount = contracts.filter(c => (c as any).bookingConfirmed).length;
   useEffect(() => { hotelsApi.getAll().then(r => setHotels(r.data)); }, []);
 
   // Load all sales-eligible users so dropdown shows reps even if they have no contracts yet
@@ -156,6 +164,26 @@ export default function Contracts() {
         </div>
       )}
 
+      {/* Booking tabs */}
+      <div className={`flex gap-1 bg-brand-50 p-1 rounded-lg w-fit ${isAr ? 'flex-row-reverse mr-0 ml-auto' : ''}`}>
+        {([
+          { key: 'all',        label: isAr ? 'كل العقود' : 'All Contracts', count: contracts.length },
+          { key: 'booked',     label: isAr ? 'تم الحجز' : 'Booked',          count: bookedCount },
+          { key: 'not_booked', label: isAr ? 'لم يتم الحجز' : 'Not Booked',  count: contracts.length - bookedCount },
+        ] as const).map(tab => (
+          <button key={tab.key}
+            onClick={() => setBookingFilter(tab.key)}
+            className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
+              bookingFilter === tab.key
+                ? 'bg-white text-brand-900 shadow-sm'
+                : 'text-brand-500 hover:text-brand-700'
+            }`}>
+            {tab.label}
+            <span className={`ml-1.5 text-xs ${bookingFilter === tab.key ? 'text-brand-500' : 'text-brand-400'}`}>({tab.count})</span>
+          </button>
+        ))}
+      </div>
+
       {/* Filters */}
       <div className={`card p-4 flex flex-wrap gap-3 ${isAr ? 'flex-row-reverse' : ''}`}>
         {canApprove && pendingCount > 0 && (
@@ -209,9 +237,9 @@ export default function Contracts() {
             <tbody className="divide-y divide-brand-50">
               {loading ? (
                 <tr><td colSpan={9} className="py-12 text-center text-brand-400">{t('loading')}</td></tr>
-              ) : contracts.length === 0 ? (
+              ) : visibleContracts.length === 0 ? (
                 <tr><td colSpan={9} className="py-12 text-center text-brand-400">{t('no_data')}</td></tr>
-              ) : contracts.map(c => {
+              ) : visibleContracts.map(c => {
                 const collected = c.collectedAmount || 0;
                 const total = c.totalValue || 0;
                 const pct = total > 0 ? Math.round((collected / total) * 100) : 0;
@@ -219,16 +247,18 @@ export default function Contracts() {
                   <tr key={c.id} className="hover:bg-brand-50/50 transition-colors">
                     <td className="px-4 py-4">
                       <div className="flex items-center justify-center gap-2">
-                        {c.fileUrl && (
-                          <button onClick={() => handlePreview(c)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-brand-400 hover:text-emerald-600" title={lang === 'ar' ? 'اطلاع' : 'Preview'}>
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        )}
-                        {c.fileUrl && (
-                          <button onClick={() => handleDownload(c)} className="p-1.5 rounded-lg hover:bg-brand-100 text-brand-400 hover:text-brand-500" title={t('contract_download')}>
-                            <Download className="w-4 h-4" />
-                          </button>
-                        )}
+                        <button onClick={() => c.fileUrl && handlePreview(c)}
+                          disabled={!c.fileUrl}
+                          className="p-1.5 rounded-lg text-brand-400 enabled:hover:bg-emerald-50 enabled:hover:text-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                          title={c.fileUrl ? (lang === 'ar' ? 'اطلاع' : 'Preview') : (lang === 'ar' ? 'لا يوجد ملف مرفوع' : 'No file uploaded')}>
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => c.fileUrl && handleDownload(c)}
+                          disabled={!c.fileUrl}
+                          className="p-1.5 rounded-lg text-brand-400 enabled:hover:bg-brand-100 enabled:hover:text-brand-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                          title={c.fileUrl ? t('contract_download') : (lang === 'ar' ? 'لا يوجد ملف مرفوع' : 'No file uploaded')}>
+                          <Download className="w-4 h-4" />
+                        </button>
                         <button onClick={() => openTimeline(c)} className="p-1.5 rounded-lg hover:bg-amber-50 text-brand-400 hover:text-amber-600" title={lang === 'ar' ? 'حالة الموافقة' : 'Approval Status'}>
                           <GitBranch className="w-4 h-4" />
                         </button>
@@ -301,7 +331,14 @@ export default function Contracts() {
                       {c.client?.contactPerson && <div className="text-xs text-brand-400">{c.client.contactPerson}</div>}
                     </td>
                     <td className={`px-4 py-4 ${isAr ? 'text-right' : 'text-left'}`}>
-                      <span className="font-mono text-xs bg-brand-100 px-2 py-1 rounded text-brand-700">{c.contractRef || `#${c.id}`}</span>
+                      <div className={`flex items-center gap-1.5 flex-wrap ${isAr ? 'flex-row-reverse justify-end' : ''}`}>
+                        <span className="font-mono text-xs bg-brand-100 px-2 py-1 rounded text-brand-700">{c.contractRef || `#${c.id}`}</span>
+                        {(c as any).bookingConfirmed && (
+                          <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-semibold">
+                            {isAr ? '✓ تم الحجز' : '✓ Booked'}
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

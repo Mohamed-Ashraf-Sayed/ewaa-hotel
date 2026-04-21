@@ -24,7 +24,7 @@ export default function Visits() {
   const isAr = lang === 'ar';
   const locale = isAr ? arSA : enUS;
   const VISIT_TYPES = isAr ? VISIT_TYPES_AR : VISIT_TYPES_EN;
-  const isManager = hasRole('general_manager', 'vice_gm', 'sales_director');
+  const isManager = hasRole('admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales');
 
   const [visits, setVisits] = useState<Visit[]>([]);
   const [followUps, setFollowUps] = useState<Visit[]>([]);
@@ -45,7 +45,11 @@ export default function Visits() {
       .then(([v, f]) => { setVisits(v.data); setFollowUps(f.data); })
       .finally(() => setLoading(false));
     if (isManager) {
-      usersApi.getAll().then(r => setReps(r.data.filter((u: any) => ['sales_rep', 'sales_director'].includes(u.role))));
+      usersApi.getAll().then(r => setReps(
+        r.data
+          .filter((u: any) => u.isActive && ['sales_rep', 'sales_director', 'assistant_sales'].includes(u.role))
+          .sort((a: any, b: any) => a.name.localeCompare(b.name, 'ar'))
+      ));
     }
   }, []);
 

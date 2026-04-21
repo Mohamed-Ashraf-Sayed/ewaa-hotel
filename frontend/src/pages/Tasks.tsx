@@ -45,6 +45,9 @@ export default function Tasks() {
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
   const [showModal, setShowModal] = useState(false);
   const [completeModal, setCompleteModal] = useState<Task | null>(null);
   const [completionNotes, setCompletionNotes] = useState('');
@@ -60,11 +63,18 @@ export default function Tasks() {
 
   useEffect(() => { load(); }, [filter]);
   useEffect(() => {
+    usersApi.getAll().then(r => setUsers(r.data.filter((u: any) => ['sales_rep', 'sales_director'].includes(u.role))));
     if (canManage) {
-      usersApi.getAll().then(r => setUsers(r.data.filter((u: any) => ['sales_rep', 'sales_director'].includes(u.role))));
       clientsApi.getAll().then(r => setClients(r.data));
     }
   }, []);
+
+  const filteredTasks = tasks.filter(t => {
+    if (assigneeFilter !== 'all' && String(t.assignee.id) !== assigneeFilter) return false;
+    if (dateFrom && (!t.dueDate || t.dueDate < dateFrom)) return false;
+    if (dateTo && (!t.dueDate || t.dueDate > dateTo + 'T23:59:59')) return false;
+    return true;
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
@@ -117,7 +127,7 @@ export default function Tasks() {
   const statusLabel: Record<string, string> = { new: isAr ? 'جديد' : 'New', in_progress: isAr ? 'قيد التنفيذ' : 'In Progress', completed: isAr ? 'مكتمل' : 'Completed' };
   const priorityLabel: Record<string, string> = { urgent: isAr ? 'عاجل' : 'Urgent', normal: isAr ? 'عادي' : 'Normal' };
 
-  const counts = { all: tasks.length, new: tasks.filter(t => t.status === 'new').length, in_progress: tasks.filter(t => t.status === 'in_progress').length, completed: tasks.filter(t => t.status === 'completed').length };
+  const counts = { all: filteredTasks.length, new: filteredTasks.filter(t => t.status === 'new').length, in_progress: filteredTasks.filter(t => t.status === 'in_progress').length, completed: filteredTasks.filter(t => t.status === 'completed').length };
 
   return (
     <div className="space-y-5">
@@ -144,17 +154,41 @@ export default function Tasks() {
         ))}
       </div>
 
+      {/* Employee & Date Filters */}
+      <div className={`card p-3 flex gap-3 flex-wrap items-end ${isAr ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex-1 min-w-[180px] ${isAr ? 'text-right' : ''}`}>
+          <label className="label text-xs">{isAr ? 'الموظف' : 'Employee'}</label>
+          <select className="input" value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)}>
+            <option value="all">{isAr ? 'كل الموظفين' : 'All Employees'}</option>
+            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </div>
+        <div className={isAr ? 'text-right' : ''}>
+          <label className="label text-xs">{isAr ? 'من تاريخ' : 'From'}</label>
+          <input type="date" className="input" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+        </div>
+        <div className={isAr ? 'text-right' : ''}>
+          <label className="label text-xs">{isAr ? 'إلى تاريخ' : 'To'}</label>
+          <input type="date" className="input" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+        </div>
+        {(assigneeFilter !== 'all' || dateFrom || dateTo) && (
+          <button className="btn-secondary" onClick={() => { setAssigneeFilter('all'); setDateFrom(''); setDateTo(''); }}>
+            {isAr ? 'مسح الفلاتر' : 'Clear'}
+          </button>
+        )}
+      </div>
+
       {/* Tasks List */}
       {loading ? (
         <div className="card py-12 text-center text-brand-400">{isAr ? 'جاري التحميل...' : 'Loading...'}</div>
-      ) : tasks.length === 0 ? (
+      ) : filteredTasks.length === 0 ? (
         <div className="card py-16 text-center">
           <CheckCircle className="w-12 h-12 text-brand-200 mx-auto mb-3" />
           <p className="text-brand-400 font-semibold">{isAr ? 'لا توجد مهام' : 'No tasks'}</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {tasks.map(task => {
+          {filteredTasks.map(task => {
             const overdue = task.dueDate && isPast(parseISO(task.dueDate)) && task.status !== 'completed';
             const isLocked = task.status === 'completed' && !isAdmin;
             const taskTypeInfo = TASK_TYPES[task.taskType] || TASK_TYPES.general;

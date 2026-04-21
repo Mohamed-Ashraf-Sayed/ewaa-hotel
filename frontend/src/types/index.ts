@@ -37,6 +37,7 @@ export interface Payment {
   paymentType?: string;
   reference?: string;
   notes?: string;
+  receiptUrl?: string;
   collectedBy: number;
   createdAt: string;
   contract?: { id: number; contractRef?: string; totalValue?: number };
@@ -117,6 +118,9 @@ export interface Contract {
   status: 'pending' | 'sales_approved' | 'credit_approved' | 'contract_approved' | 'approved' | 'rejected';
   notes?: string;
   contractRef?: string;
+  paymentMethod?: 'bank_transfer' | 'cash' | 'credit';
+  bookingConfirmed?: boolean;
+  bookingConfirmedAt?: string;
   createdAt: string;
   daysUntilExpiry?: number;
   client?: { id: number; companyName: string; contactPerson: string; phone?: string };

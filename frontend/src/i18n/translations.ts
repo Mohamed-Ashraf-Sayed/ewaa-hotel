@@ -9,6 +9,7 @@ const translations = {
   nav_hotels: { ar: 'الفنادق', en: 'Hotels' },
   nav_users: { ar: 'المستخدمون', en: 'Users' },
   nav_payments: { ar: 'التحصيل', en: 'Collections' },
+  nav_credit_payments: { ar: 'تحصيل الائتمان', en: 'Credit Collections' },
   nav_targets: { ar: 'التارجت', en: 'Targets' },
   nav_tasks: { ar: 'المهام', en: 'Tasks' },
   nav_leaderboard: { ar: 'الصدارة', en: 'Leaderboard' },

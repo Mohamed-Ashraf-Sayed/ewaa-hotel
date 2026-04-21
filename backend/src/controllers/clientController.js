@@ -7,6 +7,8 @@ const MANAGER_ROLES = ['sales_director'];
 
 const buildAccessFilter = async (user) => {
   if (ADMIN_ROLES.includes(user.role)) return {};
+  // Credit team and contract_officer need cross-rep visibility to record/review payments
+  if (['credit_manager', 'credit_officer', 'contract_officer'].includes(user.role)) return {};
   // Assistant sales sees same team as their director (sibling reps + director)
   if (user.role === 'assistant_sales' && user.managerId) {
     const teamIds = await getSubordinateIds(user.managerId);

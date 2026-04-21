@@ -80,9 +80,10 @@ export default function ClientDetail() {
 
   const [visitForm, setVisitForm] = useState({ visitDate: '', visitType: 'in_person', purpose: '', outcome: '', nextFollowUp: '', notes: '' });
   const [actForm, setActForm] = useState({ type: 'note', description: '' });
-  const [contractForm, setContractForm] = useState({ hotelId: '', roomsCount: '', ratePerRoom: '', startDate: '', endDate: '', notes: '', contractRef: '' });
+  const [contractForm, setContractForm] = useState({ hotelId: '', roomsCount: '', ratePerRoom: '', startDate: '', endDate: '', notes: '', paymentMethod: '' });
   const [contractFile, setContractFile] = useState<File | null>(null);
   const [paymentForm, setPaymentForm] = useState({ contractId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'bank_transfer', reference: '', notes: '' });
+  const [paymentReceipt, setPaymentReceipt] = useState<File | null>(null);
 
   const load = async () => {
     const [clientRes, paymentsRes, emailRes, attRes] = await Promise.all([
@@ -207,9 +208,14 @@ export default function ClientDetail() {
   const submitPayment = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
     try {
-      await paymentsApi.create({ ...paymentForm, clientId: id });
+      const fd = new FormData();
+      fd.append('clientId', String(id));
+      Object.entries(paymentForm).forEach(([k, v]) => fd.append(k, v as string));
+      if (paymentReceipt) fd.append('receipt', paymentReceipt);
+      await paymentsApi.create(fd);
       setShowPaymentModal(false);
       setPaymentForm({ contractId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'bank_transfer', reference: '', notes: '' });
+      setPaymentReceipt(null);
       load();
     } catch { alert(t('error_occurred')); } finally { setSaving(false); }
   };
@@ -265,6 +271,17 @@ export default function ClientDetail() {
                 {client.industry && <span className="text-sm text-brand-400">{client.industry}</span>}
                 {client.hotel && <span className="text-sm text-brand-400">📍 {client.hotel.name}</span>}
               </div>
+              {(client as any).createdAt && (
+                <div className={`flex items-center gap-1.5 mt-2 text-xs text-brand-400 ${isAr ? 'flex-row-reverse' : ''}`}>
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>
+                    {isAr ? 'تم إنشاء البروفايل في ' : 'Profile created on '}
+                    {format(parseISO((client as any).createdAt), 'dd MMM yyyy', { locale })}
+                    {' · '}
+                    {format(parseISO((client as any).createdAt), 'hh:mm a', { locale })}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -497,6 +514,16 @@ export default function ClientDetail() {
                   {p.reference ? ` · ${p.reference}` : ''}
                 </p>
                 {p.notes && <p className="text-xs text-brand-400 mt-1">{p.notes}</p>}
+                {p.receiptUrl && (
+                  <a
+                    href={`/uploads/${p.receiptUrl}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 mt-2 text-xs font-semibold text-brand-600 hover:text-brand-800 underline"
+                  >
+                    📎 {isAr ? 'عرض صورة السداد' : 'View Receipt'}
+                  </a>
+                )}
               </div>
               <div className={`text-xs text-brand-400 ${isAr ? 'text-left' : 'text-right'}`}>
                 <p>{p.paymentDate ? format(parseISO(p.paymentDate), 'dd MMM yyyy', { locale }) : ''}</p>
@@ -725,9 +752,14 @@ export default function ClientDetail() {
                 })}
               </select>
             </div>
-            <div><label className="label">{t('contract_ref')} *</label>
-              <input className="input" required maxLength={50} pattern="[A-Za-z0-9\-_/]+"
-                value={contractForm.contractRef} onChange={e => setContractForm(p => ({ ...p, contractRef: e.target.value }))} placeholder="CTR-SA-..." dir="ltr" />
+            <div><label className="label">{lang === 'ar' ? 'طريقة السداد' : 'Payment Method'} *</label>
+              <select className="input" required value={contractForm.paymentMethod}
+                onChange={e => setContractForm(p => ({ ...p, paymentMethod: e.target.value }))}>
+                <option value="">{lang === 'ar' ? 'اختر...' : 'Select...'}</option>
+                <option value="bank_transfer">{lang === 'ar' ? 'تحويل بنكي' : 'Bank Transfer'}</option>
+                <option value="cash">{lang === 'ar' ? 'كاش' : 'Cash'}</option>
+                <option value="credit">{lang === 'ar' ? 'كريدت' : 'Credit'}</option>
+              </select>
             </div>
             <div><label className="label">{t('contract_rooms')} *</label>
               <input className="input" type="number" required min="1" max="100000"
@@ -790,6 +822,25 @@ export default function ClientDetail() {
           </div>
           <div><label className="label">{t('client_notes')}</label>
             <textarea className="input resize-none" rows={2} value={paymentForm.notes} onChange={e => setPaymentForm(p => ({ ...p, notes: e.target.value }))} />
+          </div>
+          <div>
+            <label className="label">
+              {lang === 'ar' ? 'صورة السداد / إيصال' : 'Payment Receipt / Image'}
+            </label>
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              className="input"
+              onChange={e => setPaymentReceipt(e.target.files?.[0] || null)}
+            />
+            {paymentReceipt && (
+              <p className="text-xs text-emerald-600 mt-1">
+                ✓ {paymentReceipt.name} ({(paymentReceipt.size / 1024).toFixed(0)} KB)
+              </p>
+            )}
+            <p className="text-[11px] text-brand-400 mt-1">
+              {lang === 'ar' ? 'JPG / PNG / PDF — حتى 20 ميجا' : 'JPG / PNG / PDF — up to 20MB'}
+            </p>
           </div>
           <div className="flex gap-3">
             <button type="button" className="btn-secondary" onClick={() => setShowPaymentModal(false)}>{t('cancel')}</button>

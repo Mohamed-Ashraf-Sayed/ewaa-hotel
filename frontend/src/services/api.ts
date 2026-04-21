@@ -27,7 +27,11 @@ export const authApi = {
   login: (email: string, password: string) => api.post('/auth/login', { email, password }),
   getMe: () => api.get('/auth/me'),
   changePassword: (currentPassword: string, newPassword: string) =>
-    api.put('/auth/change-password', { currentPassword, newPassword })
+    api.put('/auth/change-password', { currentPassword, newPassword }),
+  forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
+  verifyResetCode: (email: string, code: string) => api.post('/auth/verify-reset-code', { email, code }),
+  resetPassword: (resetToken: string, newPassword: string) =>
+    api.post('/auth/reset-password', { resetToken, newPassword }),
 };
 
 // Users
@@ -93,7 +97,12 @@ export const activitiesApi = {
 export const paymentsApi = {
   getAll: (params?: { contractId?: number; clientId?: number }) => api.get('/payments', { params }),
   getSummary: (params: { contractId?: number; clientId?: number }) => api.get('/payments/summary', { params }),
-  create: (data: any) => api.post('/payments', data),
+  create: (data: any) => {
+    if (data instanceof FormData) {
+      return api.post('/payments', data, { headers: { 'Content-Type': 'multipart/form-data' } });
+    }
+    return api.post('/payments', data);
+  },
   delete: (id: number) => api.delete(`/payments/${id}`)
 };
 
@@ -127,6 +136,7 @@ export const notificationsApi = {
 // Tasks
 export const tasksApi = {
   getAll: (params?: any) => api.get('/tasks', { params }),
+  getPendingCount: () => api.get('/tasks/count'),
   create: (data: any) => api.post('/tasks', data),
   update: (id: number, data: any) => api.put(`/tasks/${id}`, data),
   delete: (id: number) => api.delete(`/tasks/${id}`),

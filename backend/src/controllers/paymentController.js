@@ -5,7 +5,8 @@ const prisma = new PrismaClient();
 const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
 
 const buildPaymentFilter = async (user) => {
-  if (ADMIN_ROLES.includes(user.role) || user.role === 'contract_officer') return {};
+  if (ADMIN_ROLES.includes(user.role) || user.role === 'contract_officer'
+      || user.role === 'credit_manager' || user.role === 'credit_officer') return {};
   if (user.role === 'assistant_sales' && user.managerId) {
     const teamIds = await getSubordinateIds(user.managerId);
     return { collectedBy: { in: [user.managerId, ...teamIds] } };
@@ -57,6 +58,8 @@ const createPayment = async (req, res) => {
     });
     if (!contract) return res.status(404).json({ message: 'Contract not found' });
 
+    const receiptUrl = req.file ? req.file.filename : null;
+
     const payment = await prisma.payment.create({
       data: {
         contractId: parseInt(contractId),
@@ -66,6 +69,7 @@ const createPayment = async (req, res) => {
         paymentType,
         reference,
         notes,
+        receiptUrl,
         collectedBy: req.user.id,
       },
       include: {

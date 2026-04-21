@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
 import Clients from './pages/Clients';
 import ClientDetail from './pages/ClientDetail';
@@ -12,6 +13,7 @@ import Users from './pages/Users';
 
 import Hotels from './pages/Hotels';
 import Payments from './pages/Payments';
+import CreditPayments from './pages/CreditPayments';
 import Targets from './pages/Targets';
 import Tasks from './pages/Tasks';
 import Leaderboard from './pages/Leaderboard';
@@ -36,6 +38,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/forgot-password" element={user ? <Navigate to="/" replace /> : <ForgotPassword />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="clients" element={<Clients />} />
@@ -46,6 +49,7 @@ function AppRoutes() {
         <Route path="users" element={<Users />} />
         <Route path="hotels" element={<Hotels />} />
         <Route path="payments" element={<Payments />} />
+        <Route path="credit-payments" element={<CreditPayments />} />
         <Route path="targets" element={<Targets />} />
         <Route path="tasks" element={<Tasks />} />
         <Route path="leaderboard" element={<Leaderboard />} />
