@@ -23,13 +23,7 @@ app.use('/api/', rateLimit({
   message: { message: 'تم تجاوز الحد المسموح به من الطلبات، حاول مرة أخرى بعد قليل' },
 }));
 
-// Stricter limit on auth: 10 login attempts per 15 minutes
-app.use('/api/auth/login', rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  skipSuccessfulRequests: true,
-  message: { message: 'تم تجاوز محاولات تسجيل الدخول المسموح بها، حاول بعد 15 دقيقة' },
-}));
+// Login rate limit disabled during training phase
 
 // === CORS ===
 app.use(cors({ origin: true, credentials: true }));
