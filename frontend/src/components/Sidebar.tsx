@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, FileText, MapPin,
@@ -6,6 +7,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { TranslationKey } from '../i18n/translations';
+import { messagesApi } from '../services/api';
 
 interface NavItem { to: string; icon: any; labelKey: TranslationKey; badge?: string; roles?: string[] }
 
@@ -32,6 +34,16 @@ export default function Sidebar({ open, isMobile, onClose }: SidebarProps) {
   const { user } = useAuth();
   const { t, lang } = useLanguage();
   const isAr = lang === 'ar';
+  const [unreadChat, setUnreadChat] = useState(0);
+
+  useEffect(() => {
+    const load = () => {
+      messagesApi.getUnreadCount().then(r => setUnreadChat(r.data.count || 0)).catch(() => {});
+    };
+    load();
+    const interval = setInterval(load, 8000);
+    return () => clearInterval(interval);
+  }, []);
 
   const visible = navItems.filter(item =>
     !item.roles || (user && item.roles.includes(user.role))
@@ -69,18 +81,26 @@ export default function Sidebar({ open, isMobile, onClose }: SidebarProps) {
         <p className="text-[10px] font-semibold text-brand-500 uppercase tracking-wider px-3 mb-2">
           {isAr ? 'القائمة الرئيسية' : 'Main Menu'}
         </p>
-        {visible.map(({ to, icon: Icon, labelKey, badge }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            onClick={handleNavClick}
-            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-          >
-            <Icon className="w-[18px] h-[18px] flex-shrink-0" />
-            <span className="whitespace-nowrap">{t(labelKey)}{badge ? ` ${badge}` : ''}</span>
-          </NavLink>
-        ))}
+        {visible.map(({ to, icon: Icon, labelKey, badge }) => {
+          const showChatBadge = to === '/chat' && unreadChat > 0;
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              onClick={handleNavClick}
+              className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+            >
+              <Icon className="w-[18px] h-[18px] flex-shrink-0" />
+              <span className="whitespace-nowrap flex-1">{t(labelKey)}{badge ? ` ${badge}` : ''}</span>
+              {showChatBadge && (
+                <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-5 h-5 px-1.5 flex items-center justify-center">
+                  {unreadChat > 9 ? '9+' : unreadChat}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
       </nav>
 
       {/* User Info */}

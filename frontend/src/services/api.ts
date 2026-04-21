@@ -169,7 +169,13 @@ export const attachmentsApi = {
 export const messagesApi = {
   getContacts: () => api.get('/messages/contacts'),
   getConversation: (userId: number) => api.get(`/messages/with/${userId}`),
-  send: (toUserId: number, content: string) => api.post('/messages', { toUserId, content }),
+  send: (toUserId: number, content: string, file?: File) => {
+    const fd = new FormData();
+    fd.append('toUserId', String(toUserId));
+    fd.append('content', content);
+    if (file) fd.append('attachment', file);
+    return api.post('/messages', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
   broadcast: (content: string) => api.post('/messages/broadcast', { content }),
   getUnreadCount: () => api.get('/messages/unread-count'),
 };

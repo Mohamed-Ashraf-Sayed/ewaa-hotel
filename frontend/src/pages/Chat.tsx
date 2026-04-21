@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Send, Search, Users, MessageCircle, Megaphone, X } from 'lucide-react';
+import { Send, Search, Users, MessageCircle, Megaphone, X, Paperclip, FileText, Download } from 'lucide-react';
 import { messagesApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -15,6 +15,7 @@ interface Contact {
 interface Message {
   id: number; fromUserId: number; toUserId: number;
   content: string; isRead: boolean; createdAt: string;
+  attachmentUrl?: string; attachmentName?: string; attachmentType?: string;
 }
 
 const ROLE_LABEL: Record<string, { ar: string; en: string }> = {
@@ -41,6 +42,8 @@ export default function Chat() {
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
   const [showBroadcast, setShowBroadcast] = useState(false);
   const [broadcastText, setBroadcastText] = useState('');
@@ -76,11 +79,12 @@ export default function Chat() {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeContact || !text.trim()) return;
+    if (!activeContact || (!text.trim() && !file)) return;
     setSending(true);
     try {
-      await messagesApi.send(activeContact.id, text);
-      setText('');
+      await messagesApi.send(activeContact.id, text, file || undefined);
+      setText(''); setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       loadMessages(activeContact.id);
       loadContacts();
     } finally { setSending(false); }
@@ -225,7 +229,23 @@ export default function Chat() {
                         <div className={`max-w-[70%] rounded-2xl px-3.5 py-2 shadow-sm ${
                           isMe ? 'bg-brand-700 text-white' : 'bg-white text-brand-900 border border-brand-100'
                         }`}>
-                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
+                          {msg.attachmentUrl && (
+                            <div className="mb-2">
+                              {msg.attachmentType?.startsWith('image/') ? (
+                                <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                                  <img src={msg.attachmentUrl} alt={msg.attachmentName} className="max-w-full rounded-lg max-h-64 object-cover" />
+                                </a>
+                              ) : (
+                                <a href={msg.attachmentUrl} download={msg.attachmentName} target="_blank" rel="noopener noreferrer"
+                                  className={`flex items-center gap-2 p-2 rounded-lg ${isMe ? 'bg-white/10 hover:bg-white/20' : 'bg-brand-50 hover:bg-brand-100'} transition-colors`}>
+                                  <FileText className="w-5 h-5 flex-shrink-0" />
+                                  <span className="text-xs truncate flex-1">{msg.attachmentName}</span>
+                                  <Download className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
+                                </a>
+                              )}
+                            </div>
+                          )}
+                          {msg.content && <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>}
                           <p className={`text-[10px] mt-1 ${isMe ? 'text-brand-200' : 'text-brand-400'} text-left`} dir="ltr">
                             {formatMsgTime(msg.createdAt)}
                             {isMe && msg.isRead && ' ✓✓'}
@@ -239,14 +259,35 @@ export default function Chat() {
               </div>
 
               {/* Input */}
-              <form onSubmit={sendMessage} className={`p-3 border-t border-brand-100 flex gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
-                <input className="input flex-1"
-                  placeholder={isAr ? 'اكتب رسالتك...' : 'Type your message...'}
-                  value={text} onChange={e => setText(e.target.value)} />
-                <button type="submit" disabled={sending || !text.trim()}
-                  className="btn-primary px-4">
-                  <Send className="w-4 h-4" />
-                </button>
+              <form onSubmit={sendMessage} className="border-t border-brand-100">
+                {file && (
+                  <div className={`px-3 pt-3 flex items-center gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-brand-50 border border-brand-200 text-xs ${isAr ? 'flex-row-reverse' : ''}`}>
+                      <FileText className="w-3.5 h-3.5 text-brand-600" />
+                      <span className="text-brand-700 max-w-[200px] truncate">{file.name}</span>
+                      <span className="text-brand-400">({(file.size / 1024).toFixed(0)} KB)</span>
+                      <button type="button" onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                        className="text-red-500 hover:text-red-700 font-bold">✕</button>
+                    </div>
+                  </div>
+                )}
+                <div className={`p-3 flex gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+                  <input ref={fileInputRef} type="file" className="hidden"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.txt"
+                    onChange={e => setFile(e.target.files?.[0] || null)} />
+                  <button type="button" onClick={() => fileInputRef.current?.click()}
+                    className="p-2.5 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-600 transition-colors"
+                    title={isAr ? 'إرفاق ملف' : 'Attach file'}>
+                    <Paperclip className="w-4 h-4" />
+                  </button>
+                  <input className="input flex-1"
+                    placeholder={isAr ? 'اكتب رسالتك...' : 'Type your message...'}
+                    value={text} onChange={e => setText(e.target.value)} />
+                  <button type="submit" disabled={sending || (!text.trim() && !file)}
+                    className="btn-primary px-4">
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
               </form>
             </>
           )}

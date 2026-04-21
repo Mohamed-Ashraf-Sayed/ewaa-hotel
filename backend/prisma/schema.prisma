@@ -68,12 +68,15 @@ model User {
 }
 
 model Message {
-  id          Int      @id @default(autoincrement())
-  fromUserId  Int
-  toUserId    Int
-  content     String
-  isRead      Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  fromUserId     Int
+  toUserId       Int
+  content        String
+  attachmentUrl  String?
+  attachmentName String?
+  attachmentType String?
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
 
   fromUser    User     @relation("MessagesSent", fields: [fromUserId], references: [id])
   toUser      User     @relation("MessagesReceived", fields: [toUserId], references: [id])

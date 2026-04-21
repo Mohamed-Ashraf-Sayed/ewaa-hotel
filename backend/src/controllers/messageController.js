@@ -102,22 +102,29 @@ const getConversation = async (req, res) => {
   }
 };
 
-// POST /messages — send a message
+// POST /messages — send a message (with optional attachment)
 const sendMessage = async (req, res) => {
   try {
     const { toUserId, content } = req.body;
-    if (!toUserId || !content || !content.trim()) {
-      return res.status(400).json({ message: 'toUserId and content are required' });
+    if (!toUserId) {
+      return res.status(400).json({ message: 'toUserId is required' });
+    }
+    if (!req.file && (!content || !content.trim())) {
+      return res.status(400).json({ message: 'content or file is required' });
     }
 
-    const msg = await prisma.message.create({
-      data: {
-        fromUserId: req.user.id,
-        toUserId: parseInt(toUserId),
-        content: content.trim(),
-      },
-    });
+    const data = {
+      fromUserId: req.user.id,
+      toUserId: parseInt(toUserId),
+      content: (content || '').trim(),
+    };
+    if (req.file) {
+      data.attachmentUrl = `/uploads/${req.file.filename}`;
+      data.attachmentName = req.file.originalname;
+      data.attachmentType = req.file.mimetype;
+    }
 
+    const msg = await prisma.message.create({ data });
     res.json(msg);
   } catch (err) {
     res.status(500).json({ message: err.message });
