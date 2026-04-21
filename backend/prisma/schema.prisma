@@ -107,6 +107,7 @@ model Client {
   source         String?
   salesRepId     Int
   hotelId        Int?
+  brands         String?  // comma-separated: muhaidib_serviced,awa_hotels,grand_plaza
   estimatedRooms Int?
   annualBudget   Float?
   website        String?

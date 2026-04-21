@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FileText, Search, CheckCircle, XCircle, Clock, Download, Percent, Eye, GitBranch } from 'lucide-react';
-import { contractsApi, hotelsApi } from '../services/api';
+import { contractsApi, hotelsApi, usersApi } from '../services/api';
 import { Contract, Hotel } from '../types';
 import Modal from '../components/Modal';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,9 +13,11 @@ export default function Contracts() {
   const { t, lang } = useLanguage();
   const locale = lang === 'ar' ? arSA : enUS;
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [allReps, setAllReps] = useState<{ id: number; name: string }[]>([]);
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
+  const [salesRepFilter, setSalesRepFilter] = useState('');
   const [search, setSearch] = useState('');
   const [approvalModal, setApprovalModal] = useState<Contract | null>(null);
   const [timelineModal, setTimelineModal] = useState<Contract | null>(null);
@@ -31,12 +33,27 @@ export default function Contracts() {
 
   const load = () => {
     setLoading(true);
-    contractsApi.getAll({ status: statusFilter || undefined, search: search || undefined })
+    contractsApi.getAll({
+      status: statusFilter || undefined,
+      salesRepId: salesRepFilter ? parseInt(salesRepFilter) : undefined,
+      search: search || undefined,
+    })
       .then(r => setContracts(r.data)).finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [statusFilter, search]);
+  useEffect(() => { load(); }, [statusFilter, salesRepFilter, search]);
   useEffect(() => { hotelsApi.getAll().then(r => setHotels(r.data)); }, []);
+
+  // Load all sales-eligible users so dropdown shows reps even if they have no contracts yet
+  useEffect(() => {
+    usersApi.getAll().then(r => {
+      const reps = (r.data as { id: number; name: string; role: string; isActive: boolean }[])
+        .filter(u => u.isActive && ['sales_rep', 'sales_director', 'assistant_sales'].includes(u.role))
+        .map(u => ({ id: u.id, name: u.name }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+      setAllReps(reps);
+    }).catch(() => setAllReps([]));
+  }, []);
 
   const handleApprove = async (status: 'approved' | 'rejected') => {
     if (!approvalModal) return;
@@ -78,18 +95,20 @@ export default function Contracts() {
 
   const statusBadge = (s: string) =>
     s === 'approved' ? <span className="badge-approved">{lang === 'ar' ? 'معتمد نهائي' : 'Fully Approved'}</span> :
-    s === 'contract_approved' ? <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200/60">{lang === 'ar' ? 'بانتظار الائتمان' : 'Awaiting Credit'}</span> :
-    s === 'sales_approved' ? <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200/60">{lang === 'ar' ? 'بانتظار العقود' : 'Awaiting Contracts'}</span> :
+    s === 'contract_approved' ? <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">{lang === 'ar' ? 'بانتظار نائب المدير' : 'Awaiting VGM'}</span> :
+    s === 'credit_approved' ? <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200/60">{lang === 'ar' ? 'بانتظار العقود' : 'Awaiting Contracts'}</span> :
+    s === 'sales_approved' ? <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200/60">{lang === 'ar' ? 'بانتظار الائتمان' : 'Awaiting Credit'}</span> :
     s === 'rejected' ? <span className="badge-rejected">{t('contract_rejected')}</span> :
     <span className="badge-pending">{t('contract_pending')}</span>;
 
-  const canApprove = hasRole('sales_director', 'contract_officer', 'credit_manager', 'general_manager', 'vice_gm');
+  const canApprove = hasRole('sales_director', 'credit_manager', 'contract_officer', 'vice_gm', 'general_manager');
   const isCreditManager = user?.role === 'credit_manager';
   const isContractOfficer = user?.role === 'contract_officer';
   const isSalesDirector = user?.role === 'sales_director';
+  const isViceGM = user?.role === 'vice_gm';
   const isSalesRep = user?.role === 'sales_rep';
   const pendingCount = contracts.filter(c =>
-    c.status === 'pending' || c.status === 'sales_approved' || c.status === 'contract_approved'
+    c.status === 'pending' || c.status === 'sales_approved' || c.status === 'credit_approved' || c.status === 'contract_approved'
   ).length;
 
   // Commission calculation for sales reps
@@ -148,11 +167,20 @@ export default function Contracts() {
         <select className="input w-44" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="">{t('all')}</option>
           <option value="pending">{t('contract_pending')}</option>
-          <option value="sales_approved">{lang === 'ar' ? 'بانتظار العقود' : 'Awaiting Contracts'}</option>
-          <option value="contract_approved">{lang === 'ar' ? 'بانتظار الائتمان' : 'Awaiting Credit'}</option>
+          <option value="sales_approved">{lang === 'ar' ? 'بانتظار الائتمان' : 'Awaiting Credit'}</option>
+          <option value="credit_approved">{lang === 'ar' ? 'بانتظار العقود' : 'Awaiting Contracts'}</option>
+          <option value="contract_approved">{lang === 'ar' ? 'بانتظار نائب المدير' : 'Awaiting VGM'}</option>
           <option value="approved">{lang === 'ar' ? 'معتمد نهائي' : 'Fully Approved'}</option>
           <option value="rejected">{t('contract_rejected')}</option>
         </select>
+        {allReps.length > 1 && (
+          <select className="input w-48" value={salesRepFilter} onChange={e => setSalesRepFilter(e.target.value)}>
+            <option value="">{lang === 'ar' ? 'كل المندوبين' : 'All Sales Reps'}</option>
+            {allReps.map(r => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
+        )}
         <div className="relative flex-1 min-w-48">
           <Search className={`absolute ${isAr ? 'right-3' : 'left-3'} top-2.5 w-4 h-4 text-brand-400`} />
           <input className={`input ${isAr ? 'pr-9' : 'pl-9'}`}
@@ -205,24 +233,31 @@ export default function Contracts() {
                           <GitBranch className="w-4 h-4" />
                         </button>
                         {/* Sales director reviews pending */}
-                        {(isSalesDirector || hasRole('general_manager', 'vice_gm')) && c.status === 'pending' && (
+                        {(isSalesDirector || hasRole('general_manager')) && c.status === 'pending' && (
                           <button onClick={() => { setApprovalModal(c); setApprovalNote(''); }}
                             className="px-3 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100">
                             {lang === 'ar' ? 'موافقة المبيعات' : 'Sales Approval'}
                           </button>
                         )}
-                        {/* Contract officer reviews sales_approved */}
-                        {(isContractOfficer || hasRole('general_manager', 'vice_gm')) && c.status === 'sales_approved' && (
+                        {/* Credit manager reviews sales_approved */}
+                        {(isCreditManager || hasRole('general_manager')) && c.status === 'sales_approved' && (
                           <button onClick={() => { setApprovalModal(c); setApprovalNote(''); }}
                             className="px-3 py-1 rounded-lg bg-violet-50 text-violet-700 text-xs font-medium hover:bg-violet-100">
+                            {lang === 'ar' ? 'موافقة الائتمان' : 'Credit Approval'}
+                          </button>
+                        )}
+                        {/* Contract officer reviews credit_approved */}
+                        {(isContractOfficer || hasRole('general_manager')) && c.status === 'credit_approved' && (
+                          <button onClick={() => { setApprovalModal(c); setApprovalNote(''); }}
+                            className="px-3 py-1 rounded-lg bg-sky-50 text-sky-700 text-xs font-medium hover:bg-sky-100">
                             {lang === 'ar' ? 'مراجعة العقود' : 'Contract Review'}
                           </button>
                         )}
-                        {/* Credit manager reviews contract_approved */}
-                        {(isCreditManager || hasRole('general_manager', 'vice_gm')) && c.status === 'contract_approved' && (
+                        {/* Vice GM reviews contract_approved (final approval) */}
+                        {(isViceGM || hasRole('general_manager')) && c.status === 'contract_approved' && (
                           <button onClick={() => { setApprovalModal(c); setApprovalNote(''); }}
-                            className="px-3 py-1 rounded-lg bg-sky-50 text-sky-700 text-xs font-medium hover:bg-sky-100">
-                            {lang === 'ar' ? 'موافقة الائتمان' : 'Credit Approval'}
+                            className="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100">
+                            {lang === 'ar' ? 'الاعتماد النهائي' : 'Final Approval'}
                           </button>
                         )}
                       </div>
@@ -347,12 +382,13 @@ export default function Contracts() {
       <Modal open={!!timelineModal} onClose={() => setTimelineModal(null)}
         title={lang === 'ar' ? `حالة موافقة العقد - ${timelineModal?.contractRef || `#${timelineModal?.id}`}` : `Approval Status - ${timelineModal?.contractRef || `#${timelineModal?.id}`}`}>
         {timelineModal && (() => {
-          // Find approvals by status
-          const findApprover = (status: string) => timelineData.find((a: any) => a.status === status);
-          const salesApproval = findApprover('sales_approved');
-          const contractApproval = findApprover('contract_approved');
-          const creditApproval = findApprover('approved');
-          const rejection = findApprover('rejected');
+          // Find approvals by approver role (most reliable)
+          const findByRole = (role: string) => timelineData.find((a: any) => a.approver?.role === role && a.status === 'approved');
+          const salesApproval = findByRole('sales_director');
+          const creditApproval = findByRole('credit_manager');
+          const contractApproval = findByRole('contract_officer');
+          const finalApproval = findByRole('vice_gm') || findByRole('general_manager');
+          const rejection = timelineData.find((a: any) => a.status === 'rejected');
 
           const currentStatus = timelineModal.status;
           const isRejected = currentStatus === 'rejected';
@@ -371,11 +407,21 @@ export default function Contracts() {
               key: 'sales_approved',
               title: lang === 'ar' ? 'موافقة مدير المبيعات' : 'Sales Director Approval',
               who: lang === 'ar' ? 'مدير المبيعات' : 'Sales Director',
-              done: ['sales_approved', 'contract_approved', 'approved'].includes(currentStatus),
+              done: ['sales_approved', 'credit_approved', 'contract_approved', 'approved'].includes(currentStatus),
               user: salesApproval?.approver?.name,
               date: salesApproval?.createdAt,
               notes: salesApproval?.notes,
               icon: '👔',
+            },
+            {
+              key: 'credit_approved',
+              title: lang === 'ar' ? 'موافقة مدير الائتمان' : 'Credit Manager Approval',
+              who: lang === 'ar' ? 'مدير الائتمان' : 'Credit Manager',
+              done: ['credit_approved', 'contract_approved', 'approved'].includes(currentStatus),
+              user: creditApproval?.approver?.name,
+              date: creditApproval?.createdAt,
+              notes: creditApproval?.notes,
+              icon: '💳',
             },
             {
               key: 'contract_approved',
@@ -389,12 +435,12 @@ export default function Contracts() {
             },
             {
               key: 'approved',
-              title: lang === 'ar' ? 'موافقة مدير الائتمان' : 'Credit Manager Approval',
-              who: lang === 'ar' ? 'مدير الائتمان' : 'Credit Manager',
+              title: lang === 'ar' ? 'الاعتماد النهائي - نائب المدير العام' : 'Final Approval - Vice GM',
+              who: lang === 'ar' ? 'نائب المدير العام' : 'Vice GM',
               done: currentStatus === 'approved',
-              user: creditApproval?.approver?.name,
-              date: creditApproval?.createdAt,
-              notes: creditApproval?.notes,
+              user: finalApproval?.approver?.name,
+              date: finalApproval?.createdAt,
+              notes: finalApproval?.notes,
               icon: '✅',
             },
           ];

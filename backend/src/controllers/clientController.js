@@ -99,7 +99,7 @@ const normalizeName = (s) => {
 const createClient = async (req, res) => {
   try {
     const { companyName, contactPerson, phone, email, address, industry,
-      clientType, source, hotelId, estimatedRooms, annualBudget, website, notes } = req.body;
+      clientType, source, hotelId, brands, estimatedRooms, annualBudget, website, notes } = req.body;
 
     // === Duplicate detection ===
     const allClients = await prisma.client.findMany({
@@ -134,6 +134,8 @@ const createClient = async (req, res) => {
       });
     }
 
+    const brandsStr = Array.isArray(brands) ? brands.join(',') : (brands || null);
+
     const client = await prisma.client.create({
       data: {
         companyName, contactPerson, phone, email, address, industry,
@@ -141,6 +143,7 @@ const createClient = async (req, res) => {
         source,
         salesRepId: req.user.id,
         hotelId: hotelId ? parseInt(hotelId) : null,
+        brands: brandsStr,
         estimatedRooms: estimatedRooms ? parseInt(estimatedRooms) : null,
         annualBudget: annualBudget ? parseFloat(annualBudget) : null,
         website, notes
@@ -169,6 +172,7 @@ const updateClient = async (req, res) => {
     if (data.hotelId) data.hotelId = parseInt(data.hotelId);
     if (data.estimatedRooms) data.estimatedRooms = parseInt(data.estimatedRooms);
     if (data.annualBudget) data.annualBudget = parseFloat(data.annualBudget);
+    if (Array.isArray(data.brands)) data.brands = data.brands.join(',');
     delete data.salesRepId;
 
     const client = await prisma.client.update({

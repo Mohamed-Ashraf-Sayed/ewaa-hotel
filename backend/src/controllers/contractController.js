@@ -70,13 +70,14 @@ const buildContractFilter = async (user) => {
 
 const getContracts = async (req, res) => {
   try {
-    const { status, hotelId, clientId, search } = req.query;
+    const { status, hotelId, clientId, salesRepId, search } = req.query;
     const accessFilter = await buildContractFilter(req.user);
     const where = {
       ...accessFilter,
       ...(status && { status }),
       ...(hotelId && { hotelId: parseInt(hotelId) }),
       ...(clientId && { clientId: parseInt(clientId) }),
+      ...(salesRepId && { salesRepId: parseInt(salesRepId) }),
       ...(search && {
         client: {
           OR: [
@@ -203,28 +204,34 @@ const approveContract = async (req, res) => {
     const current = await prisma.contract.findUnique({ where: { id: parseInt(id) } });
     if (!current) return res.status(404).json({ message: 'Contract not found' });
 
-    // 3-step approval flow:
+    // 4-step approval flow:
     // Step 1: sales_director approves pending → sales_approved
-    // Step 2: contract_officer approves sales_approved → contract_approved
-    // Step 3: credit_manager approves contract_approved → approved
-    // GM/VGM can approve at any stage directly
+    // Step 2: credit_manager approves sales_approved → credit_approved
+    // Step 3: contract_officer approves credit_approved → contract_approved
+    // Step 4: vice_gm approves contract_approved → approved (final)
+    // GM/Admin can approve at any stage directly
     let newStatus = status;
     const role = req.user.role;
 
     if (status === 'approved') {
-      if (role === 'general_manager' || role === 'vice_gm') {
+      if (role === 'general_manager' || role === 'admin') {
         newStatus = 'approved';
       } else if (role === 'sales_director') {
         if (current.status !== 'pending') {
           return res.status(400).json({ message: 'العقد ليس في حالة "في الانتظار"' });
         }
         newStatus = 'sales_approved';
-      } else if (role === 'contract_officer') {
+      } else if (role === 'credit_manager') {
         if (current.status !== 'sales_approved') {
           return res.status(400).json({ message: 'العقد لم يحصل على موافقة مدير المبيعات بعد' });
         }
+        newStatus = 'credit_approved';
+      } else if (role === 'contract_officer') {
+        if (current.status !== 'credit_approved') {
+          return res.status(400).json({ message: 'العقد لم يحصل على موافقة مدير الائتمان بعد' });
+        }
         newStatus = 'contract_approved';
-      } else if (role === 'credit_manager') {
+      } else if (role === 'vice_gm') {
         if (current.status !== 'contract_approved') {
           return res.status(400).json({ message: 'العقد لم يحصل على موافقة مسئول العقود بعد' });
         }
@@ -249,8 +256,9 @@ const approveContract = async (req, res) => {
 
     const statusLabels = {
       sales_approved: 'موافقة مدير المبيعات',
+      credit_approved: 'موافقة مدير الائتمان',
       contract_approved: 'موافقة مسئول العقود',
-      approved: 'موافقة نهائية',
+      approved: 'موافقة نهائية (نائب المدير العام)',
       rejected: 'مرفوض'
     };
 
@@ -305,16 +313,22 @@ const approveContract = async (req, res) => {
     contract.hotel = contractWithHotel.hotel;
 
     if (newStatus === 'sales_approved') {
-      await notifyNext('contract_officer',
-        'عقد ينتظر موافقتك',
-        `عقد ${contract.contractRef || '#' + id} لشركة ${contract.client.companyName} حصل على موافقة مدير المبيعات وينتظر موافقتك`,
-        `[CRM] عقد جديد ينتظر مراجعتك - ${contract.client.companyName}`
-      );
-    } else if (newStatus === 'contract_approved') {
       await notifyNext('credit_manager',
         'عقد ينتظر موافقتك',
-        `عقد ${contract.contractRef || '#' + id} لشركة ${contract.client.companyName} حصل على موافقة مسئول العقود وينتظر موافقتك`,
+        `عقد ${contract.contractRef || '#' + id} لشركة ${contract.client.companyName} حصل على موافقة مدير المبيعات وينتظر موافقة مدير الائتمان`,
         `[CRM] عقد جديد ينتظر موافقة الائتمان - ${contract.client.companyName}`
+      );
+    } else if (newStatus === 'credit_approved') {
+      await notifyNext('contract_officer',
+        'عقد ينتظر موافقتك',
+        `عقد ${contract.contractRef || '#' + id} لشركة ${contract.client.companyName} حصل على موافقة مدير الائتمان وينتظر مراجعة مسئول العقود`,
+        `[CRM] عقد جديد ينتظر مراجعة العقود - ${contract.client.companyName}`
+      );
+    } else if (newStatus === 'contract_approved') {
+      await notifyNext('vice_gm',
+        'عقد ينتظر موافقتك النهائية',
+        `عقد ${contract.contractRef || '#' + id} لشركة ${contract.client.companyName} حصل على كل الموافقات وينتظر موافقتك النهائية`,
+        `[CRM] عقد ينتظر الموافقة النهائية - ${contract.client.companyName}`
       );
     } else if (newStatus === 'approved') {
       await notifyNext('reservations',

@@ -50,10 +50,23 @@ export default function Clients() {
 
   const emptyForm = {
     companyName: '', contactPerson: '', countryCode: '+966', phoneNumber: '', email: '', address: '',
-    industry: '', clientType: 'lead', source: '', hotelId: '',
+    industry: '', clientType: 'lead', source: '', hotelId: '', brands: [] as string[],
     estimatedRooms: '', annualBudget: '', website: '', notes: ''
   };
   const [form, setForm] = useState(emptyForm);
+
+  const BRAND_OPTS = [
+    { value: 'muhaidib_serviced', label_ar: 'شقق المهيدب المخدومة', label_en: 'Muhaidib Serviced Apartments' },
+    { value: 'awa_hotels', label_ar: 'فنادق إيواء', label_en: 'Awa Hotels' },
+    { value: 'grand_plaza', label_ar: 'جراند بلازا', label_en: 'Grand Plaza' },
+  ];
+
+  const toggleBrand = (value: string) => {
+    setForm(p => ({
+      ...p,
+      brands: p.brands.includes(value) ? p.brands.filter(b => b !== value) : [...p.brands, value],
+    }));
+  };
 
   useEffect(() => {
     const t = searchParams.get('type') || '';
@@ -72,6 +85,10 @@ export default function Clients() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (form.brands.length === 0) {
+      alert(isAr ? 'اختر براند واحد على الأقل' : 'Select at least one brand');
+      return;
+    }
     setSaving(true);
     try {
       const { countryCode, phoneNumber, ...rest } = form;
@@ -291,6 +308,26 @@ export default function Clients() {
               <label className="label">{isAr ? 'الميزانية السنوية (ر.س)' : 'Annual Budget (SAR)'} *</label>
               <input className="input" type="number" required min="1"
                 value={form.annualBudget} onChange={e => setForm(p => ({ ...p, annualBudget: e.target.value }))} />
+            </div>
+            <div className="col-span-2">
+              <label className="label">{isAr ? 'البراندات (يمكن اختيار أكثر من واحد)' : 'Brands (multi-select)'} *</label>
+              <div className="grid grid-cols-3 gap-2">
+                {BRAND_OPTS.map(b => {
+                  const checked = form.brands.includes(b.value);
+                  return (
+                    <label key={b.value}
+                      className={`cursor-pointer flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 transition ${
+                        checked ? 'bg-brand-50 border-brand-500 text-brand-900' : 'bg-white border-brand-100 text-brand-500 hover:border-brand-300'
+                      } ${isAr ? 'flex-row-reverse' : ''}`}>
+                      <input type="checkbox" className="hidden" checked={checked} onChange={() => toggleBrand(b.value)} />
+                      <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${checked ? 'bg-brand-500 border-brand-500' : 'border-brand-300'}`}>
+                        {checked && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                      </span>
+                      <span className="text-sm font-medium">{isAr ? b.label_ar : b.label_en}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
             <div className="col-span-2">
               <label className="label">{isAr ? 'العنوان' : 'Address'} *</label>

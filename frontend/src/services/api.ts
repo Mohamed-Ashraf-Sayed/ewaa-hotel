@@ -59,7 +59,7 @@ export const clientsApi = {
 
 // Contracts
 export const contractsApi = {
-  getAll: (params?: { status?: string; hotelId?: number; clientId?: number; search?: string }) =>
+  getAll: (params?: { status?: string; hotelId?: number; clientId?: number; salesRepId?: number; search?: string }) =>
     api.get('/contracts', { params }),
   getOne: (id: number) => api.get(`/contracts/${id}`),
   getExpiring: (days?: number) => api.get('/contracts/expiring', { params: { days } }),

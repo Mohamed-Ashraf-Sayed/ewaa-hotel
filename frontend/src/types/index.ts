@@ -87,6 +87,7 @@ export interface Client {
   source?: string;
   salesRepId: number;
   hotelId?: number;
+  brands?: string;
   estimatedRooms?: number;
   annualBudget?: number;
   website?: string;
@@ -113,7 +114,7 @@ export interface Contract {
   endDate?: string;
   totalValue?: number;
   collectedAmount?: number;
-  status: 'pending' | 'sales_approved' | 'contract_approved' | 'approved' | 'rejected';
+  status: 'pending' | 'sales_approved' | 'credit_approved' | 'contract_approved' | 'approved' | 'rejected';
   notes?: string;
   contractRef?: string;
   createdAt: string;
