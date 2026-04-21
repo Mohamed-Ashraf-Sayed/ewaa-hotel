@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Download, Building2, FileText, TrendingUp, Users, MapPin, Target as TargetIcon, FileSpreadsheet } from 'lucide-react';
+import { Download, Building2, FileText, TrendingUp, Users, MapPin, Target as TargetIcon, FileSpreadsheet, Filter } from 'lucide-react';
 import { pdfApi, contractsApi, clientsApi, visitsApi, paymentsApi, usersApi } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
+import Modal from '../components/Modal';
+import { format, parseISO } from 'date-fns';
+import { arSA, enUS } from 'date-fns/locale';
+
+type FilterKey = 'type' | 'dateRange' | 'rep' | 'status' | 'visitType';
 
 interface ReportCard {
   key: string;
@@ -10,7 +15,8 @@ interface ReportCard {
   icon: any;
   color: string;
   iconColor: string;
-  filters?: ('type' | 'dateRange' | 'rep')[];
+  filters?: FilterKey[];
+  hasPdf?: boolean;
 }
 
 const REPORTS: ReportCard[] = [
@@ -21,7 +27,8 @@ const REPORTS: ReportCard[] = [
     icon: Building2,
     color: 'bg-sky-50',
     iconColor: 'text-sky-600',
-    filters: ['type'],
+    filters: ['type', 'rep'],
+    hasPdf: true,
   },
   {
     key: 'contracts',
@@ -30,7 +37,7 @@ const REPORTS: ReportCard[] = [
     icon: FileText,
     color: 'bg-brand-50',
     iconColor: 'text-brand-600',
-    filters: ['dateRange'],
+    filters: ['status', 'rep', 'dateRange'],
   },
   {
     key: 'visits',
@@ -39,7 +46,7 @@ const REPORTS: ReportCard[] = [
     icon: MapPin,
     color: 'bg-emerald-50',
     iconColor: 'text-emerald-600',
-    filters: ['rep', 'dateRange'],
+    filters: ['rep', 'visitType', 'dateRange'],
   },
   {
     key: 'payments',
@@ -48,7 +55,7 @@ const REPORTS: ReportCard[] = [
     icon: TrendingUp,
     color: 'bg-amber-50',
     iconColor: 'text-amber-600',
-    filters: ['dateRange'],
+    filters: ['rep', 'dateRange'],
   },
   {
     key: 'team',
@@ -68,12 +75,51 @@ const REPORTS: ReportCard[] = [
   },
 ];
 
+// === Arabic label maps ===
+const CLIENT_TYPE_AR: Record<string, string> = { active: 'نشط', lead: 'محتمل', inactive: 'غير نشط' };
+const CONTRACT_STATUS_AR: Record<string, string> = {
+  pending: 'قيد الانتظار',
+  sales_approved: 'بانتظار الائتمان',
+  credit_approved: 'بانتظار العقود',
+  contract_approved: 'بانتظار نائب المدير',
+  approved: 'معتمد نهائي',
+  rejected: 'مرفوض',
+};
+const VISIT_TYPE_AR: Record<string, string> = {
+  in_person: 'زيارة شخصية',
+  phone: 'هاتف',
+  online: 'أونلاين',
+  site_visit: 'زيارة الموقع',
+};
+const ROLE_AR: Record<string, string> = {
+  admin: 'مسؤول النظام',
+  general_manager: 'المدير العام',
+  vice_gm: 'نائب المدير العام',
+  sales_director: 'مدير المبيعات',
+  assistant_sales: 'مساعد مدير المبيعات',
+  sales_rep: 'مندوب مبيعات',
+  contract_officer: 'مسئول العقود',
+  reservations: 'الحجوزات',
+  credit_manager: 'مدير الائتمان',
+  credit_officer: 'موظف الائتمان',
+};
+const PAYMENT_METHOD_AR: Record<string, string> = {
+  cash: 'نقدي',
+  bank_transfer: 'تحويل بنكي',
+  cheque: 'شيك',
+  card: 'بطاقة',
+};
+const SOURCE_AR: Record<string, string> = {
+  cold_call: 'اتصال بارد', referral: 'إحالة', exhibition: 'معرض',
+  website: 'الموقع الإلكتروني', social_media: 'وسائل التواصل', walk_in: 'زيارة مباشرة', other: 'أخرى',
+};
+
 export default function Reports() {
   const { lang } = useLanguage();
   const isAr = lang === 'ar';
+  const locale = isAr ? arSA : enUS;
   const [generating, setGenerating] = useState<string | null>(null);
-
-  // Filters state
+  const [openModal, setOpenModal] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, any>>({});
   const [reps, setReps] = useState<{ id: number; name: string }[]>([]);
 
@@ -93,17 +139,42 @@ export default function Reports() {
     URL.revokeObjectURL(url);
   };
 
-  const exportToCSV = (data: any[], filename: string, headers: { key: string; label: string }[]) => {
+  // === Value translators ===
+  const fmtDate = (v: any) => {
+    if (!v) return '';
+    try { return format(parseISO(String(v)), 'dd/MM/yyyy', { locale }); } catch { return String(v); }
+  };
+  const fmtNum = (v: any) => v == null || v === '' ? '' : Number(v).toLocaleString(isAr ? 'ar-EG' : 'en');
+
+  const exportToCSV = (
+    data: any[],
+    filename: string,
+    headers: { key: string; label: string; transform?: (v: any, row: any) => any }[],
+  ) => {
     const BOM = '\uFEFF';
     const headerRow = headers.map(h => `"${h.label}"`).join(',');
     const dataRows = data.map(row =>
       headers.map(h => {
-        const val = h.key.split('.').reduce((acc, k) => acc?.[k], row);
+        const raw = h.key.split('.').reduce((acc, k) => acc?.[k], row);
+        const val = h.transform ? h.transform(raw, row) : raw;
         return `"${(val ?? '').toString().replace(/"/g, '""')}"`;
       }).join(',')
     );
     const csv = BOM + [headerRow, ...dataRows].join('\n');
     downloadFile(csv, filename, 'text/csv;charset=utf-8;');
+  };
+
+  // Filter helpers — apply client-side date range + rep filters on already-fetched arrays
+  const applyDateRange = <T,>(data: T[], dateField: string, from?: string, to?: string): T[] => {
+    if (!from && !to) return data;
+    return data.filter((row: any) => {
+      const raw = dateField.split('.').reduce((acc, k) => acc?.[k], row);
+      if (!raw) return false;
+      const d = new Date(raw);
+      if (from && d < new Date(from)) return false;
+      if (to && d > new Date(to + 'T23:59:59')) return false;
+      return true;
+    });
   };
 
   const generate = async (key: string, format: 'pdf' | 'csv' = 'pdf') => {
@@ -116,57 +187,70 @@ export default function Reports() {
             const res = await pdfApi.clientReport({ type: f.type || undefined });
             downloadFile(res.data, 'Clients_Report.pdf');
           } else {
-            const res = await clientsApi.getAll({ type: f.type || undefined });
-            exportToCSV(res.data, 'Clients.csv', [
+            let { data } = await clientsApi.getAll({ type: f.type || undefined });
+            if (f.salesRepId) data = data.filter((c: any) => c.salesRep?.id === parseInt(f.salesRepId));
+            exportToCSV(data, 'Clients.csv', [
               { key: 'companyName', label: isAr ? 'الشركة' : 'Company' },
               { key: 'contactPerson', label: isAr ? 'جهة الاتصال' : 'Contact' },
               { key: 'phone', label: isAr ? 'الهاتف' : 'Phone' },
               { key: 'email', label: isAr ? 'البريد' : 'Email' },
               { key: 'industry', label: isAr ? 'القطاع' : 'Industry' },
-              { key: 'clientType', label: isAr ? 'النوع' : 'Type' },
+              { key: 'clientType', label: isAr ? 'النوع' : 'Type', transform: v => isAr ? (CLIENT_TYPE_AR[v] || v) : v },
+              { key: 'source', label: isAr ? 'المصدر' : 'Source', transform: v => isAr ? (SOURCE_AR[v] || v) : v },
               { key: 'hotel.name', label: isAr ? 'الفندق' : 'Hotel' },
               { key: 'salesRep.name', label: isAr ? 'المندوب' : 'Sales Rep' },
+              { key: 'createdAt', label: isAr ? 'تاريخ الإضافة' : 'Added On', transform: fmtDate },
             ]);
           }
           break;
         case 'contracts': {
-          const res = await contractsApi.getAll({});
-          exportToCSV(res.data, 'Contracts.csv', [
+          let { data } = await contractsApi.getAll({
+            status: f.status || undefined,
+            salesRepId: f.salesRepId ? parseInt(f.salesRepId) : undefined,
+          });
+          data = applyDateRange(data, 'createdAt', f.from, f.to);
+          exportToCSV(data, 'Contracts.csv', [
             { key: 'contractRef', label: isAr ? 'رقم العقد' : 'Ref' },
             { key: 'client.companyName', label: isAr ? 'الشركة' : 'Company' },
             { key: 'hotel.name', label: isAr ? 'الفندق' : 'Hotel' },
             { key: 'salesRep.name', label: isAr ? 'المندوب' : 'Rep' },
             { key: 'roomsCount', label: isAr ? 'الغرف' : 'Rooms' },
-            { key: 'ratePerRoom', label: isAr ? 'السعر/غرفة' : 'Rate' },
-            { key: 'totalValue', label: isAr ? 'القيمة' : 'Value' },
-            { key: 'collectedAmount', label: isAr ? 'المحصل' : 'Collected' },
-            { key: 'status', label: isAr ? 'الحالة' : 'Status' },
-            { key: 'startDate', label: isAr ? 'البداية' : 'Start' },
-            { key: 'endDate', label: isAr ? 'النهاية' : 'End' },
+            { key: 'ratePerRoom', label: isAr ? 'السعر/غرفة' : 'Rate', transform: fmtNum },
+            { key: 'totalValue', label: isAr ? 'القيمة' : 'Value', transform: fmtNum },
+            { key: 'collectedAmount', label: isAr ? 'المحصل' : 'Collected', transform: fmtNum },
+            { key: 'status', label: isAr ? 'الحالة' : 'Status', transform: v => isAr ? (CONTRACT_STATUS_AR[v] || v) : v },
+            { key: 'startDate', label: isAr ? 'البداية' : 'Start', transform: fmtDate },
+            { key: 'endDate', label: isAr ? 'النهاية' : 'End', transform: fmtDate },
+            { key: 'createdAt', label: isAr ? 'تاريخ الرفع' : 'Created', transform: fmtDate },
           ]);
           break;
         }
         case 'visits': {
-          const res = await visitsApi.getAll({ salesRepId: f.salesRepId ? parseInt(f.salesRepId) : undefined });
-          exportToCSV(res.data, 'Visits.csv', [
-            { key: 'visitDate', label: isAr ? 'التاريخ' : 'Date' },
+          let { data } = await visitsApi.getAll({ salesRepId: f.salesRepId ? parseInt(f.salesRepId) : undefined });
+          if (f.visitType) data = data.filter((v: any) => v.visitType === f.visitType);
+          data = applyDateRange(data, 'visitDate', f.from, f.to);
+          exportToCSV(data, 'Visits.csv', [
+            { key: 'visitDate', label: isAr ? 'التاريخ' : 'Date', transform: fmtDate },
             { key: 'client.companyName', label: isAr ? 'الشركة' : 'Company' },
+            { key: 'client.contactPerson', label: isAr ? 'جهة الاتصال' : 'Contact' },
             { key: 'salesRep.name', label: isAr ? 'المندوب' : 'Rep' },
-            { key: 'visitType', label: isAr ? 'النوع' : 'Type' },
+            { key: 'visitType', label: isAr ? 'النوع' : 'Type', transform: v => isAr ? (VISIT_TYPE_AR[v] || v) : v },
             { key: 'purpose', label: isAr ? 'الغرض' : 'Purpose' },
             { key: 'outcome', label: isAr ? 'النتيجة' : 'Outcome' },
-            { key: 'nextFollowUp', label: isAr ? 'المتابعة' : 'Follow-up' },
+            { key: 'nextFollowUp', label: isAr ? 'المتابعة' : 'Follow-up', transform: fmtDate },
           ]);
           break;
         }
         case 'payments': {
-          const res = await paymentsApi.getAll();
-          exportToCSV(res.data, 'Payments.csv', [
-            { key: 'paymentDate', label: isAr ? 'التاريخ' : 'Date' },
+          let { data } = await paymentsApi.getAll();
+          if (f.salesRepId) data = data.filter((p: any) => p.collector?.id === parseInt(f.salesRepId));
+          data = applyDateRange(data, 'paymentDate', f.from, f.to);
+          exportToCSV(data, 'Payments.csv', [
+            { key: 'paymentDate', label: isAr ? 'التاريخ' : 'Date', transform: fmtDate },
             { key: 'client.companyName', label: isAr ? 'الشركة' : 'Company' },
             { key: 'contract.contractRef', label: isAr ? 'العقد' : 'Contract' },
-            { key: 'amount', label: isAr ? 'المبلغ' : 'Amount' },
-            { key: 'paymentType', label: isAr ? 'الطريقة' : 'Method' },
+            { key: 'amount', label: isAr ? 'المبلغ' : 'Amount', transform: fmtNum },
+            { key: 'paymentType', label: isAr ? 'الطريقة' : 'Method', transform: v => isAr ? (PAYMENT_METHOD_AR[v] || v) : v },
             { key: 'reference', label: isAr ? 'المرجع' : 'Reference' },
             { key: 'collector.name', label: isAr ? 'المُحصِّل' : 'Collected By' },
           ]);
@@ -174,12 +258,12 @@ export default function Reports() {
         }
         case 'team': {
           const res = await usersApi.getAll();
-          const reps = res.data.filter((u: any) => ['sales_rep', 'sales_director', 'assistant_sales'].includes(u.role));
-          exportToCSV(reps, 'Team.csv', [
+          const data = res.data.filter((u: any) => ['sales_rep', 'sales_director', 'assistant_sales'].includes(u.role));
+          exportToCSV(data, 'Team.csv', [
             { key: 'name', label: isAr ? 'الاسم' : 'Name' },
             { key: 'email', label: isAr ? 'البريد' : 'Email' },
             { key: 'phone', label: isAr ? 'الهاتف' : 'Phone' },
-            { key: 'role', label: isAr ? 'الدور' : 'Role' },
+            { key: 'role', label: isAr ? 'الدور' : 'Role', transform: v => isAr ? (ROLE_AR[v] || v) : v },
             { key: 'commissionRate', label: isAr ? 'العمولة %' : 'Commission %' },
             { key: '_count.assignedClients', label: isAr ? 'العملاء' : 'Clients' },
             { key: '_count.contracts', label: isAr ? 'العقود' : 'Contracts' },
@@ -191,6 +275,7 @@ export default function Reports() {
           break;
         }
       }
+      setOpenModal(null);
     } catch (err: any) {
       alert(err?.response?.data?.message || (isAr ? 'فشل إنشاء التقرير' : 'Failed to generate report'));
     } finally {
@@ -198,68 +283,47 @@ export default function Reports() {
     }
   };
 
+  const current = REPORTS.find(r => r.key === openModal);
+  const f = current ? (filters[current.key] || {}) : {};
+  const setF = (patch: any) => {
+    if (!current) return;
+    setFilters(p => ({ ...p, [current.key]: { ...p[current.key], ...patch } }));
+  };
+
   return (
     <div className="space-y-5">
       <div className={isAr ? 'text-right' : 'text-left'}>
         <h1 className="text-2xl font-bold text-brand-900">{isAr ? 'التقارير' : 'Reports'}</h1>
         <p className="text-brand-400 text-sm mt-0.5">
-          {isAr ? 'كل التقارير الإدارية في مكان واحد' : 'All management reports in one place'}
+          {isAr ? 'اضغط على أي تقرير لتحديد الفلاتر وتنزيله' : 'Click any report to pick filters and download'}
         </p>
       </div>
 
-      {/* Reports Grid */}
+      {/* Reports Grid — simpler cards, click opens modal */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {REPORTS.map(r => (
-          <div key={r.key} className="card p-5 hover:shadow-md transition-shadow">
-            <div className={`flex items-start justify-between ${isAr ? 'flex-row-reverse' : ''}`}>
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${r.color} flex-shrink-0`}>
-                <r.icon className={`w-6 h-6 ${r.iconColor}`} />
+        {REPORTS.map(r => {
+          const activeFilters = filters[r.key] ? Object.values(filters[r.key]).filter(v => v).length : 0;
+          return (
+            <button key={r.key}
+              onClick={() => setOpenModal(r.key)}
+              className="card p-5 text-start hover:shadow-md hover:border-brand-300 transition-all">
+              <div className={`flex items-start justify-between ${isAr ? 'flex-row-reverse' : ''}`}>
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${r.color} flex-shrink-0`}>
+                  <r.icon className={`w-6 h-6 ${r.iconColor}`} />
+                </div>
+                {activeFilters > 0 && (
+                  <span className="inline-flex items-center gap-1 bg-brand-100 text-brand-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    <Filter className="w-3 h-3" /> {activeFilters}
+                  </span>
+                )}
               </div>
-            </div>
-            <div className={`mt-4 ${isAr ? 'text-right' : 'text-left'}`}>
-              <h3 className="font-bold text-brand-900">{isAr ? r.title.ar : r.title.en}</h3>
-              <p className="text-xs text-brand-400 mt-1 leading-relaxed">{isAr ? r.description.ar : r.description.en}</p>
-            </div>
-
-            {/* Filters */}
-            {r.filters?.includes('type') && (
-              <div className="mt-3">
-                <select className="input text-xs"
-                  value={filters[r.key]?.type || ''}
-                  onChange={e => setFilters(p => ({ ...p, [r.key]: { ...p[r.key], type: e.target.value } }))}>
-                  <option value="">{isAr ? 'كل الأنواع' : 'All types'}</option>
-                  <option value="active">{isAr ? 'نشط' : 'Active'}</option>
-                  <option value="lead">{isAr ? 'محتمل' : 'Lead'}</option>
-                  <option value="inactive">{isAr ? 'غير نشط' : 'Inactive'}</option>
-                </select>
+              <div className={`mt-4 ${isAr ? 'text-right' : 'text-left'}`}>
+                <h3 className="font-bold text-brand-900">{isAr ? r.title.ar : r.title.en}</h3>
+                <p className="text-xs text-brand-400 mt-1 leading-relaxed">{isAr ? r.description.ar : r.description.en}</p>
               </div>
-            )}
-            {r.filters?.includes('rep') && reps.length > 0 && (
-              <div className="mt-3">
-                <select className="input text-xs"
-                  value={filters[r.key]?.salesRepId || ''}
-                  onChange={e => setFilters(p => ({ ...p, [r.key]: { ...p[r.key], salesRepId: e.target.value } }))}>
-                  <option value="">{isAr ? 'كل المناديب' : 'All reps'}</option>
-                  {reps.map(rep => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
-                </select>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className={`flex gap-2 mt-4 ${isAr ? 'flex-row-reverse' : ''}`}>
-              {r.key === 'clients' && (
-                <button onClick={() => generate(r.key, 'pdf')} disabled={generating === `${r.key}-pdf`}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-xs font-semibold transition-colors disabled:opacity-50">
-                  {generating === `${r.key}-pdf` ? '...' : <><Download className="w-3.5 h-3.5" /> PDF</>}
-                </button>
-              )}
-              <button onClick={() => generate(r.key, 'csv')} disabled={generating === `${r.key}-csv`}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors disabled:opacity-50">
-                {generating === `${r.key}-csv` ? '...' : <><FileSpreadsheet className="w-3.5 h-3.5" /> Excel/CSV</>}
-              </button>
-            </div>
-          </div>
-        ))}
+            </button>
+          );
+        })}
       </div>
 
       {/* Info */}
@@ -270,6 +334,103 @@ export default function Reports() {
             : 'Excel/CSV files can be opened in Microsoft Excel or Google Sheets. PDF files are ready to print and share.'}
         </p>
       </div>
+
+      {/* Filter Modal */}
+      <Modal open={!!current} onClose={() => setOpenModal(null)}
+        title={current ? (isAr ? current.title.ar : current.title.en) : ''}>
+        {current && (
+          <div className="space-y-4">
+            <p className={`text-xs text-brand-500 ${isAr ? 'text-right' : 'text-left'}`}>
+              {isAr ? current.description.ar : current.description.en}
+            </p>
+
+            {(!current.filters || current.filters.length === 0) && (
+              <p className={`text-xs text-brand-400 ${isAr ? 'text-right' : 'text-left'}`}>
+                {isAr ? 'هذا التقرير بدون فلاتر' : 'No filters for this report'}
+              </p>
+            )}
+
+            {current.filters?.includes('type') && (
+              <div>
+                <label className="label">{isAr ? 'نوع العميل' : 'Client Type'}</label>
+                <select className="input" value={f.type || ''} onChange={e => setF({ type: e.target.value })}>
+                  <option value="">{isAr ? 'كل الأنواع' : 'All types'}</option>
+                  <option value="active">{isAr ? 'نشط' : 'Active'}</option>
+                  <option value="lead">{isAr ? 'محتمل' : 'Lead'}</option>
+                  <option value="inactive">{isAr ? 'غير نشط' : 'Inactive'}</option>
+                </select>
+              </div>
+            )}
+
+            {current.filters?.includes('status') && (
+              <div>
+                <label className="label">{isAr ? 'حالة العقد' : 'Contract Status'}</label>
+                <select className="input" value={f.status || ''} onChange={e => setF({ status: e.target.value })}>
+                  <option value="">{isAr ? 'كل الحالات' : 'All statuses'}</option>
+                  {Object.entries(CONTRACT_STATUS_AR).map(([k, v]) => (
+                    <option key={k} value={k}>{isAr ? v : k}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {current.filters?.includes('visitType') && (
+              <div>
+                <label className="label">{isAr ? 'نوع الزيارة' : 'Visit Type'}</label>
+                <select className="input" value={f.visitType || ''} onChange={e => setF({ visitType: e.target.value })}>
+                  <option value="">{isAr ? 'كل الأنواع' : 'All types'}</option>
+                  {Object.entries(VISIT_TYPE_AR).map(([k, v]) => (
+                    <option key={k} value={k}>{isAr ? v : k}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {current.filters?.includes('rep') && reps.length > 0 && (
+              <div>
+                <label className="label">{isAr ? 'المندوب' : 'Sales Rep'}</label>
+                <select className="input" value={f.salesRepId || ''} onChange={e => setF({ salesRepId: e.target.value })}>
+                  <option value="">{isAr ? 'كل المناديب' : 'All reps'}</option>
+                  {reps.map(rep => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
+                </select>
+              </div>
+            )}
+
+            {current.filters?.includes('dateRange') && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">{isAr ? 'من تاريخ' : 'From'}</label>
+                  <input type="date" className="input" value={f.from || ''} onChange={e => setF({ from: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">{isAr ? 'إلى تاريخ' : 'To'}</label>
+                  <input type="date" className="input" value={f.to || ''} onChange={e => setF({ to: e.target.value })} />
+                </div>
+              </div>
+            )}
+
+            {Object.values(f).some(v => v) && (
+              <button onClick={() => setFilters(p => ({ ...p, [current.key]: {} }))}
+                className="text-xs text-brand-500 hover:text-brand-700 underline">
+                {isAr ? '✕ مسح الفلاتر' : '✕ Clear filters'}
+              </button>
+            )}
+
+            <div className={`flex gap-2 pt-2 border-t border-brand-100 ${isAr ? 'flex-row-reverse' : ''}`}>
+              {current.hasPdf && (
+                <button onClick={() => generate(current.key, 'pdf')} disabled={generating === `${current.key}-pdf`}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+                  {generating === `${current.key}-pdf` ? (isAr ? 'جاري الإنشاء...' : 'Generating...') : <><Download className="w-4 h-4" /> PDF</>}
+                </button>
+              )}
+              <button onClick={() => generate(current.key, 'csv')} disabled={generating === `${current.key}-csv`}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+                {generating === `${current.key}-csv` ? (isAr ? 'جاري الإنشاء...' : 'Generating...') : <><FileSpreadsheet className="w-4 h-4" /> Excel/CSV</>}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
