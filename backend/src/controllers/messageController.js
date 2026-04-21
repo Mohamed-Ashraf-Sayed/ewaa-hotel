@@ -8,30 +8,36 @@ const getContacts = async (req, res) => {
     const me = req.user;
     let where = {};
 
+    let baseIds = new Set();
     if (me.role === 'admin' || me.role === 'general_manager' || me.role === 'vice_gm') {
-      // Can chat with everyone
-      where = { isActive: true, NOT: { id: me.id } };
+      const all = await prisma.user.findMany({ where: { isActive: true, NOT: { id: me.id } }, select: { id: true } });
+      all.forEach(u => baseIds.add(u.id));
     } else if (me.role === 'sales_director') {
-      // Director: chat with team + their manager
       const subIds = await getSubordinateIds(me.id);
-      where = { isActive: true, id: { in: [...subIds, me.managerId].filter(Boolean) } };
+      [...subIds, me.managerId].filter(Boolean).forEach(id => baseIds.add(id));
     } else if (me.role === 'assistant_sales' && me.managerId) {
-      // Assistant: chat with director + sibling reps
       const teamIds = await getSubordinateIds(me.managerId);
-      where = { isActive: true, id: { in: [me.managerId, ...teamIds.filter(id => id !== me.id)] } };
+      [me.managerId, ...teamIds.filter(id => id !== me.id)].forEach(id => baseIds.add(id));
     } else if (me.managerId) {
-      // Sales rep / others: chat with manager + siblings
       const siblings = await prisma.user.findMany({
         where: { managerId: me.managerId, isActive: true, NOT: { id: me.id } },
         select: { id: true }
       });
-      where = { isActive: true, id: { in: [me.managerId, ...siblings.map(s => s.id)] } };
-    } else {
-      where = { isActive: true, NOT: { id: me.id } };
+      [me.managerId, ...siblings.map(s => s.id)].forEach(id => baseIds.add(id));
     }
 
+    // Include anyone who has had a message conversation with me (so admins/anyone outside hierarchy still appear)
+    const conversationPartners = await prisma.message.findMany({
+      where: { OR: [{ fromUserId: me.id }, { toUserId: me.id }] },
+      select: { fromUserId: true, toUserId: true },
+    });
+    conversationPartners.forEach(m => {
+      if (m.fromUserId !== me.id) baseIds.add(m.fromUserId);
+      if (m.toUserId !== me.id) baseIds.add(m.toUserId);
+    });
+
     const contacts = await prisma.user.findMany({
-      where,
+      where: { isActive: true, id: { in: Array.from(baseIds) } },
       select: { id: true, name: true, role: true, email: true },
       orderBy: { name: 'asc' },
     });
