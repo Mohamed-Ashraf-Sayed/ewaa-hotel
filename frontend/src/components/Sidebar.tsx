@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, FileText, MapPin,
-  Hotel, CreditCard, Target, CheckSquare, Trophy, CalendarDays, X, BarChart3, Network
+  Hotel, CreditCard, Target, CheckSquare, Trophy, CalendarDays, X, BarChart3, Network, MessageCircle
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -17,6 +17,7 @@ const navItems: NavItem[] = [
   { to: '/payments', icon: CreditCard, labelKey: 'nav_payments', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer'] },
   { to: '/targets', icon: Target, labelKey: 'nav_targets', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep'] },
   { to: '/calendar', icon: CalendarDays, labelKey: 'nav_calendar' },
+  { to: '/chat', icon: MessageCircle, labelKey: 'nav_chat' },
   { to: '/tasks', icon: CheckSquare, labelKey: 'nav_tasks', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep'] },
   { to: '/leaderboard', icon: Trophy, labelKey: 'nav_leaderboard', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep'] },
   { to: '/reports', icon: BarChart3, labelKey: 'nav_reports', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales'] },

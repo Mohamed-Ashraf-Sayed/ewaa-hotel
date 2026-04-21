@@ -15,6 +15,7 @@ const translations = {
   nav_calendar: { ar: 'التقويم', en: 'Calendar' },
   nav_reports: { ar: 'التقارير', en: 'Reports' },
   nav_org_chart: { ar: 'الهيكل التنظيمي', en: 'Org Chart' },
+  nav_chat: { ar: 'المحادثات', en: 'Chat' },
 
   // === Auth ===
   login_title: { ar: 'تسجيل الدخول', en: 'Sign In' },

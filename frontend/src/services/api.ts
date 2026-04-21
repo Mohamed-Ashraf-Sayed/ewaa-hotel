@@ -165,6 +165,15 @@ export const attachmentsApi = {
   download: (id: number) => api.get(`/attachments/${id}/download`, { responseType: 'blob' }),
 };
 
+// Messages / Chat
+export const messagesApi = {
+  getContacts: () => api.get('/messages/contacts'),
+  getConversation: (userId: number) => api.get(`/messages/with/${userId}`),
+  send: (toUserId: number, content: string) => api.post('/messages', { toUserId, content }),
+  broadcast: (content: string) => api.post('/messages/broadcast', { content }),
+  getUnreadCount: () => api.get('/messages/unread-count'),
+};
+
 // Reminders / Calendar
 export const remindersApi = {
   getAll: (params?: any) => api.get('/reminders', { params }),

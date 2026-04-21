@@ -18,6 +18,7 @@ import Leaderboard from './pages/Leaderboard';
 import Calendar from './pages/Calendar';
 import Reports from './pages/Reports';
 import OrgChart from './pages/OrgChart';
+import Chat from './pages/Chat';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -51,6 +52,7 @@ function AppRoutes() {
         <Route path="calendar" element={<Calendar />} />
         <Route path="reports" element={<Reports />} />
         <Route path="org-chart" element={<OrgChart />} />
+        <Route path="chat" element={<Chat />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

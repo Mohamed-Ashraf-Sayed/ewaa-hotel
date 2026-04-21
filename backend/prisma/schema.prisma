@@ -63,6 +63,23 @@ model User {
   emailLogs       EmailLog[]
   reminders       Reminder[]
   uploadedAttachments ClientAttachment[]
+  messagesSent    Message[]      @relation("MessagesSent")
+  messagesReceived Message[]     @relation("MessagesReceived")
+}
+
+model Message {
+  id          Int      @id @default(autoincrement())
+  fromUserId  Int
+  toUserId    Int
+  content     String
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  fromUser    User     @relation("MessagesSent", fields: [fromUserId], references: [id])
+  toUser      User     @relation("MessagesReceived", fields: [toUserId], references: [id])
+
+  @@index([fromUserId, toUserId])
+  @@index([toUserId, isRead])
 }
 
 model UserHotel {
