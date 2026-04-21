@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, Building2, FileText, TrendingUp, Users, MapPin, Target as TargetIcon, FileSpreadsheet } from 'lucide-react';
 import { pdfApi, contractsApi, clientsApi, visitsApi, paymentsApi, usersApi } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -75,6 +75,16 @@ export default function Reports() {
 
   // Filters state
   const [filters, setFilters] = useState<Record<string, any>>({});
+  const [reps, setReps] = useState<{ id: number; name: string }[]>([]);
+
+  useEffect(() => {
+    usersApi.getAll().then(r => {
+      setReps((r.data as any[])
+        .filter(u => u.isActive && ['sales_rep', 'sales_director', 'assistant_sales'].includes(u.role))
+        .map(u => ({ id: u.id, name: u.name }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'ar')));
+    }).catch(() => setReps([]));
+  }, []);
 
   const downloadFile = (data: BlobPart, filename: string, mimeType = 'application/pdf') => {
     const url = URL.createObjectURL(new Blob([data], { type: mimeType }));
@@ -137,7 +147,7 @@ export default function Reports() {
           break;
         }
         case 'visits': {
-          const res = await visitsApi.getAll();
+          const res = await visitsApi.getAll({ salesRepId: f.salesRepId ? parseInt(f.salesRepId) : undefined });
           exportToCSV(res.data, 'Visits.csv', [
             { key: 'visitDate', label: isAr ? 'التاريخ' : 'Date' },
             { key: 'client.companyName', label: isAr ? 'الشركة' : 'Company' },
@@ -221,6 +231,16 @@ export default function Reports() {
                   <option value="active">{isAr ? 'نشط' : 'Active'}</option>
                   <option value="lead">{isAr ? 'محتمل' : 'Lead'}</option>
                   <option value="inactive">{isAr ? 'غير نشط' : 'Inactive'}</option>
+                </select>
+              </div>
+            )}
+            {r.filters?.includes('rep') && reps.length > 0 && (
+              <div className="mt-3">
+                <select className="input text-xs"
+                  value={filters[r.key]?.salesRepId || ''}
+                  onChange={e => setFilters(p => ({ ...p, [r.key]: { ...p[r.key], salesRepId: e.target.value } }))}>
+                  <option value="">{isAr ? 'كل المناديب' : 'All reps'}</option>
+                  {reps.map(rep => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
                 </select>
               </div>
             )}

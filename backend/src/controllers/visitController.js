@@ -7,7 +7,7 @@ const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
 
 const getVisits = async (req, res) => {
   try {
-    const { clientId, upcoming } = req.query;
+    const { clientId, upcoming, salesRepId } = req.query;
     let salesRepFilter = {};
     if (!ADMIN_ROLES.includes(req.user.role)) {
       if (req.user.role === 'assistant_sales' && req.user.managerId) {
@@ -24,6 +24,7 @@ const getVisits = async (req, res) => {
     const where = {
       ...salesRepFilter,
       ...(clientId && { clientId: parseInt(clientId) }),
+      ...(salesRepId && { salesRepId: parseInt(salesRepId) }),
       ...(upcoming === 'true' && { nextFollowUp: { gte: new Date() } })
     };
 

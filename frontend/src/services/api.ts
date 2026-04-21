@@ -77,7 +77,7 @@ export const contractsApi = {
 
 // Visits
 export const visitsApi = {
-  getAll: (params?: { clientId?: number; upcoming?: boolean }) => api.get('/visits', { params }),
+  getAll: (params?: { clientId?: number; upcoming?: boolean; salesRepId?: number }) => api.get('/visits', { params }),
   getFollowUps: (days?: number) => api.get('/visits/follow-ups', { params: { days } }),
   create: (data: any) => api.post('/visits', data),
   update: (id: number, data: any) => api.put(`/visits/${id}`, data)
