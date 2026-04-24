@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getClients, getClient, createClient, updateClient, deleteClient } = require('../controllers/clientController');
+const { getClients, getClient, createClient, updateClient, deleteClient, lookupClient } = require('../controllers/clientController');
 const { authenticate } = require('../middleware/auth');
 const { sanitizeBody, validateFields } = require('../middleware/validate');
 
@@ -15,6 +15,7 @@ const clientRules = {
 };
 
 router.get('/', authenticate, getClients);
+router.get('/lookup', authenticate, lookupClient);
 router.get('/:id', authenticate, getClient);
 router.post('/', authenticate, sanitizeBody(['notes']), validateFields(clientRules), createClient);
 router.put('/:id', authenticate, sanitizeBody(['notes']), updateClient);

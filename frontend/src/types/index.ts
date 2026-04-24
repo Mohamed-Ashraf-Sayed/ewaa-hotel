@@ -92,6 +92,10 @@ export interface Client {
   estimatedRooms?: number;
   annualBudget?: number;
   website?: string;
+  commercialRegNo?: string;
+  taxCardNo?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   notes?: string;
   isActive: boolean;
   createdAt: string;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowRight, FileText, Plus, Clock, MapPin, CreditCard, Receipt, Mail } from 'lucide-react';
+import { ArrowRight, FileText, Plus, Clock, MapPin, CreditCard, Receipt, Mail, ExternalLink } from 'lucide-react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { clientsApi, visitsApi, activitiesApi, contractsApi, hotelsApi, paymentsApi, pdfApi, emailApi, attachmentsApi } from '../services/api';
@@ -26,11 +26,53 @@ export default function ClientDetail() {
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'visits' | 'contracts' | 'activities' | 'payments' | 'emails' | 'attachments'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'visits' | 'contracts' | 'activities' | 'payments' | 'receipts' | 'emails' | 'attachments'>('overview');
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ contactPerson: '', countryCode: '+966', phoneNumber: '', email: '', address: '', notes: '' });
+  const [editForm, setEditForm] = useState({ contactPerson: '', countryCode: '+966', phoneNumber: '', email: '', address: '', commercialRegNo: '', taxCardNo: '', notes: '' });
+  const [locUpdating, setLocUpdating] = useState(false);
+
+  const updateLocation = () => {
+    if (!navigator.geolocation) {
+      alert(isAr ? 'المتصفح لا يدعم تحديد الموقع' : 'Geolocation not supported');
+      return;
+    }
+    setLocUpdating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          await clientsApi.update(parseInt(id!), {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+          await load();
+        } catch (err: any) {
+          alert(err.response?.data?.message || (isAr ? 'فشل حفظ الموقع' : 'Failed to save location'));
+        } finally {
+          setLocUpdating(false);
+        }
+      },
+      (err) => {
+        setLocUpdating(false);
+        const msg = err.code === err.PERMISSION_DENIED
+          ? (isAr ? 'تم رفض إذن الوصول للموقع' : 'Location permission denied')
+          : (isAr ? 'تعذّر تحديد الموقع' : 'Could not get location');
+        alert(msg);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const clearLocation = async () => {
+    if (!confirm(isAr ? 'مسح الموقع الحالي؟' : 'Clear current location?')) return;
+    try {
+      await clientsApi.update(parseInt(id!), { latitude: null, longitude: null });
+      await load();
+    } catch {
+      alert(isAr ? 'فشل مسح الموقع' : 'Failed to clear location');
+    }
+  };
   const [savingEdit, setSavingEdit] = useState(false);
   const [showAttachmentModal, setShowAttachmentModal] = useState(false);
   const [attachmentForm, setAttachmentForm] = useState({ type: 'commercial_register', notes: '' });
@@ -148,6 +190,8 @@ export default function ClientDetail() {
       phoneNumber: number,
       email: client.email || '',
       address: client.address || '',
+      commercialRegNo: client.commercialRegNo || '',
+      taxCardNo: client.taxCardNo || '',
       notes: client.notes || '',
     });
     setShowEditModal(true);
@@ -162,6 +206,8 @@ export default function ClientDetail() {
         phone: `${editForm.countryCode}${editForm.phoneNumber}`,
         email: editForm.email,
         address: editForm.address,
+        commercialRegNo: editForm.commercialRegNo,
+        taxCardNo: editForm.taxCardNo,
         notes: editForm.notes,
       });
       setShowEditModal(false);
@@ -233,12 +279,14 @@ export default function ClientDetail() {
   const totalRemaining = Math.max(totalValue - totalCollected, 0);
   const collectionPct = totalValue > 0 ? Math.round((totalCollected / totalValue) * 100) : 0;
 
+  const paymentsWithReceipt = payments.filter((p: Payment) => !!p.receiptUrl);
   const tabs = [
     { key: 'overview', label: t('tab_overview') },
     { key: 'visits', label: `${t('tab_visits')} (${clientData.visits?.length || 0})` },
     { key: 'contracts', label: `${t('tab_contracts')} (${clientData.contracts?.length || 0})` },
     { key: 'activities', label: `${t('tab_activities')} (${clientData.activities?.length || 0})` },
     { key: 'payments', label: `${t('tab_payments')} (${payments.length})` },
+    { key: 'receipts', label: `${isAr ? 'إيصالات السداد' : 'Receipts'} (${paymentsWithReceipt.length})` },
     { key: 'emails', label: `${isAr ? 'الإيميلات' : 'Emails'} (${emailLogs.length})` },
     { key: 'attachments', label: `${isAr ? 'المرفقات' : 'Attachments'} (${attachments.length})` },
   ];
@@ -329,6 +377,36 @@ export default function ClientDetail() {
           {client.annualBudget && <div><p className="text-xs text-brand-400 mb-1">{t('client_budget')}</p><p className="font-medium text-brand-900">{client.annualBudget.toLocaleString()} {t('sar')}</p></div>}
           {client.salesRep && <div><p className="text-xs text-brand-400 mb-1">{t('contract_rep')}</p><p className="font-medium text-brand-900">{client.salesRep.name}</p></div>}
           {client.address && <div className="col-span-2"><p className="text-xs text-brand-400 mb-1">{lang === 'ar' ? 'العنوان' : 'Address'}</p><p className="font-medium text-brand-900">{client.address}</p></div>}
+          <div className="col-span-2">
+            <p className="text-xs text-brand-400 mb-1">{isAr ? 'الموقع الجغرافي' : 'Geo Location'}</p>
+            <div className={`flex items-center gap-3 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
+              {client.latitude != null && client.longitude != null ? (
+                <>
+                  <a href={`https://www.google.com/maps/search/?api=1&query=${client.latitude},${client.longitude}`}
+                    target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 font-medium text-brand-600 hover:underline" dir="ltr">
+                    <MapPin className="w-4 h-4" />
+                    {client.latitude.toFixed(5)}, {client.longitude.toFixed(5)}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <button type="button" className="btn-secondary text-xs" onClick={updateLocation} disabled={locUpdating}>
+                    {locUpdating ? (isAr ? 'جاري التحديث...' : 'Updating...') : (isAr ? 'تحديث الموقع' : 'Update location')}
+                  </button>
+                  <button type="button" className="text-xs text-red-500 hover:underline" onClick={clearLocation}>
+                    {isAr ? 'مسح' : 'Clear'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-sm text-brand-400">{isAr ? 'لم يتم تحديد الموقع بعد' : 'Not set'}</span>
+                  <button type="button" className="btn-secondary text-xs" onClick={updateLocation} disabled={locUpdating}>
+                    <MapPin className="w-4 h-4" />
+                    {locUpdating ? (isAr ? 'جاري التقاط الموقع...' : 'Getting location...') : (isAr ? 'التقط موقعي الحالي' : 'Capture current location')}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
         {client.notes && (
           <div className={`mt-4 pt-4 border-t border-brand-100 ${isAr ? 'text-right' : 'text-left'}`}>
@@ -531,6 +609,64 @@ export default function ClientDetail() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Receipts Tab */}
+      {activeTab === 'receipts' && (
+        <div>
+          {paymentsWithReceipt.length === 0 ? (
+            <div className="card py-16 text-center">
+              <Receipt className="w-12 h-12 text-brand-200 mx-auto mb-3" />
+              <p className="text-brand-400 font-semibold">
+                {isAr ? 'لا توجد إيصالات سداد مرفوعة' : 'No payment receipts uploaded'}
+              </p>
+              <p className="text-xs text-brand-300 mt-1">
+                {isAr ? 'ارفع صورة الإيصال مع كل دفعة عشان تقدر ترجعلها هنا' : 'Attach a receipt when recording a payment to see it here'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {paymentsWithReceipt.map((p: Payment) => {
+                const ext = p.receiptUrl?.split('.').pop()?.toLowerCase() || '';
+                const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext);
+                return (
+                  <a key={p.id}
+                    href={`/uploads/${p.receiptUrl}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="card overflow-hidden hover:shadow-md hover:border-brand-300 transition-all group">
+                    <div className="aspect-video bg-brand-50 flex items-center justify-center overflow-hidden">
+                      {isImage ? (
+                        <img src={`/uploads/${p.receiptUrl}`} alt=""
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-brand-400">
+                          <FileText className="w-10 h-10" />
+                          <span className="text-xs font-mono uppercase">{ext || 'file'}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className={`p-3 ${isAr ? 'text-right' : 'text-left'}`}>
+                      <p className="font-bold text-green-600 text-base">
+                        {p.amount.toLocaleString()} {t('sar')}
+                      </p>
+                      <p className="text-xs text-brand-400 mt-0.5">
+                        {p.paymentDate ? format(parseISO(p.paymentDate), 'dd MMM yyyy', { locale }) : ''}
+                        {p.contract?.contractRef ? ` · ${p.contract.contractRef}` : ''}
+                      </p>
+                      {p.paymentType && (
+                        <p className="text-[11px] text-brand-500 mt-1">{t(`payment_${p.paymentType}` as any)}</p>
+                      )}
+                      {p.reference && (
+                        <p className="text-[11px] text-brand-400 mt-0.5 font-mono">#{p.reference}</p>
+                      )}
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -931,7 +1067,7 @@ export default function ClientDetail() {
       <Modal open={showEditModal} onClose={() => setShowEditModal(false)} title={isAr ? 'تعديل بيانات العميل' : 'Edit Client Info'}>
         <form onSubmit={handleSaveEdit} className="space-y-4">
           <div className={`p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs ${isAr ? 'text-right' : ''}`}>
-            ℹ️ {isAr ? 'يمكن تعديل بيانات التواصل (الهاتف، الإيميل، العنوان، جهة الاتصال)' : 'You can update contact info (phone, email, address, contact person)'}
+            ℹ️ {isAr ? 'يمكن تعديل بيانات التواصل والسجل التجاري والبطاقة الضريبية' : 'You can update contact info, commercial reg no, and tax card no'}
           </div>
           <div>
             <label className="label">{isAr ? 'جهة الاتصال' : 'Contact Person'} *</label>
@@ -968,6 +1104,20 @@ export default function ClientDetail() {
             <input className="input" required minLength={2} maxLength={300}
               value={editForm.address}
               onChange={e => setEditForm(p => ({ ...p, address: e.target.value }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">{isAr ? 'رقم السجل التجاري' : 'Commercial Reg No.'}</label>
+              <input className="input" minLength={3} maxLength={30} pattern="[A-Za-z0-9\-\/\s]*" dir="ltr"
+                value={editForm.commercialRegNo}
+                onChange={e => setEditForm(p => ({ ...p, commercialRegNo: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label">{isAr ? 'رقم البطاقة الضريبية' : 'Tax Card No.'}</label>
+              <input className="input" minLength={3} maxLength={30} pattern="[A-Za-z0-9\-\/\s]*" dir="ltr"
+                value={editForm.taxCardNo}
+                onChange={e => setEditForm(p => ({ ...p, taxCardNo: e.target.value }))} />
+            </div>
           </div>
           <div>
             <label className="label">{isAr ? 'ملاحظات' : 'Notes'}</label>

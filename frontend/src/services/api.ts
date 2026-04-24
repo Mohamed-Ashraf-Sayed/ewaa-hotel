@@ -58,7 +58,8 @@ export const clientsApi = {
   getOne: (id: number) => api.get(`/clients/${id}`),
   create: (data: any) => api.post('/clients', data),
   update: (id: number, data: any) => api.put(`/clients/${id}`, data),
-  delete: (id: number) => api.delete(`/clients/${id}`)
+  delete: (id: number) => api.delete(`/clients/${id}`),
+  lookup: (params: { regNo?: string; taxNo?: string }) => api.get('/clients/lookup', { params })
 };
 
 // Contracts
@@ -188,6 +189,16 @@ export const messagesApi = {
   },
   broadcast: (content: string) => api.post('/messages/broadcast', { content }),
   getUnreadCount: () => api.get('/messages/unread-count'),
+};
+
+// Local Events / Holidays
+export const localEventsApi = {
+  getAll: (params?: { month?: number; year?: number; type?: string }) =>
+    api.get('/local-events', { params }),
+  create: (data: any) => api.post('/local-events', data),
+  update: (id: number, data: any) => api.put(`/local-events/${id}`, data),
+  delete: (id: number) => api.delete(`/local-events/${id}`),
+  sync: () => api.post('/local-events/sync'),
 };
 
 // Reminders / Calendar

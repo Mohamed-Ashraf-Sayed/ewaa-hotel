@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Search, ChevronLeft, ChevronRight, User, Download } from 'lucide-react';
+import { Plus, Search, ChevronLeft, ChevronRight, User, Download, FileSearch } from 'lucide-react';
 import { clientsApi, hotelsApi, pdfApi } from '../services/api';
 import { Client, Hotel } from '../types';
 import Modal from '../components/Modal';
@@ -45,13 +45,19 @@ export default function Clients() {
   const [typeFilter, setTypeFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showLookup, setShowLookup] = useState(false);
+  const [lookupRegNo, setLookupRegNo] = useState('');
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupResult, setLookupResult] = useState<null | { exists: boolean; matches: { salesRepName: string; brandLabels: string[] }[] }>(null);
   const [searchParams] = useSearchParams();
   const { hasRole } = useAuth();
 
   const emptyForm = {
     companyName: '', contactPerson: '', countryCode: '+966', phoneNumber: '', email: '', address: '',
     industry: '', clientType: 'lead', source: '', hotelId: '', brands: [] as string[],
-    estimatedRooms: '', annualBudget: '', website: '', notes: ''
+    estimatedRooms: '', annualBudget: '', website: '',
+    commercialRegNo: '', taxCardNo: '',
+    notes: ''
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -118,6 +124,9 @@ export default function Clients() {
           <p className="text-brand-400 text-sm mt-0.5">{isAr ? 'الإجمالي: ' : 'Total: '}{clients.length}</p>
         </div>
         <div className="flex gap-2">
+          <button className="btn-secondary" onClick={() => { setLookupResult(null); setLookupRegNo(''); setShowLookup(true); }}>
+            <FileSearch className="w-4 h-4" /> {isAr ? 'استعلام بالسجل التجاري' : 'Lookup by Commercial Reg No'}
+          </button>
           {hasRole('general_manager', 'vice_gm', 'sales_director') && (
             <button className="btn-secondary" onClick={async () => {
               try {
@@ -309,6 +318,20 @@ export default function Clients() {
               <input className="input" type="number" required min="1"
                 value={form.annualBudget} onChange={e => setForm(p => ({ ...p, annualBudget: e.target.value }))} />
             </div>
+            <div>
+              <label className="label">{isAr ? 'رقم السجل التجاري' : 'Commercial Registration No.'} *</label>
+              <input className="input" required minLength={4} maxLength={30} pattern="[A-Za-z0-9\-\/\s]+"
+                title={isAr ? 'أرقام وحروف فقط' : 'Letters and numbers only'}
+                value={form.commercialRegNo}
+                onChange={e => setForm(p => ({ ...p, commercialRegNo: e.target.value }))} dir="ltr" />
+            </div>
+            <div>
+              <label className="label">{isAr ? 'رقم البطاقة الضريبية' : 'Tax Card No.'} *</label>
+              <input className="input" required minLength={4} maxLength={30} pattern="[A-Za-z0-9\-\/\s]+"
+                title={isAr ? 'أرقام وحروف فقط' : 'Letters and numbers only'}
+                value={form.taxCardNo}
+                onChange={e => setForm(p => ({ ...p, taxCardNo: e.target.value }))} dir="ltr" />
+            </div>
             <div className="col-span-2">
               <label className="label">{isAr ? 'البراندات (يمكن اختيار أكثر من واحد)' : 'Brands (multi-select)'} *</label>
               <div className="grid grid-cols-3 gap-2">
@@ -345,6 +368,67 @@ export default function Clients() {
               {saving ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'إضافة العميل' : 'Add Client')}
             </button>
           </div>
+        </form>
+      </Modal>
+
+      <Modal open={showLookup} onClose={() => setShowLookup(false)} title={isAr ? 'استعلام عن عميل' : 'Client Lookup'} size="sm">
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!lookupRegNo.trim()) return;
+            setLookupLoading(true);
+            setLookupResult(null);
+            try {
+              const res = await clientsApi.lookup({ regNo: lookupRegNo.trim() });
+              setLookupResult(res.data);
+            } catch {
+              setLookupResult({ exists: false, matches: [] });
+            } finally {
+              setLookupLoading(false);
+            }
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="label">{isAr ? 'رقم السجل التجاري' : 'Commercial Registration No.'}</label>
+            <input
+              className="input"
+              required
+              minLength={3}
+              maxLength={30}
+              value={lookupRegNo}
+              onChange={(e) => setLookupRegNo(e.target.value)}
+              dir="ltr"
+              placeholder="1010XXXXXX"
+              autoFocus
+            />
+          </div>
+          <button type="submit" className="btn-primary w-full justify-center" disabled={lookupLoading}>
+            {lookupLoading ? (isAr ? 'جاري البحث...' : 'Searching...') : (isAr ? 'استعلام' : 'Search')}
+          </button>
+
+          {lookupResult && !lookupResult.exists && (
+            <div className="rounded-lg bg-green-50 border border-green-200 text-green-800 px-3 py-2 text-sm">
+              {isAr ? 'العميل غير مسجّل في النظام — يمكنك إضافته.' : 'Client not registered — you can add them.'}
+            </div>
+          )}
+          {lookupResult && lookupResult.exists && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2 text-sm space-y-1.5">
+              <div className="font-semibold">{isAr ? 'العميل مسجّل بالفعل:' : 'Client is already registered:'}</div>
+              {lookupResult.matches.map((m, i) => (
+                <div key={i} className={`flex ${isAr ? 'flex-row-reverse' : ''} items-center gap-2`}>
+                  <span className="font-medium">{isAr ? 'المندوب:' : 'Sales Rep:'}</span>
+                  <span>{m.salesRepName}</span>
+                  {m.brandLabels.length > 0 && (
+                    <>
+                      <span className="text-amber-700">•</span>
+                      <span>{isAr ? 'البراند: ' : 'Brand: '}{m.brandLabels.join('، ')}</span>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </form>
       </Modal>
     </div>

@@ -65,6 +65,7 @@ model User {
   uploadedAttachments ClientAttachment[]
   messagesSent    Message[]      @relation("MessagesSent")
   messagesReceived Message[]     @relation("MessagesReceived")
+  localEvents     LocalEvent[]
 }
 
 model Message {
@@ -111,6 +112,10 @@ model Client {
   estimatedRooms Int?
   annualBudget   Float?
   website        String?
+  commercialRegNo String?
+  taxCardNo      String?
+  latitude       Float?
+  longitude      Float?
   notes          String?
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -366,6 +371,29 @@ model PasswordResetCode {
 
   @@index([email, used])
   @@index([expiresAt])
+}
+
+// === LOCAL EVENTS / HOLIDAYS ===
+model LocalEvent {
+  id          Int       @id @default(autoincrement())
+  title       String
+  titleEn     String?
+  description String?
+  eventDate   DateTime
+  endDate     DateTime?
+  type        String    @default("occasion") // official_holiday | religious | school | season | occasion
+  color       String?
+  isRecurring Boolean   @default(false)
+  source      String    @default("manual")  // manual | nager
+  externalId  String?
+  createdById Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  createdBy User? @relation(fields: [createdById], references: [id])
+
+  @@unique([source, externalId])
+  @@index([eventDate])
 }
 
 // === PERFORMANCE & GAMIFICATION ===
