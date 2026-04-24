@@ -47,7 +47,7 @@ export default function Login() {
           <p className="text-[11px] text-white leading-relaxed">
             الجهة المنفذة
             <span className="mx-1.5 text-white/70">•</span>
-            إدارة تقنية المعلومات بمجموعة المهيدب الاستثمارية
+            إدارة تقنية المعلومات بمجموعة فنادق إيواء
           </p>
         </div>
       </div>
@@ -133,7 +133,7 @@ export default function Login() {
             </div>
           </div>
           <p className="lg:hidden text-center text-[11px] text-white/50 mt-6 leading-relaxed">
-            الجهة المنفذة • إدارة تقنية المعلومات بمجموعة المهيدب الاستثمارية
+            الجهة المنفذة • إدارة تقنية المعلومات بمجموعة فنادق إيواء
           </p>
         </div>
       </div>

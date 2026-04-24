@@ -52,6 +52,7 @@ app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/gamification', require('./routes/gamification'));
 app.use('/api/email', require('./routes/email'));
 app.use('/api/reminders', require('./routes/reminders'));
+app.use('/api/local-events', require('./routes/localEvents'));
 app.use('/api', require('./routes/attachments'));
 app.use('/api/messages', require('./routes/messages'));
 
@@ -71,4 +72,6 @@ app.listen(PORT, () => {
   console.log(`Hotel CRM running on port ${PORT}`);
   // Background job: notify managers when tasks are overdue
   require('./jobs/taskOverdueChecker').startTaskOverdueChecker();
+  // Background job: sync local holidays from Nager.Date API
+  require('./jobs/holidaySync').startHolidaySync();
 });
