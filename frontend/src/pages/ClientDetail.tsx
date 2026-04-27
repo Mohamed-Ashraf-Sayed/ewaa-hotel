@@ -88,7 +88,10 @@ export default function ClientDetail() {
   const [emailFiles, setEmailFiles] = useState<File[]>([]);
   const [emailSending, setEmailSending] = useState(false);
   const [quoteItems, setQuoteItems] = useState([{ description: '', roomType: '', nights: '', rooms: '', ratePerNight: '' }]);
-  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '' });
+  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '' });
+  const [quoteHotelId, setQuoteHotelId] = useState<number | null>(null);
+  const [hotelSearch, setHotelSearch] = useState('');
+  const [showHotelDropdown, setShowHotelDropdown] = useState(false);
   const [saving, setSaving] = useState(false);
   const { hasRole } = useAuth();
 
@@ -433,7 +436,12 @@ export default function ClientDetail() {
               <CreditCard className="w-4 h-4" /> {t('add_payment')}
             </button>
           )}
-          <button className="btn-secondary text-sm" onClick={() => setShowQuoteModal(true)}>
+          <button className="btn-secondary text-sm" onClick={() => {
+            const def = client?.hotelId ? hotels.find(h => h.id === client.hotelId) : null;
+            setQuoteHotelId(def?.id ?? null);
+            setHotelSearch(def?.name || '');
+            setShowQuoteModal(true);
+          }}>
             <Receipt className="w-4 h-4" /> {isAr ? 'عرض سعر' : 'Price Quote'}
           </button>
           <button className="btn-secondary text-sm" onClick={() => {
@@ -988,13 +996,20 @@ export default function ClientDetail() {
       {/* Quote Modal */}
       <Modal open={showQuoteModal} onClose={() => setShowQuoteModal(false)} title={isAr ? 'إنشاء عرض سعر' : 'Create Price Quote'} size="xl">
         <form onSubmit={async (e) => {
-          e.preventDefault(); setSaving(true);
+          e.preventDefault();
+          const finalHotelId = quoteHotelId ?? client?.hotelId;
+          if (!finalHotelId) {
+            alert(isAr ? 'اختر الفندق من القائمة' : 'Select a hotel from the dropdown');
+            return;
+          }
+          setSaving(true);
           try {
             const res = await pdfApi.generateQuote({
-              clientId: id, hotelId: client?.hotelId,
+              clientId: id, hotelId: finalHotelId,
               companyName: client?.companyName, contactPerson: client?.contactPerson,
               items: quoteItems.filter(i => i.description),
               validDays: quoteForm.validDays, notes: quoteForm.notes,
+              municipalityTaxPercent: quoteForm.municipalityTaxPercent,
             });
             const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
             const a = document.createElement('a'); a.href = url;
@@ -1004,6 +1019,53 @@ export default function ClientDetail() {
           } catch { alert(isAr ? 'حدث خطأ' : 'Error generating quote'); }
           finally { setSaving(false); }
         }} className="space-y-4">
+          {/* Hotel selector with search */}
+          <div className="relative">
+            <label className="label">{isAr ? 'الفندق' : 'Hotel'} *</label>
+            <input
+              className="input"
+              placeholder={isAr ? 'ابحث عن فندق...' : 'Search hotels...'}
+              value={hotelSearch}
+              onChange={e => {
+                setHotelSearch(e.target.value);
+                setQuoteHotelId(null);
+                setShowHotelDropdown(true);
+              }}
+              onFocus={() => setShowHotelDropdown(true)}
+              onBlur={() => setTimeout(() => setShowHotelDropdown(false), 200)}
+              required
+            />
+            {showHotelDropdown && (() => {
+              const q = hotelSearch.toLowerCase().trim();
+              const matches = hotels.filter(h =>
+                !q || h.name.toLowerCase().includes(q) || (h.city || '').toLowerCase().includes(q)
+              );
+              return matches.length > 0 ? (
+                <div className="absolute z-20 w-full mt-1 bg-white border border-brand-200 rounded-lg max-h-56 overflow-y-auto shadow-lg">
+                  {matches.map(h => (
+                    <button
+                      key={h.id}
+                      type="button"
+                      className={`w-full px-3 py-2 text-sm hover:bg-brand-50 ${isAr ? 'text-right' : 'text-left'} ${quoteHotelId === h.id ? 'bg-brand-50 font-semibold' : ''}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setQuoteHotelId(h.id);
+                        setHotelSearch(h.name);
+                        setShowHotelDropdown(false);
+                      }}
+                    >
+                      {h.name}{h.city ? ` — ${h.city}` : ''}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="absolute z-20 w-full mt-1 bg-white border border-brand-200 rounded-lg px-3 py-2 text-sm text-brand-400 shadow-lg">
+                  {isAr ? 'لا توجد نتائج' : 'No matches'}
+                </div>
+              );
+            })()}
+          </div>
+
           {/* Items */}
           <div>
             <div className={`flex items-center justify-between mb-2 ${isAr ? 'flex-row-reverse' : ''}`}>
@@ -1045,6 +1107,12 @@ export default function ClientDetail() {
               <label className="label">{isAr ? 'صلاحية العرض (أيام)' : 'Valid for (days)'}</label>
               <input className="input" type="number" min="1" value={quoteForm.validDays}
                 onChange={e => setQuoteForm(p => ({ ...p, validDays: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label">{isAr ? 'ضريبة البلدية %' : 'Municipality Tax %'}</label>
+              <input className="input" type="number" min="0" max="100" step="0.01"
+                placeholder="0" value={quoteForm.municipalityTaxPercent}
+                onChange={e => setQuoteForm(p => ({ ...p, municipalityTaxPercent: e.target.value }))} />
             </div>
           </div>
           <div>
