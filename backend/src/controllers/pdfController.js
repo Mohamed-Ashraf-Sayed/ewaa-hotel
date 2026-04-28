@@ -129,6 +129,19 @@ const drawRow = (doc, y, cols, widths, options = {}) => {
 };
 
 // Shared report header: logo (right), centered title, meta line with user + date/time
+// Footer banner drawn on every page of every report PDF (image is 1728x229).
+// Width 600 → height ~80 in landscape; centered horizontally near bottom.
+const drawReportFooterFn = (doc) => {
+  if (!hasQuoteFooter) return;
+  doc.save();
+  doc.image(quoteFooterPath, 121, 505, { width: 600 });
+  doc.restore();
+};
+const attachReportFooter = (doc) => {
+  doc.on('pageAdded', () => drawReportFooterFn(doc));
+  drawReportFooterFn(doc);
+};
+
 const drawReportHeader = (doc, { titleAr, subtitleAr, user, pageW = 812, marginX = 30 }) => {
   let y = 25;
   const logoH = 42;
@@ -502,10 +515,15 @@ const generateQuote = async (req, res) => {
 // ==================== CLIENT REPORT PDF ====================
 const generateClientReport = async (req, res) => {
   try {
-    const { type, hotelId, salesRepId } = req.query;
+    const { type, hotelId, salesRepId, from, to } = req.query;
     const where = {};
     if (type) where.clientType = type;
     if (hotelId) where.hotelId = parseInt(hotelId);
+    if (from || to) {
+      where.createdAt = {};
+      if (from) where.createdAt.gte = new Date(from);
+      if (to) where.createdAt.lte = new Date(`${to}T23:59:59`);
+    }
 
     const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
     if (!ADMIN_ROLES.includes(req.user.role) && req.user.role !== 'contract_officer') {
@@ -526,7 +544,7 @@ const generateClientReport = async (req, res) => {
     const clients = await prisma.client.findMany({
       where,
       include: {
-        salesRep: { select: { name: true } },
+        salesRep: { select: { name: true, email: true } },
         hotel: { select: { name: true } },
         _count: { select: { contracts: true, visits: true } },
       },
@@ -541,6 +559,7 @@ const generateClientReport = async (req, res) => {
     doc.pipe(res);
 
     const pageW = 812; // landscape A4 width
+    attachReportFooter(doc);
     let y = drawReportHeader(doc, {
       titleAr: 'تقرير العملاء',
       subtitleAr: `فنادق إيواء — إجمالي ${clients.length} عميل`,
@@ -562,8 +581,9 @@ const generateClientReport = async (req, res) => {
 
     const typeLabel = { active: 'نشط', lead: 'محتمل', inactive: 'غير نشط' };
 
+    const dataBottomY = hasQuoteFooter ? 490 : 530;
     clients.forEach((c, i) => {
-      if (y > 530) {
+      if (y > dataBottomY) {
         doc.addPage();
         y = drawReportHeader(doc, {
           titleAr: 'تقرير العملاء',
@@ -575,8 +595,9 @@ const generateClientReport = async (req, res) => {
           bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24, aligns, fontSize: 9,
         });
       }
+      const repName = extractEnglishName(c.salesRep?.name, c.salesRep?.email) || '-';
       y = drawRow(doc, y, [
-        c._count.visits, c._count.contracts, c.salesRep?.name || '-', c.hotel?.name || '-',
+        c._count.visits, c._count.contracts, repName, c.hotel?.name || '-',
         typeLabel[c.clientType] || c.clientType, c.phone || '-',
         c.contactPerson || '-', c.companyName, i + 1
       ], widths, {
@@ -601,4 +622,428 @@ const generateClientReport = async (req, res) => {
   }
 };
 
-module.exports = { generateQuote, generateClientReport };
+// Apply role-based scope filter to a Prisma `where` clause for entities that
+// have a `salesRepId` field. Admins / contract officers see everything;
+// directors see their team; assistants see their director's team; reps see
+// only their own.
+const applyAccessScope = async (user, where) => {
+  const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+  if (ADMIN_ROLES.includes(user.role) || user.role === 'contract_officer') return;
+  if (user.role === 'assistant_sales' && user.managerId) {
+    const subs = await prisma.user.findMany({ where: { managerId: user.managerId }, select: { id: true } });
+    where.salesRepId = { in: [user.managerId, ...subs.map(s => s.id)] };
+  } else if (user.role === 'sales_director') {
+    const subs = await prisma.user.findMany({ where: { managerId: user.id }, select: { id: true } });
+    where.salesRepId = { in: [user.id, ...subs.map(s => s.id)] };
+  } else {
+    where.salesRepId = user.id;
+  }
+};
+
+const CONTRACT_STATUS_AR = {
+  pending: 'قيد الانتظار', sales_approved: 'بانتظار الائتمان',
+  credit_approved: 'بانتظار العقود', contract_approved: 'بانتظار نائب المدير',
+  approved: 'معتمد نهائي', rejected: 'مرفوض',
+};
+const VISIT_TYPE_AR = {
+  in_person: 'زيارة شخصية', phone: 'هاتف', online: 'أونلاين', site_visit: 'زيارة الموقع',
+};
+const PAYMENT_METHOD_AR = {
+  cash: 'نقدي', bank_transfer: 'تحويل بنكي', cheque: 'شيك', check: 'شيك', card: 'بطاقة', online: 'أونلاين',
+};
+const ROLE_AR = {
+  sales_rep: 'مندوب مبيعات', sales_director: 'مدير المبيعات', assistant_sales: 'مساعد مدير المبيعات',
+};
+
+const dateRangeWhere = (from, to, field = 'createdAt') => {
+  if (!from && !to) return {};
+  const range = {};
+  if (from) range.gte = new Date(from);
+  if (to) range.lte = new Date(`${to}T23:59:59`);
+  return { [field]: range };
+};
+
+const generateContractsReport = async (req, res) => {
+  try {
+    const { status, salesRepId, from, to } = req.query;
+    const where = { ...dateRangeWhere(from, to, 'createdAt') };
+    if (status) where.status = status;
+    await applyAccessScope(req.user, where);
+    if (salesRepId) where.salesRepId = parseInt(salesRepId);
+
+    const contracts = await prisma.contract.findMany({
+      where,
+      include: {
+        client: { select: { companyName: true } },
+        hotel: { select: { name: true } },
+        salesRep: { select: { name: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 30 });
+    doc.registerFont('Cairo', CAIRO_REG); doc.registerFont('Cairo-Bold', CAIRO_BOLD);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Contracts_Report.pdf`);
+    doc.pipe(res);
+    const pageW = 812;
+    attachReportFooter(doc);
+
+    let y = drawReportHeader(doc, {
+      titleAr: 'تقرير العقود',
+      subtitleAr: `فنادق إيواء — إجمالي ${contracts.length} عقد`,
+      user: req.user, pageW,
+    });
+
+    // visual order RTL: # | الشركة | الفندق | المندوب | الغرف | السعر | القيمة | المحصل | الحالة | البداية | النهاية
+    const widths = [60, 55, 65, 65, 50, 50, 100, 80, 50, 142, 30];
+    const headers = ['النهاية', 'البداية', 'الحالة', 'المحصل', 'القيمة', 'السعر', 'الغرف', 'المندوب', 'الفندق', 'الشركة', '#'];
+    const aligns = ['center', 'center', 'center', 'right', 'right', 'right', 'center', 'right', 'right', 'right', 'center'];
+    y = drawRow(doc, y, headers, widths, { bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24, aligns, fontSize: 9 });
+
+    contracts.forEach((c, i) => {
+      if (y > 490) {
+        doc.addPage();
+        y = drawReportHeader(doc, { titleAr: 'تقرير العقود', subtitleAr: `فنادق إيواء — إجمالي ${contracts.length} عقد`, user: req.user, pageW });
+        y = drawRow(doc, y, headers, widths, { bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24, aligns, fontSize: 9 });
+      }
+      const repName = extractEnglishName(c.salesRep?.name, c.salesRep?.email) || '-';
+      y = drawRow(doc, y, [
+        c.endDate ? formatDate(c.endDate) : '-',
+        c.startDate ? formatDate(c.startDate) : '-',
+        CONTRACT_STATUS_AR[c.status] || c.status,
+        formatNum(c.collectedAmount || 0),
+        formatNum(c.totalValue || 0),
+        formatNum(c.ratePerRoom || 0),
+        c.roomsCount || '-',
+        repName,
+        c.hotel?.name || '-',
+        c.client?.companyName || '-',
+        i + 1,
+      ], widths, { bg: i % 2 === 0 ? BG : null, aligns });
+    });
+
+    // Summary
+    const totalValue = contracts.reduce((s, c) => s + (c.totalValue || 0), 0);
+    const totalCollected = contracts.reduce((s, c) => s + (c.collectedAmount || 0), 0);
+    y += 12;
+    doc.font(CAIRO_BOLD).fontSize(9).fillColor(NAVY);
+    drawText(doc, `إجمالي القيمة: ${formatNum(totalValue)} ر.س   |   المحصل: ${formatNum(totalCollected)} ر.س   |   المتبقي: ${formatNum(totalValue - totalCollected)} ر.س`, 30, y, { align: 'center', width: pageW - 60 });
+
+    doc.end();
+  } catch (err) {
+    console.error('Contracts PDF error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const generateVisitsReport = async (req, res) => {
+  try {
+    const { salesRepId, visitType, from, to } = req.query;
+    const where = { ...dateRangeWhere(from, to, 'visitDate') };
+    if (visitType) where.visitType = visitType;
+    await applyAccessScope(req.user, where);
+    if (salesRepId) where.salesRepId = parseInt(salesRepId);
+
+    const visits = await prisma.visit.findMany({
+      where,
+      include: {
+        client: { select: { companyName: true, contactPerson: true } },
+        salesRep: { select: { name: true, email: true } },
+      },
+      orderBy: { visitDate: 'desc' },
+    });
+
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 30 });
+    doc.registerFont('Cairo', CAIRO_REG); doc.registerFont('Cairo-Bold', CAIRO_BOLD);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Visits_Report.pdf`);
+    doc.pipe(res);
+    const pageW = 812;
+    attachReportFooter(doc);
+
+    let y = drawReportHeader(doc, {
+      titleAr: 'تقرير الزيارات',
+      subtitleAr: `فنادق إيواء — إجمالي ${visits.length} زيارة`,
+      user: req.user, pageW,
+    });
+
+    const widths = [70, 70, 110, 80, 90, 130, 130, 50, 30];
+    const headers = ['النتيجة', 'الغرض', 'النوع', 'المندوب', 'جهة الاتصال', 'الشركة', '', 'التاريخ', '#'];
+    // Rebalance — visit doesn't always need a separate "" col. Let me redo.
+    const widthsV = [120, 110, 80, 90, 130, 130, 70, 30];
+    const headersV = ['النتيجة/الغرض', 'النوع', 'المندوب', 'جهة الاتصال', 'الشركة', '', 'التاريخ', '#'];
+    const alignsV = ['right', 'center', 'right', 'right', 'right', 'right', 'center', 'center'];
+    // simpler set
+    const W = [180, 90, 90, 110, 160, 100, 50, 30];
+    const H = ['الغرض/النتيجة', 'النوع', 'المندوب', 'جهة الاتصال', 'الشركة', 'الفندق', 'التاريخ', '#'];
+    const A = ['right', 'center', 'right', 'right', 'right', 'right', 'center', 'center'];
+    y = drawRow(doc, y, H, W, { bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24, aligns: A, fontSize: 9 });
+
+    visits.forEach((v, i) => {
+      if (y > 490) {
+        doc.addPage();
+        y = drawReportHeader(doc, { titleAr: 'تقرير الزيارات', subtitleAr: `فنادق إيواء — إجمالي ${visits.length} زيارة`, user: req.user, pageW });
+        y = drawRow(doc, y, H, W, { bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24, aligns: A, fontSize: 9 });
+      }
+      const repName = extractEnglishName(v.salesRep?.name, v.salesRep?.email) || '-';
+      const purposeOutcome = [v.purpose, v.outcome].filter(Boolean).join(' / ') || '-';
+      y = drawRow(doc, y, [
+        purposeOutcome,
+        VISIT_TYPE_AR[v.visitType] || v.visitType || '-',
+        repName,
+        v.client?.contactPerson || '-',
+        v.client?.companyName || '-',
+        '-',
+        formatDate(v.visitDate),
+        i + 1,
+      ], W, { bg: i % 2 === 0 ? BG : null, aligns: A });
+    });
+
+    doc.end();
+  } catch (err) {
+    console.error('Visits PDF error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const generatePaymentsReport = async (req, res) => {
+  try {
+    const { salesRepId, paymentType, from, to } = req.query;
+    const where = { ...dateRangeWhere(from, to, 'paymentDate') };
+    if (paymentType) where.paymentType = paymentType;
+
+    // Payments scope: collectors are users; for sales scope, look at the contract's salesRepId.
+    const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+    if (!ADMIN_ROLES.includes(req.user.role) && !['credit_manager', 'credit_officer', 'contract_officer'].includes(req.user.role)) {
+      // Restrict by collectedBy or by contract's salesRep
+      where.OR = [];
+      if (req.user.role === 'sales_director') {
+        const subs = await prisma.user.findMany({ where: { managerId: req.user.id }, select: { id: true } });
+        const ids = [req.user.id, ...subs.map(s => s.id)];
+        where.OR = [{ collectedBy: { in: ids } }, { contract: { salesRepId: { in: ids } } }];
+      } else if (req.user.role === 'assistant_sales' && req.user.managerId) {
+        const subs = await prisma.user.findMany({ where: { managerId: req.user.managerId }, select: { id: true } });
+        const ids = [req.user.managerId, ...subs.map(s => s.id)];
+        where.OR = [{ collectedBy: { in: ids } }, { contract: { salesRepId: { in: ids } } }];
+      } else {
+        where.OR = [{ collectedBy: req.user.id }, { contract: { salesRepId: req.user.id } }];
+      }
+    }
+    if (salesRepId) {
+      const id = parseInt(salesRepId);
+      where.OR = [{ collectedBy: id }, { contract: { salesRepId: id } }];
+    }
+
+    const payments = await prisma.payment.findMany({
+      where,
+      include: {
+        client: { select: { companyName: true } },
+        contract: { select: { contractRef: true } },
+        collector: { select: { name: true, email: true } },
+      },
+      orderBy: { paymentDate: 'desc' },
+    });
+
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 30 });
+    doc.registerFont('Cairo', CAIRO_REG); doc.registerFont('Cairo-Bold', CAIRO_BOLD);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Payments_Report.pdf`);
+    doc.pipe(res);
+    const pageW = 812;
+    attachReportFooter(doc);
+
+    let y = drawReportHeader(doc, {
+      titleAr: 'تقرير التحصيل',
+      subtitleAr: `فنادق إيواء — إجمالي ${payments.length} دفعة`,
+      user: req.user, pageW,
+    });
+
+    const W = [110, 100, 80, 90, 100, 180, 90, 30];
+    const H = ['المُحصِّل', 'المرجع', 'الطريقة', 'المبلغ', 'العقد', 'الشركة', 'التاريخ', '#'];
+    const A = ['right', 'right', 'center', 'right', 'right', 'right', 'center', 'center'];
+    y = drawRow(doc, y, H, W, { bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24, aligns: A, fontSize: 9 });
+
+    let totalAmount = 0;
+    payments.forEach((p, i) => {
+      if (y > 490) {
+        doc.addPage();
+        y = drawReportHeader(doc, { titleAr: 'تقرير التحصيل', subtitleAr: `فنادق إيواء — إجمالي ${payments.length} دفعة`, user: req.user, pageW });
+        y = drawRow(doc, y, H, W, { bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24, aligns: A, fontSize: 9 });
+      }
+      const collector = extractEnglishName(p.collector?.name, p.collector?.email) || '-';
+      totalAmount += Number(p.amount || 0);
+      y = drawRow(doc, y, [
+        collector,
+        p.reference || '-',
+        PAYMENT_METHOD_AR[p.paymentType] || p.paymentType || '-',
+        formatNum(p.amount),
+        p.contract?.contractRef || '-',
+        p.client?.companyName || '-',
+        formatDate(p.paymentDate),
+        i + 1,
+      ], W, { bg: i % 2 === 0 ? BG : null, aligns: A });
+    });
+
+    y += 12;
+    doc.font(CAIRO_BOLD).fontSize(10).fillColor(NAVY);
+    drawText(doc, `إجمالي المحصل: ${formatNum(totalAmount)} ر.س`, 30, y, { align: 'center', width: pageW - 60 });
+
+    doc.end();
+  } catch (err) {
+    console.error('Payments PDF error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const generatePaymentMethodsReport = async (req, res) => {
+  try {
+    const { salesRepId, from, to } = req.query;
+    const where = { ...dateRangeWhere(from, to, 'paymentDate') };
+
+    const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+    if (!ADMIN_ROLES.includes(req.user.role) && !['credit_manager', 'credit_officer', 'contract_officer'].includes(req.user.role)) {
+      if (req.user.role === 'sales_director') {
+        const subs = await prisma.user.findMany({ where: { managerId: req.user.id }, select: { id: true } });
+        const ids = [req.user.id, ...subs.map(s => s.id)];
+        where.OR = [{ collectedBy: { in: ids } }, { contract: { salesRepId: { in: ids } } }];
+      } else if (req.user.role === 'assistant_sales' && req.user.managerId) {
+        const subs = await prisma.user.findMany({ where: { managerId: req.user.managerId }, select: { id: true } });
+        const ids = [req.user.managerId, ...subs.map(s => s.id)];
+        where.OR = [{ collectedBy: { in: ids } }, { contract: { salesRepId: { in: ids } } }];
+      } else {
+        where.OR = [{ collectedBy: req.user.id }, { contract: { salesRepId: req.user.id } }];
+      }
+    }
+    if (salesRepId) {
+      const id = parseInt(salesRepId);
+      where.OR = [{ collectedBy: id }, { contract: { salesRepId: id } }];
+    }
+
+    const payments = await prisma.payment.findMany({
+      where,
+      include: {
+        client: { select: { companyName: true } },
+        contract: { select: { id: true, contractRef: true } },
+      },
+    });
+
+    // Aggregate by contract
+    const byContract = {};
+    for (const p of payments) {
+      const cid = p.contract?.id || p.contractId;
+      if (!cid) continue;
+      if (!byContract[cid]) {
+        byContract[cid] = {
+          contractRef: p.contract?.contractRef || `#${cid}`,
+          companyName: p.client?.companyName || '-',
+          cash: 0, bank_transfer: 0, cheque: 0, card: 0, total: 0, count: 0,
+        };
+      }
+      const r = byContract[cid];
+      r.total += Number(p.amount || 0);
+      r.count += 1;
+      const key = p.paymentType === 'check' ? 'cheque' : (p.paymentType || 'cash');
+      if (r[key] !== undefined) r[key] += Number(p.amount || 0);
+    }
+    const rows = Object.values(byContract);
+
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 30 });
+    doc.registerFont('Cairo', CAIRO_REG); doc.registerFont('Cairo-Bold', CAIRO_BOLD);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Payment_Methods.pdf`);
+    doc.pipe(res);
+    const pageW = 812;
+    attachReportFooter(doc);
+
+    let y = drawReportHeader(doc, {
+      titleAr: 'طرق سداد العملاء للعقد',
+      subtitleAr: `فنادق إيواء — إجمالي ${rows.length} عقد`,
+      user: req.user, pageW,
+    });
+
+    const W = [90, 80, 70, 70, 70, 60, 220, 90, 30];
+    const H = ['الإجمالي', 'بطاقة', 'شيك', 'تحويل', 'نقدي', 'الدفعات', 'الشركة', 'العقد', '#'];
+    const A = ['right', 'right', 'right', 'right', 'right', 'center', 'right', 'right', 'center'];
+    y = drawRow(doc, y, H, W, { bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24, aligns: A, fontSize: 9 });
+
+    rows.forEach((r, i) => {
+      if (y > 490) {
+        doc.addPage();
+        y = drawReportHeader(doc, { titleAr: 'طرق سداد العملاء للعقد', subtitleAr: `فنادق إيواء — إجمالي ${rows.length} عقد`, user: req.user, pageW });
+        y = drawRow(doc, y, H, W, { bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24, aligns: A, fontSize: 9 });
+      }
+      y = drawRow(doc, y, [
+        formatNum(r.total), formatNum(r.card), formatNum(r.cheque), formatNum(r.bank_transfer),
+        formatNum(r.cash), r.count, r.companyName, r.contractRef, i + 1,
+      ], W, { bg: i % 2 === 0 ? BG : null, aligns: A });
+    });
+
+    doc.end();
+  } catch (err) {
+    console.error('PaymentMethods PDF error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const generateTeamReport = async (req, res) => {
+  try {
+    const team = await prisma.user.findMany({
+      where: { isActive: true, role: { in: ['sales_rep', 'sales_director', 'assistant_sales'] } },
+      include: {
+        _count: { select: { assignedClients: true, contracts: true, visits: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 30 });
+    doc.registerFont('Cairo', CAIRO_REG); doc.registerFont('Cairo-Bold', CAIRO_BOLD);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Team_Performance.pdf`);
+    doc.pipe(res);
+    const pageW = 812;
+    attachReportFooter(doc);
+
+    let y = drawReportHeader(doc, {
+      titleAr: 'أداء فريق المبيعات',
+      subtitleAr: `فنادق إيواء — إجمالي ${team.length} موظف`,
+      user: req.user, pageW,
+    });
+
+    const W = [60, 60, 60, 60, 110, 180, 162, 90, 30];
+    const H = ['الزيارات', 'العقود', 'العملاء', 'العمولة %', 'الدور', 'البريد الإلكتروني', 'الاسم', 'الهاتف', '#'];
+    const A = ['center', 'center', 'center', 'center', 'right', 'left', 'left', 'center', 'center'];
+    y = drawRow(doc, y, H, W, { bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24, aligns: A, fontSize: 9 });
+
+    team.forEach((u, i) => {
+      if (y > 490) {
+        doc.addPage();
+        y = drawReportHeader(doc, { titleAr: 'أداء فريق المبيعات', subtitleAr: `فنادق إيواء — إجمالي ${team.length} موظف`, user: req.user, pageW });
+        y = drawRow(doc, y, H, W, { bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24, aligns: A, fontSize: 9 });
+      }
+      const name = extractEnglishName(u.name, u.email) || '-';
+      y = drawRow(doc, y, [
+        u._count?.visits || 0,
+        u._count?.contracts || 0,
+        u._count?.assignedClients || 0,
+        u.commissionRate != null ? `${u.commissionRate}%` : '-',
+        ROLE_AR[u.role] || u.role,
+        u.email || '-',
+        name,
+        u.phone || '-',
+        i + 1,
+      ], W, { bg: i % 2 === 0 ? BG : null, aligns: A });
+    });
+
+    doc.end();
+  } catch (err) {
+    console.error('Team PDF error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = {
+  generateQuote, generateClientReport,
+  generateContractsReport, generateVisitsReport, generatePaymentsReport,
+  generatePaymentMethodsReport, generateTeamReport,
+};

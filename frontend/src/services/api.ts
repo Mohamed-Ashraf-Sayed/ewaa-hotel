@@ -124,6 +124,11 @@ export const targetsApi = {
 export const pdfApi = {
   generateQuote: (data: any) => api.post('/pdf/quote', data, { responseType: 'blob' }),
   clientReport: (params?: any) => api.get('/pdf/client-report', { params, responseType: 'blob' }),
+  contractsReport: (params?: any) => api.get('/pdf/contracts-report', { params, responseType: 'blob' }),
+  visitsReport: (params?: any) => api.get('/pdf/visits-report', { params, responseType: 'blob' }),
+  paymentsReport: (params?: any) => api.get('/pdf/payments-report', { params, responseType: 'blob' }),
+  paymentMethodsReport: (params?: any) => api.get('/pdf/payment-methods-report', { params, responseType: 'blob' }),
+  teamReport: (params?: any) => api.get('/pdf/team-report', { params, responseType: 'blob' }),
 };
 
 // Notifications

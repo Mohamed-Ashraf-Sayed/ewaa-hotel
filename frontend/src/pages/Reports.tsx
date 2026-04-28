@@ -27,7 +27,7 @@ const REPORTS: ReportCard[] = [
     icon: Building2,
     color: 'bg-sky-50',
     iconColor: 'text-sky-600',
-    filters: ['type', 'rep'],
+    filters: ['type', 'rep', 'dateRange'],
     hasPdf: true,
   },
   {
@@ -38,6 +38,7 @@ const REPORTS: ReportCard[] = [
     color: 'bg-brand-50',
     iconColor: 'text-brand-600',
     filters: ['status', 'rep', 'dateRange'],
+    hasPdf: true,
   },
   {
     key: 'visits',
@@ -47,6 +48,7 @@ const REPORTS: ReportCard[] = [
     color: 'bg-emerald-50',
     iconColor: 'text-emerald-600',
     filters: ['rep', 'visitType', 'dateRange'],
+    hasPdf: true,
   },
   {
     key: 'payments',
@@ -56,6 +58,7 @@ const REPORTS: ReportCard[] = [
     color: 'bg-amber-50',
     iconColor: 'text-amber-600',
     filters: ['rep', 'paymentMethod', 'dateRange'],
+    hasPdf: true,
   },
   {
     key: 'paymentMethods',
@@ -65,6 +68,7 @@ const REPORTS: ReportCard[] = [
     color: 'bg-indigo-50',
     iconColor: 'text-indigo-600',
     filters: ['rep', 'dateRange'],
+    hasPdf: true,
   },
   {
     key: 'team',
@@ -73,6 +77,7 @@ const REPORTS: ReportCard[] = [
     icon: Users,
     color: 'bg-violet-50',
     iconColor: 'text-violet-600',
+    hasPdf: true,
   },
   {
     key: 'targets',
@@ -196,11 +201,14 @@ export default function Reports() {
             const res = await pdfApi.clientReport({
               type: f.type || undefined,
               salesRepId: f.salesRepId || undefined,
+              from: f.from || undefined,
+              to: f.to || undefined,
             });
             downloadFile(res.data, 'Clients_Report.pdf');
           } else {
             let { data } = await clientsApi.getAll({ type: f.type || undefined });
             if (f.salesRepId) data = data.filter((c: any) => c.salesRep?.id === parseInt(f.salesRepId));
+            data = applyDateRange(data, 'createdAt', f.from, f.to);
             exportToCSV(data, 'Clients.csv', [
               { key: 'companyName', label: isAr ? 'الشركة' : 'Company' },
               { key: 'contactPerson', label: isAr ? 'جهة الاتصال' : 'Contact' },
@@ -216,6 +224,16 @@ export default function Reports() {
           }
           break;
         case 'contracts': {
+          if (format === 'pdf') {
+            const res = await pdfApi.contractsReport({
+              status: f.status || undefined,
+              salesRepId: f.salesRepId || undefined,
+              from: f.from || undefined,
+              to: f.to || undefined,
+            });
+            downloadFile(res.data, 'Contracts_Report.pdf');
+            break;
+          }
           let { data } = await contractsApi.getAll({
             status: f.status || undefined,
             salesRepId: f.salesRepId ? parseInt(f.salesRepId) : undefined,
@@ -238,6 +256,16 @@ export default function Reports() {
           break;
         }
         case 'visits': {
+          if (format === 'pdf') {
+            const res = await pdfApi.visitsReport({
+              salesRepId: f.salesRepId || undefined,
+              visitType: f.visitType || undefined,
+              from: f.from || undefined,
+              to: f.to || undefined,
+            });
+            downloadFile(res.data, 'Visits_Report.pdf');
+            break;
+          }
           let { data } = await visitsApi.getAll({ salesRepId: f.salesRepId ? parseInt(f.salesRepId) : undefined });
           if (f.visitType) data = data.filter((v: any) => v.visitType === f.visitType);
           data = applyDateRange(data, 'visitDate', f.from, f.to);
@@ -254,6 +282,16 @@ export default function Reports() {
           break;
         }
         case 'payments': {
+          if (format === 'pdf') {
+            const res = await pdfApi.paymentsReport({
+              salesRepId: f.salesRepId || undefined,
+              paymentType: f.paymentMethod || undefined,
+              from: f.from || undefined,
+              to: f.to || undefined,
+            });
+            downloadFile(res.data, 'Payments_Report.pdf');
+            break;
+          }
           let { data } = await paymentsApi.getAll();
           if (f.salesRepId) data = data.filter((p: any) => p.collector?.id === parseInt(f.salesRepId));
           if (f.paymentMethod) data = data.filter((p: any) => p.paymentType === f.paymentMethod);
@@ -270,6 +308,15 @@ export default function Reports() {
           break;
         }
         case 'paymentMethods': {
+          if (format === 'pdf') {
+            const res = await pdfApi.paymentMethodsReport({
+              salesRepId: f.salesRepId || undefined,
+              from: f.from || undefined,
+              to: f.to || undefined,
+            });
+            downloadFile(res.data, 'Payment_Methods.pdf');
+            break;
+          }
           let { data: payments } = await paymentsApi.getAll();
           if (f.salesRepId) payments = payments.filter((p: any) => p.collector?.id === parseInt(f.salesRepId));
           payments = applyDateRange(payments, 'paymentDate', f.from, f.to);
@@ -311,6 +358,11 @@ export default function Reports() {
           break;
         }
         case 'team': {
+          if (format === 'pdf') {
+            const res = await pdfApi.teamReport();
+            downloadFile(res.data, 'Team_Performance.pdf');
+            break;
+          }
           const res = await usersApi.getAll();
           const data = res.data.filter((u: any) => ['sales_rep', 'sales_director', 'assistant_sales'].includes(u.role));
           exportToCSV(data, 'Team.csv', [
