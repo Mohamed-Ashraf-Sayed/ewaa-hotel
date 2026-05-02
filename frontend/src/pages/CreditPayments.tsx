@@ -17,6 +17,7 @@ interface PendingPayment {
   paymentDate: string;
   paymentType?: string;
   reference?: string;
+  receiptUrl?: string | null;
   status: PaymentStatus;
   approvalNotes?: string;
   contract?: { id: number; contractRef?: string };
