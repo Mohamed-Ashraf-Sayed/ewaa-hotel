@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, FileText, MapPin, Clock, AlertTriangle, TrendingUp, Users, ArrowLeft, Eye, Download } from 'lucide-react';
+import { Building2, FileText, MapPin, Clock, AlertTriangle, TrendingUp, Users, ArrowLeft, Eye, Download, Plus, Receipt, Sparkles, Flame, Target as TargetIcon, ArrowUpRight } from 'lucide-react';
 import { dashboardApi, contractsApi } from '../services/api';
 import Modal from '../components/Modal';
 import { DashboardData } from '../types';
@@ -100,60 +100,116 @@ export default function Dashboard() {
 
   const dateLocale = isAr ? 'ar-EG' : 'en-US';
 
+  // Time-based greeting (uses local hour)
+  const hour = new Date().getHours();
+  const greeting = isAr
+    ? (hour < 12 ? 'صباح الخير' : hour < 17 ? 'مساء الخير' : 'مساء الخير')
+    : (hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening');
+
+  // Insight cards — auto-summarize what needs attention today
+  const overdueFollowUps = data.upcomingFollowUps.filter(v => {
+    if (!v.nextFollowUp) return false;
+    return new Date(v.nextFollowUp) < new Date();
+  }).length;
+  const expiringSoon = data.expiringIn30.filter(c => (c.daysUntilExpiry || 0) <= 7).length;
+  const atRiskCount = data.atRiskClients.length;
+  const hotLeadsCount = (data.hotLeads || []).length;
+
   return (
     <div className="space-y-5">
-      {/* Welcome Header */}
-      <div className="card p-6 bg-gradient-to-l from-brand-800 to-brand-900 border-0 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-full opacity-[0.04]"
-          style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'40\' height=\'40\' viewBox=\'0 0 40 40\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M20 20.5V18H0v-2h20v-2H0v-2h20v-2H0V8h20V6H0V4h20V2H0V0h22v20h2V0h2v20h2V0h2v20h2V0h2v20h2v2H20v-1.5zM0 20h2v20H0V20zm4 0h2v20H4V20zm4 0h2v20H8V20zm4 0h2v20h-2V20zm4 0h2v20h-2V20zm4 0h2v20h-2V20z\' fill=\'%23ffffff\' fill-opacity=\'1\' fill-rule=\'evenodd\'/%3E%3C/svg%3E")' }}
-        />
-        <div className={`relative z-10 flex items-center justify-between ${isAr ? 'flex-row-reverse' : ''}`}>
+      {/* === Premium hero header === */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700 p-6 lg:p-7 text-white">
+        <div className="absolute -right-12 -top-12 w-72 h-72 rounded-full bg-white/[0.04]" />
+        <div className="absolute -left-16 -bottom-20 w-64 h-64 rounded-full bg-white/[0.03]" />
+        <div className={`relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 ${isAr ? 'lg:flex-row-reverse' : ''}`}>
           <div className={isAr ? 'text-right' : 'text-left'}>
-            <h1 className="text-2xl font-bold text-white">{isAr ? 'مرحباً، ' : 'Welcome, '}{user?.name?.split(' ')[0]}</h1>
-            <p className="text-brand-200 text-sm mt-1">
-              {user && ROLE_LABELS[user.role]} · {' '}
+            <p className="text-white/60 text-xs uppercase tracking-wider font-semibold">
               {new Date().toLocaleDateString(dateLocale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
+            <h1 className="text-3xl lg:text-4xl font-bold mt-1">
+              {greeting}، <span className="text-white/90">{user?.name?.split(' ')[0]}</span> 👋
+            </h1>
+            <p className="text-white/70 text-sm mt-1">
+              {user && ROLE_LABELS[user.role]}
+              <span className="mx-2 text-white/30">·</span>
+              {isAr
+                ? `لديك ${stats.totalClients} عميل و ${stats.totalContracts} عقد، ${stats.visitsThisMonth} زيارة هذا الشهر`
+                : `${stats.totalClients} clients · ${stats.totalContracts} contracts · ${stats.visitsThisMonth} visits this month`}
+            </p>
           </div>
-          <div className="hidden sm:flex items-center gap-6 text-white/80">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-white">{stats.totalClients}</p>
-              <p className="text-xs text-brand-200">{isAr ? 'عميل' : 'clients'}</p>
-            </div>
-            <div className="w-px h-10 bg-white/20" />
-            <div className="text-center">
-              <p className="text-2xl font-bold text-white">{stats.totalContracts}</p>
-              <p className="text-xs text-brand-200">{isAr ? 'عقد' : 'contracts'}</p>
-            </div>
-            <div className="w-px h-10 bg-white/20" />
-            <div className="text-center">
-              <p className="text-2xl font-bold text-white">{stats.visitsThisMonth}</p>
-              <p className="text-xs text-brand-200">{isAr ? 'زيارة هذا الشهر' : 'visits this month'}</p>
-            </div>
+          {/* Quick actions */}
+          <div className={`flex flex-wrap gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+            <Link to="/clients" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white/10 hover:bg-white/15 backdrop-blur-sm text-white text-sm font-semibold border border-white/10 transition-colors">
+              <Plus className="w-4 h-4" /> {isAr ? 'عميل جديد' : 'New Client'}
+            </Link>
+            <Link to="/visits" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white/10 hover:bg-white/15 backdrop-blur-sm text-white text-sm font-semibold border border-white/10 transition-colors">
+              <MapPin className="w-4 h-4" /> {isAr ? 'تسجيل زيارة' : 'Log Visit'}
+            </Link>
+            <Link to="/contracts" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white text-brand-900 hover:bg-white/90 text-sm font-semibold transition-colors">
+              <FileText className="w-4 h-4" /> {isAr ? 'العقود' : 'Contracts'}
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* === Action Items / Insights === */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: isAr ? 'العملاء' : 'Clients', value: stats.totalClients, sub: `${stats.activeClients} ${isAr ? 'نشط' : 'active'}`, icon: Building2, iconColor: 'text-sky-600', iconBg: 'bg-sky-50', accent: 'border-l-sky-500' },
-          { label: isAr ? 'العقود' : 'Contracts', value: stats.totalContracts, sub: `${stats.contractsThisMonth} ${isAr ? 'هذا الشهر' : 'this month'}`, icon: FileText, iconColor: 'text-brand-600', iconBg: 'bg-brand-50', accent: 'border-l-brand-600' },
-          { label: isAr ? 'الزيارات' : 'Visits', value: stats.totalVisits, sub: `${stats.visitsThisMonth} ${isAr ? 'هذا الشهر' : 'this month'}`, icon: MapPin, iconColor: 'text-emerald-600', iconBg: 'bg-emerald-50', accent: 'border-l-emerald-500' },
-          { label: isAr ? 'بانتظار الموافقة' : 'Pending Approval', value: stats.pendingContracts, sub: isAr ? 'عقود تحتاج مراجعة' : 'contracts to review', icon: Clock, iconColor: 'text-amber-600', iconBg: 'bg-amber-50', accent: 'border-l-amber-500' },
-        ].map(kpi => (
-          <div key={kpi.label} className={`card p-4 border-l-4 ${kpi.accent}`}>
-            <div className={`flex items-start justify-between ${isAr ? 'flex-row-reverse' : ''}`}>
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${kpi.iconBg}`}>
-                <kpi.icon className={`w-5 h-5 ${kpi.iconColor}`} />
+          { count: overdueFollowUps, label: isAr ? 'متابعات متأخرة' : 'Overdue Follow-ups', sub: isAr ? 'محتاجة تواصل' : 'need contact', to: '/visits', icon: Clock, accent: 'red' },
+          { count: expiringSoon, label: isAr ? 'عقود تنتهي خلال أسبوع' : 'Expiring This Week', sub: isAr ? 'جدّد قبل الفوات' : 'renew now', to: '/contracts?status=approved', icon: AlertTriangle, accent: 'amber' },
+          { count: atRiskCount, label: isAr ? 'عملاء في خطر' : 'At-Risk Clients', sub: isAr ? 'تواصل ضروري' : 'reach out', to: '/clients', icon: Flame, accent: 'rose' },
+          { count: hotLeadsCount, label: isAr ? 'عملاء محتملون نشطين' : 'Hot Leads', sub: isAr ? 'جاهزة للإغلاق' : 'ready to close', to: '/clients?type=lead', icon: Sparkles, accent: 'emerald' },
+        ].map(card => {
+          const ACCENTS: Record<string, { bg: string; bgIcon: string; text: string; ring: string }> = {
+            red: { bg: 'bg-red-50/60', bgIcon: 'bg-red-100', text: 'text-red-700', ring: 'hover:ring-red-200' },
+            amber: { bg: 'bg-amber-50/60', bgIcon: 'bg-amber-100', text: 'text-amber-700', ring: 'hover:ring-amber-200' },
+            rose: { bg: 'bg-rose-50/60', bgIcon: 'bg-rose-100', text: 'text-rose-700', ring: 'hover:ring-rose-200' },
+            emerald: { bg: 'bg-emerald-50/60', bgIcon: 'bg-emerald-100', text: 'text-emerald-700', ring: 'hover:ring-emerald-200' },
+          };
+          const a = ACCENTS[card.accent];
+          const muted = card.count === 0;
+          return (
+            <Link
+              key={card.label}
+              to={card.to}
+              className={`relative card p-4 transition-all hover:shadow-md hover:ring-2 ${a.ring} ${muted ? 'opacity-60' : a.bg} ${isAr ? 'text-right' : ''}`}
+            >
+              <div className={`flex items-start justify-between gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${muted ? 'bg-brand-100' : a.bgIcon}`}>
+                  <card.icon className={`w-5 h-5 ${muted ? 'text-brand-400' : a.text}`} />
+                </div>
+                <div className={isAr ? 'text-right' : 'text-left'}>
+                  <p className={`text-3xl font-extrabold ${muted ? 'text-brand-400' : a.text}`}>{card.count}</p>
+                  <p className="text-xs font-semibold text-brand-700 mt-0.5">{card.label}</p>
+                  <p className="text-[10px] text-brand-400 mt-0.5">{card.sub}</p>
+                </div>
               </div>
-              <div className={isAr ? 'text-right' : 'text-left'}>
-                <p className="text-xs font-semibold text-brand-400 uppercase">{kpi.label}</p>
-                <p className="text-2xl font-bold text-brand-900 mt-0.5">{kpi.value}</p>
-                <p className="text-[11px] text-brand-400 mt-0.5">{kpi.sub}</p>
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* KPI Cards — primary metrics */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { to: '/clients', label: isAr ? 'العملاء' : 'Clients', value: stats.totalClients, sub: `${stats.activeClients} ${isAr ? 'نشط' : 'active'} · ${stats.leads} ${isAr ? 'محتمل' : 'leads'}`, icon: Building2, gradient: 'from-sky-500 to-blue-600', iconText: 'text-white' },
+          { to: '/contracts', label: isAr ? 'العقود' : 'Contracts', value: stats.totalContracts, sub: `${stats.contractsThisMonth} ${isAr ? 'هذا الشهر' : 'this month'}`, icon: FileText, gradient: 'from-brand-600 to-brand-800', iconText: 'text-white' },
+          { to: '/visits', label: isAr ? 'الزيارات' : 'Visits', value: stats.totalVisits, sub: `${stats.visitsThisMonth} ${isAr ? 'هذا الشهر' : 'this month'}`, icon: MapPin, gradient: 'from-emerald-500 to-emerald-700', iconText: 'text-white' },
+          { to: '/contracts?status=pending', label: isAr ? 'بانتظار الموافقة' : 'Pending Approval', value: stats.pendingContracts, sub: isAr ? 'عقود تحتاج مراجعة' : 'contracts to review', icon: Clock, gradient: 'from-amber-500 to-orange-600', iconText: 'text-white' },
+        ].map(kpi => (
+          <Link key={kpi.label} to={kpi.to} className={`card p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all group ${isAr ? 'text-right' : ''}`}>
+            <div className={`flex items-start justify-between gap-3 ${isAr ? 'flex-row-reverse' : ''}`}>
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br ${kpi.gradient} shadow-sm group-hover:scale-105 transition-transform`}>
+                <kpi.icon className={`w-6 h-6 ${kpi.iconText}`} />
+              </div>
+              <div className={`flex-1 min-w-0 ${isAr ? 'text-right' : 'text-left'}`}>
+                <p className="text-[11px] font-semibold text-brand-400 uppercase tracking-wider truncate">{kpi.label}</p>
+                <p className="text-3xl font-extrabold text-brand-900 mt-0.5 leading-none">{kpi.value}</p>
+                <p className="text-[11px] text-brand-400 mt-1 truncate">{kpi.sub}</p>
               </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 
