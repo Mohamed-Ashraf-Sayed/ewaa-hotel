@@ -288,6 +288,38 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
           </div>
         </div>
 
+        {/* Linked Contract — auto-fills the nightly rate from the contract's ratePerRoom */}
+        {contracts.length > 0 && (
+          <div>
+            <label className="text-xs font-semibold text-brand-600 mb-1 block">
+              {isAr ? 'العقد المرتبط' : 'Linked Contract'}
+              <span className="text-brand-400 font-normal ms-1">{isAr ? '(اختياري — سعر الليلة من العقد)' : '(optional — pulls nightly rate from contract)'}</span>
+            </label>
+            <select
+              className="input"
+              value={form.contractId}
+              onChange={e => {
+                const v = e.target.value;
+                const c = contracts.find(x => String(x.id) === v);
+                setForm(prev => ({
+                  ...prev,
+                  contractId: v,
+                  ratePerNight: c?.ratePerRoom != null ? String(c.ratePerRoom) : prev.ratePerNight,
+                }));
+              }}
+            >
+              <option value="">{isAr ? 'بدون عقد' : 'No contract'}</option>
+              {contracts.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.contractRef || `#${c.id}`}
+                  {c.ratePerRoom ? ` · ${isAr ? 'سعر الليلة' : 'Rate'}: ${c.ratePerRoom.toLocaleString()} SAR` : ''}
+                  {c.totalValue ? ` · ${isAr ? 'الإجمالي' : 'Total'}: ${c.totalValue.toLocaleString()} SAR` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Opera Confirmation + Guest Name */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -425,21 +457,6 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
             <input type="text" className="input" value={form.reservationMadeBy} onChange={e => update('reservationMadeBy', e.target.value)} placeholder="M.EZZ@EWAA" />
           </div>
         </div>
-
-        {/* Optional contract link */}
-        {contracts.length > 0 && (
-          <div>
-            <label className="text-xs font-semibold text-brand-600 mb-1 block">{isAr ? 'العقد المرتبط (اختياري)' : 'Linked Contract (optional)'}</label>
-            <select className="input" value={form.contractId} onChange={e => update('contractId', e.target.value)}>
-              <option value="">{isAr ? 'بدون عقد' : 'No contract'}</option>
-              {contracts.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.contractRef || `#${c.id}`} {c.totalValue ? `· ${c.totalValue.toLocaleString()} SAR` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
 
         {/* Notes */}
         <div>
