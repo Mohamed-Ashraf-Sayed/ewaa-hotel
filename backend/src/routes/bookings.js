@@ -8,6 +8,7 @@ const {
   updateBooking,
   updateStatus,
   deleteBooking,
+  extractFromLetter,
 } = require('../controllers/bookingController');
 const { authenticate, authorize } = require('../middleware/auth');
 const upload = require('../middleware/upload');
@@ -18,6 +19,7 @@ router.get('/', authenticate, getBookings);
 router.get('/client/:clientId', authenticate, getClientBookings);
 router.get('/:id', authenticate, getBooking);
 
+router.post('/extract', authenticate, authorize(...RES_ROLES), upload.single('file'), extractFromLetter);
 router.post('/', authenticate, authorize(...RES_ROLES), upload.single('confirmationLetter'), createBooking);
 router.put('/:id', authenticate, authorize(...RES_ROLES), upload.single('confirmationLetter'), updateBooking);
 router.put('/:id/status', authenticate, authorize(...RES_ROLES), updateStatus);

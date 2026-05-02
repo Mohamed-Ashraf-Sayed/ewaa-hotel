@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const { getSubordinateIds } = require('../middleware/auth');
+const { extractBooking } = require('../utils/bookingExtractor');
 const path = require('path');
 const fs = require('fs');
 const prisma = new PrismaClient();
@@ -369,6 +370,41 @@ const deleteBooking = async (req, res) => {
   }
 };
 
+// POST /bookings/extract - parse confirmation letter and return suggested fields
+const extractFromLetter = async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+  const filePath = req.file.path;
+  try {
+    const result = await extractBooking(filePath);
+
+    // Try to find a matching client by extracted company name
+    let suggestedClient = null;
+    if (result.fields.companyName) {
+      const q = result.fields.companyName.trim();
+      const matches = await prisma.client.findMany({
+        where: {
+          OR: [
+            { companyName: { contains: q } },
+            { companyNameEn: { contains: q } },
+          ],
+        },
+        select: { id: true, companyName: true, companyNameEn: true, salesRepId: true },
+        take: 5,
+      });
+      if (matches.length > 0) suggestedClient = matches[0];
+    }
+
+    // Don't keep the temp file - it'll be re-uploaded with the booking save
+    try { fs.unlinkSync(filePath); } catch (_) {}
+
+    res.json({ ...result, suggestedClient });
+  } catch (err) {
+    console.error('extractFromLetter error:', err);
+    try { fs.unlinkSync(filePath); } catch (_) {}
+    res.status(500).json({ message: err.message || 'Failed to extract data from file' });
+  }
+};
+
 module.exports = {
   getBookings,
   getBooking,
@@ -377,4 +413,5 @@ module.exports = {
   updateBooking,
   updateStatus,
   deleteBooking,
+  extractFromLetter,
 };

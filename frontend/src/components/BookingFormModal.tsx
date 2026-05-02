@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Upload, FileText } from 'lucide-react';
+import { Upload, FileText, Sparkles, Loader2 } from 'lucide-react';
 import Modal from './Modal';
 import { bookingsApi, clientsApi, hotelsApi, contractsApi } from '../services/api';
 import { Booking, Client, Hotel, Contract } from '../types';
@@ -75,6 +75,11 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
   const [clientSearch, setClientSearch] = useState('');
   const [showClientList, setShowClientList] = useState(false);
 
+  // Extraction state
+  const [extracting, setExtracting] = useState(false);
+  const [extractedKeys, setExtractedKeys] = useState<Set<string>>(new Set());
+  const [extractMsg, setExtractMsg] = useState('');
+
   // Load supporting data when modal opens
   useEffect(() => {
     if (!open) return;
@@ -120,6 +125,8 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
     }
     setFile(null);
     setError('');
+    setExtractedKeys(new Set());
+    setExtractMsg('');
   }, [open, editing, clientId]);
 
   // Load contracts for the selected client
@@ -161,6 +168,65 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
 
   const update = (k: keyof typeof initialState, v: string) =>
     setForm(prev => ({ ...prev, [k]: v }));
+
+  // Extract data from a confirmation letter and pre-fill the form
+  const handleExtract = async (uploadedFile: File) => {
+    setExtractMsg('');
+    setExtracting(true);
+    try {
+      const res = await bookingsApi.extract(uploadedFile);
+      const { fields, suggestedClient } = res.data;
+
+      // Build a partial form update from non-null fields
+      const updates: Partial<typeof initialState> = {};
+      const filled: string[] = [];
+      const setIf = (key: keyof typeof initialState, val: any) => {
+        if (val !== null && val !== undefined && val !== '') {
+          updates[key] = String(val);
+          filled.push(key);
+        }
+      };
+
+      setIf('operaConfirmationNo', fields.operaConfirmationNo);
+      setIf('guestName', fields.guestName);
+      setIf('reservationMadeBy', fields.reservationMadeBy);
+      setIf('arrivalDate', fields.arrivalDate);
+      setIf('departureDate', fields.departureDate);
+      setIf('roomsCount', fields.roomsCount);
+      setIf('adultsCount', fields.adultsCount);
+      setIf('childrenCount', fields.childrenCount);
+      setIf('roomType', fields.roomType);
+      setIf('ratePerNight', fields.ratePerNight);
+      setIf('ratePackage', fields.ratePackage);
+      setIf('paymentMethod', fields.paymentMethod);
+      setIf('vatPercent', fields.vatPercent);
+      setIf('municipalityFeePercent', fields.municipalityFeePercent);
+
+      // Auto-link suggested client if not already locked to one
+      if (!clientId && suggestedClient?.id) {
+        updates.clientId = String(suggestedClient.id);
+        filled.push('clientId');
+        setClientSearch(suggestedClient.companyName || '');
+      }
+
+      setForm(prev => ({ ...prev, ...updates }));
+      setExtractedKeys(new Set(filled));
+      setFile(uploadedFile);  // also store as the booking attachment
+
+      const sourceLabel = res.data.extractionSource === 'pdf-text' ? 'PDF نصي' :
+                          res.data.extractionSource === 'pdf-ocr' ? 'PDF (OCR)' : 'صورة (OCR)';
+      setExtractMsg(isAr
+        ? `تم استخراج ${filled.length} حقل من الخطاب (${sourceLabel}). راجعها قبل الحفظ.`
+        : `Extracted ${filled.length} fields. Please review before saving.`);
+    } catch (err: any) {
+      setExtractMsg(err?.response?.data?.message || (isAr ? 'فشل قراءة الملف' : 'Failed to read file'));
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const isExtracted = (k: string) => extractedKeys.has(k);
+  const extractedCls = (k: string) => isExtracted(k) ? 'ring-1 ring-amber-300 bg-amber-50/40' : '';
 
   const handleSave = async () => {
     setError('');
@@ -229,6 +295,54 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
     >
       <div className="space-y-5">
         {error && <div className="bg-red-50 text-red-700 text-sm px-4 py-2.5 rounded-lg border border-red-200">{error}</div>}
+
+        {/* Extract from confirmation letter (optional) */}
+        {!editing && (
+          <div className="border-2 border-dashed border-brand-200 rounded-xl p-4 bg-gradient-to-br from-amber-50/50 to-brand-50/30">
+            <div className={`flex items-start gap-3 ${isAr ? 'flex-row-reverse text-right' : ''}`}>
+              <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold text-brand-900 text-sm">
+                  {isAr ? 'استخراج تلقائي من خطاب التأكيد' : 'Auto-extract from confirmation letter'}
+                </div>
+                <p className="text-xs text-brand-500 mt-0.5">
+                  {isAr
+                    ? 'ارفع PDF أو صورة للخطاب وهنملا لك الحقول تلقائيًا — تقدر تراجعها وتعدلها قبل الحفظ.'
+                    : 'Upload a PDF or image of the letter — fields will be auto-filled for your review.'}
+                </p>
+                <div className={`flex items-center gap-2 mt-3 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
+                  <label className={`btn-secondary text-sm cursor-pointer ${extracting ? 'opacity-60 pointer-events-none' : ''}`}>
+                    {extracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    {extracting
+                      ? (isAr ? 'جاري قراءة الخطاب...' : 'Reading letter...')
+                      : (isAr ? 'ارفع خطاب التأكيد' : 'Upload confirmation letter')}
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleExtract(f); e.target.value = ''; }}
+                      className="hidden"
+                      disabled={extracting}
+                    />
+                  </label>
+                  <span className="text-xs text-brand-400">
+                    {isAr ? 'أو املأ يدويًا تحت' : 'or fill manually below'}
+                  </span>
+                </div>
+                {extractMsg && (
+                  <div className={`mt-3 text-xs px-3 py-2 rounded-lg ${
+                    extractedKeys.size > 0
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-red-50 text-red-700 border border-red-200'
+                  }`}>
+                    {extractMsg}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Client + Hotel */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -328,7 +442,7 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
             </label>
             <input
               type="text"
-              className="input"
+              className={`input ${extractedCls('operaConfirmationNo')}`}
               value={form.operaConfirmationNo}
               onChange={e => update('operaConfirmationNo', e.target.value)}
               placeholder="574184126"
@@ -340,7 +454,7 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
             </label>
             <input
               type="text"
-              className="input"
+              className={`input ${extractedCls('guestName')}`}
               value={form.guestName}
               onChange={e => update('guestName', e.target.value)}
             />
@@ -353,13 +467,13 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
             <label className="text-xs font-semibold text-brand-600 mb-1 block">
               {isAr ? 'تاريخ الوصول' : 'Arrival Date'} <span className="text-red-500">*</span>
             </label>
-            <input type="date" className="input" value={form.arrivalDate} onChange={e => update('arrivalDate', e.target.value)} />
+            <input type="date" className={`input ${extractedCls('arrivalDate')}`} value={form.arrivalDate} onChange={e => update('arrivalDate', e.target.value)} />
           </div>
           <div>
             <label className="text-xs font-semibold text-brand-600 mb-1 block">
               {isAr ? 'تاريخ المغادرة' : 'Departure Date'} <span className="text-red-500">*</span>
             </label>
-            <input type="date" className="input" value={form.departureDate} onChange={e => update('departureDate', e.target.value)} />
+            <input type="date" className={`input ${extractedCls('departureDate')}`} value={form.departureDate} onChange={e => update('departureDate', e.target.value)} />
           </div>
           <div>
             <label className="text-xs font-semibold text-brand-600 mb-1 block">
@@ -373,19 +487,19 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <label className="text-xs font-semibold text-brand-600 mb-1 block">{isAr ? 'عدد الغرف' : 'Rooms'}</label>
-            <input type="number" min="1" className="input" value={form.roomsCount} onChange={e => update('roomsCount', e.target.value)} />
+            <input type="number" min="1" className={`input ${extractedCls('roomsCount')}`} value={form.roomsCount} onChange={e => update('roomsCount', e.target.value)} />
           </div>
           <div>
             <label className="text-xs font-semibold text-brand-600 mb-1 block">{isAr ? 'عدد الكبار' : 'Adults'}</label>
-            <input type="number" min="0" className="input" value={form.adultsCount} onChange={e => update('adultsCount', e.target.value)} />
+            <input type="number" min="0" className={`input ${extractedCls('adultsCount')}`} value={form.adultsCount} onChange={e => update('adultsCount', e.target.value)} />
           </div>
           <div>
             <label className="text-xs font-semibold text-brand-600 mb-1 block">{isAr ? 'عدد الأطفال' : 'Children'}</label>
-            <input type="number" min="0" className="input" value={form.childrenCount} onChange={e => update('childrenCount', e.target.value)} />
+            <input type="number" min="0" className={`input ${extractedCls('childrenCount')}`} value={form.childrenCount} onChange={e => update('childrenCount', e.target.value)} />
           </div>
           <div>
             <label className="text-xs font-semibold text-brand-600 mb-1 block">{isAr ? 'نوع الغرفة' : 'Room Type'}</label>
-            <input type="text" className="input" value={form.roomType} onChange={e => update('roomType', e.target.value)} placeholder="ST KING" />
+            <input type="text" className={`input ${extractedCls('roomType')}`} value={form.roomType} onChange={e => update('roomType', e.target.value)} placeholder="ST KING" />
           </div>
         </div>
 
@@ -393,11 +507,11 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="text-xs font-semibold text-brand-600 mb-1 block">{isAr ? 'سعر الليلة' : 'Rate/Night'}</label>
-            <input type="number" step="0.01" className="input" value={form.ratePerNight} onChange={e => update('ratePerNight', e.target.value)} />
+            <input type="number" step="0.01" className={`input ${extractedCls('ratePerNight')}`} value={form.ratePerNight} onChange={e => update('ratePerNight', e.target.value)} />
           </div>
           <div>
             <label className="text-xs font-semibold text-brand-600 mb-1 block">{isAr ? 'الباقة' : 'Package'}</label>
-            <select className="input" value={form.ratePackage} onChange={e => update('ratePackage', e.target.value)}>
+            <select className={`input ${extractedCls('ratePackage')}`} value={form.ratePackage} onChange={e => update('ratePackage', e.target.value)}>
               {RATE_PACKAGES.map(p => <option key={p.value} value={p.value}>{isAr ? p.ar : p.value}</option>)}
             </select>
           </div>
@@ -421,11 +535,11 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
         <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="text-xs font-semibold text-brand-600 mb-1 block">{isAr ? 'ضريبة القيمة المضافة %' : 'VAT %'}</label>
-            <input type="number" step="0.01" className="input" value={form.vatPercent} onChange={e => update('vatPercent', e.target.value)} />
+            <input type="number" step="0.01" className={`input ${extractedCls('vatPercent')}`} value={form.vatPercent} onChange={e => update('vatPercent', e.target.value)} />
           </div>
           <div>
             <label className="text-xs font-semibold text-brand-600 mb-1 block">{isAr ? 'رسوم البلدية %' : 'Municipality %'}</label>
-            <input type="number" step="0.01" className="input" value={form.municipalityFeePercent} onChange={e => update('municipalityFeePercent', e.target.value)} />
+            <input type="number" step="0.01" className={`input ${extractedCls('municipalityFeePercent')}`} value={form.municipalityFeePercent} onChange={e => update('municipalityFeePercent', e.target.value)} />
           </div>
           <div>
             <label className="text-xs font-semibold text-brand-600 mb-1 block">{isAr ? 'العملة' : 'Currency'}</label>
@@ -441,7 +555,7 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="text-xs font-semibold text-brand-600 mb-1 block">{isAr ? 'طريقة الدفع' : 'Payment Method'}</label>
-            <select className="input" value={form.paymentMethod} onChange={e => update('paymentMethod', e.target.value)}>
+            <select className={`input ${extractedCls('paymentMethod')}`} value={form.paymentMethod} onChange={e => update('paymentMethod', e.target.value)}>
               <option value="">{isAr ? '-- اختر --' : '-- Select --'}</option>
               {PAYMENT_METHODS.map(p => <option key={p.value} value={p.value}>{isAr ? p.ar : p.value}</option>)}
             </select>
@@ -454,7 +568,7 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
           </div>
           <div>
             <label className="text-xs font-semibold text-brand-600 mb-1 block">{isAr ? 'منشئ الحجز في اوبرا' : 'Reservation Made By'}</label>
-            <input type="text" className="input" value={form.reservationMadeBy} onChange={e => update('reservationMadeBy', e.target.value)} placeholder="M.EZZ@EWAA" />
+            <input type="text" className={`input ${extractedCls('reservationMadeBy')}`} value={form.reservationMadeBy} onChange={e => update('reservationMadeBy', e.target.value)} placeholder="M.EZZ@EWAA" />
           </div>
         </div>
 

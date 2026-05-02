@@ -264,4 +264,9 @@ export const bookingsApi = {
   updateStatus: (id: number, status: string, cancellationReason?: string) =>
     api.put(`/bookings/${id}/status`, { status, cancellationReason }),
   delete: (id: number) => api.delete(`/bookings/${id}`),
+  extract: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/bookings/extract', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
 };
