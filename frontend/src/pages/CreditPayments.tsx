@@ -1,10 +1,29 @@
-import { useEffect, useState } from 'react';
-import { CreditCard, Building2, Search, Plus, CheckCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { CreditCard, Building2, Search, Plus, CheckCircle, Clock, XCircle, Check, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { clientsApi, contractsApi, paymentsApi } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
 import Modal from '../components/Modal';
 import { format, parseISO } from 'date-fns';
 import { arSA, enUS } from 'date-fns/locale';
+
+type PaymentStatus = 'pending' | 'approved' | 'rejected';
+type CredTab = 'collect' | 'approvals';
+
+interface PendingPayment {
+  id: number;
+  amount: number;
+  paymentDate: string;
+  paymentType?: string;
+  reference?: string;
+  status: PaymentStatus;
+  approvalNotes?: string;
+  contract?: { id: number; contractRef?: string };
+  client?: { id: number; companyName: string };
+  collector?: { id: number; name: string };
+  approver?: { id: number; name: string } | null;
+}
 
 interface ClientLite {
   id: number;
@@ -38,8 +57,12 @@ interface PaymentLite {
 
 export default function CreditPayments() {
   const { lang } = useLanguage();
+  const { hasRole } = useAuth();
   const isAr = lang === 'ar';
   const locale = isAr ? arSA : enUS;
+
+  const canApprove = hasRole('credit_manager', 'admin', 'general_manager', 'vice_gm');
+  const [tab, setTab] = useState<CredTab>(canApprove ? 'approvals' : 'collect');
 
   const [clients, setClients] = useState<ClientLite[]>([]);
   const [search, setSearch] = useState('');
@@ -49,6 +72,47 @@ export default function CreditPayments() {
   const [loadingClient, setLoadingClient] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Approvals tab state
+  const [allPayments, setAllPayments] = useState<PendingPayment[]>([]);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'all'>('pending');
+
+  const loadAllPayments = async () => {
+    try {
+      const res = await paymentsApi.getAll();
+      setAllPayments(res.data);
+    } catch { setAllPayments([]); }
+  };
+  useEffect(() => { if (tab === 'approvals') loadAllPayments(); }, [tab]);
+
+  const counts = useMemo(() => ({
+    pending: allPayments.filter(p => p.status === 'pending').length,
+    approved: allPayments.filter(p => p.status === 'approved').length,
+    rejected: allPayments.filter(p => p.status === 'rejected').length,
+    all: allPayments.length,
+  }), [allPayments]);
+
+  const visibleApprovals = useMemo(() => {
+    if (statusFilter === 'all') return allPayments;
+    return allPayments.filter(p => p.status === statusFilter);
+  }, [allPayments, statusFilter]);
+
+  const handleApprove = async (id: number) => {
+    if (!confirm(isAr ? 'تأكيد الموافقة على الدفعة وإضافتها لحساب العميل؟' : 'Approve this payment?')) return;
+    setBusyId(id);
+    try { await paymentsApi.approve(id); await loadAllPayments(); }
+    catch (err: any) { alert(err?.response?.data?.message || (isAr ? 'فشل الاعتماد' : 'Failed')); }
+    finally { setBusyId(null); }
+  };
+  const handleReject = async (id: number) => {
+    const note = prompt(isAr ? 'سبب الرفض (اختياري):' : 'Rejection reason (optional):') ?? null;
+    if (note === null) return;
+    setBusyId(id);
+    try { await paymentsApi.reject(id, note || undefined); await loadAllPayments(); }
+    catch (err: any) { alert(err?.response?.data?.message || (isAr ? 'فشل الرفض' : 'Failed')); }
+    finally { setBusyId(null); }
+  };
 
   const todayIso = new Date().toISOString().split('T')[0];
   const emptyForm = { contractId: '', amount: '', paymentDate: todayIso, paymentType: 'bank_transfer', reference: '', notes: '' };
@@ -123,6 +187,32 @@ export default function CreditPayments() {
   ];
   const paymentTypeLabel = (v?: string) => PAYMENT_TYPES.find(p => p.value === v)?.label || v || '-';
 
+  const StatusBadge = ({ status }: { status: PaymentStatus }) => {
+    const map: Record<PaymentStatus, { ar: string; en: string; cls: string; Icon: any }> = {
+      pending: { ar: 'بانتظار الموافقة', en: 'Pending', cls: 'bg-amber-50 text-amber-700 border-amber-200', Icon: Clock },
+      approved: { ar: 'معتمد', en: 'Approved', cls: 'bg-green-50 text-green-700 border-green-200', Icon: CheckCircle },
+      rejected: { ar: 'مرفوض', en: 'Rejected', cls: 'bg-red-50 text-red-700 border-red-200', Icon: XCircle },
+    };
+    const m = map[status];
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] ${m.cls}`}>
+        <m.Icon className="w-3 h-3" /> {isAr ? m.ar : m.en}
+      </span>
+    );
+  };
+
+  const FilterChip = ({ id, label, count, accent }: { id: PaymentStatus | 'all'; label: string; count: number; accent?: string }) => (
+    <button
+      type="button"
+      onClick={() => setStatusFilter(id)}
+      className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+        statusFilter === id ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-brand-100 text-brand-500 hover:bg-brand-50'
+      }`}
+    >
+      {label} {count > 0 && <span className={`ms-1.5 inline-flex items-center justify-center text-[10px] font-bold px-1.5 py-0.5 rounded-full ${accent || 'bg-brand-100 text-brand-700'}`}>{count}</span>}
+    </button>
+  );
+
   return (
     <div className="space-y-5">
       <div className={`flex items-center justify-between ${isAr ? 'flex-row-reverse' : ''}`}>
@@ -137,6 +227,134 @@ export default function CreditPayments() {
         <CreditCard className="w-8 h-8 text-brand-500" />
       </div>
 
+      {/* Top tabs */}
+      <div className={`flex border-b border-brand-100 ${isAr ? 'flex-row-reverse' : ''}`}>
+        <button
+          type="button"
+          onClick={() => setTab('collect')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tab === 'collect' ? 'border-brand-500 text-brand-700' : 'border-transparent text-brand-400 hover:text-brand-600'
+          }`}
+        >
+          {isAr ? 'تحصيل / تسجيل دفعة' : 'Collect / Record Payment'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('approvals')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tab === 'approvals' ? 'border-brand-500 text-brand-700' : 'border-transparent text-brand-400 hover:text-brand-600'
+          }`}
+        >
+          {isAr ? 'الموافقات' : 'Approvals'}
+          {counts.pending > 0 && (
+            <span className="ms-1.5 inline-flex items-center justify-center text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+              {counts.pending}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {tab === 'approvals' ? (
+        <div className="card p-5 space-y-4">
+          <div className={`flex items-center justify-between gap-3 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
+            <h3 className="font-bold text-brand-900">
+              {isAr ? 'دفعات بانتظار الموافقة' : 'Payments Awaiting Approval'}
+            </h3>
+            <div className="flex gap-2 flex-wrap">
+              <FilterChip id="pending" label={isAr ? 'بانتظار' : 'Pending'} count={counts.pending} accent="bg-amber-100 text-amber-700" />
+              <FilterChip id="approved" label={isAr ? 'معتمد' : 'Approved'} count={counts.approved} accent="bg-green-100 text-green-700" />
+              <FilterChip id="rejected" label={isAr ? 'مرفوض' : 'Rejected'} count={counts.rejected} accent="bg-red-100 text-red-700" />
+              <FilterChip id="all" label={isAr ? 'الكل' : 'All'} count={counts.all} />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-brand-100">
+                  <th className={`pb-2 font-medium text-brand-400 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'العميل' : 'Client'}</th>
+                  <th className={`pb-2 font-medium text-brand-400 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'العقد' : 'Contract'}</th>
+                  <th className={`pb-2 font-medium text-brand-400 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'المبلغ' : 'Amount'}</th>
+                  <th className={`pb-2 font-medium text-brand-400 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'الطريقة' : 'Method'}</th>
+                  <th className={`pb-2 font-medium text-brand-400 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'التاريخ' : 'Date'}</th>
+                  <th className={`pb-2 font-medium text-brand-400 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'سجّل بواسطة' : 'Recorded By'}</th>
+                  <th className={`pb-2 font-medium text-brand-400 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'الإيصال' : 'Receipt'}</th>
+                  <th className={`pb-2 font-medium text-brand-400 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'الحالة' : 'Status'}</th>
+                  {canApprove && (
+                    <th className={`pb-2 font-medium text-brand-400 ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'إجراء' : 'Action'}</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-brand-50">
+                {visibleApprovals.map(p => {
+                  const isImage = p.receiptUrl && /\.(png|jpe?g|webp|gif)$/i.test(p.receiptUrl);
+                  const receiptHref = p.receiptUrl ? `/uploads/${p.receiptUrl}` : null;
+                  return (
+                    <tr key={p.id} className="hover:bg-brand-50/50">
+                      <td className={`py-3 font-medium text-brand-900 ${isAr ? 'text-right' : ''}`}>
+                        <Link to={`/clients/${p.client?.id}`} className="hover:text-brand-600">{p.client?.companyName || '-'}</Link>
+                      </td>
+                      <td className={`py-3 text-brand-500 ${isAr ? 'text-right' : ''}`}>{p.contract?.contractRef || '-'}</td>
+                      <td className={`py-3 font-bold ${p.status === 'approved' ? 'text-green-600' : p.status === 'pending' ? 'text-amber-600' : 'text-brand-400'} ${isAr ? 'text-right' : ''}`}>
+                        {p.amount.toLocaleString()} {isAr ? 'ر.س' : 'SAR'}
+                      </td>
+                      <td className={`py-3 text-brand-500 ${isAr ? 'text-right' : ''}`}>{paymentTypeLabel(p.paymentType)}</td>
+                      <td className={`py-3 text-brand-400 ${isAr ? 'text-right' : ''}`}>{format(parseISO(p.paymentDate), 'dd MMM yyyy', { locale })}</td>
+                      <td className={`py-3 text-brand-500 ${isAr ? 'text-right' : ''}`}>{p.collector?.name || '-'}</td>
+                      <td className={`py-3 ${isAr ? 'text-right' : ''}`}>
+                        {receiptHref ? (
+                          <div className="flex items-center gap-2">
+                            {isImage && (
+                              <a href={receiptHref} target="_blank" rel="noreferrer">
+                                <img src={receiptHref} alt="receipt" className="w-12 h-12 object-cover rounded border border-brand-200" />
+                              </a>
+                            )}
+                            <a href={receiptHref} target="_blank" rel="noreferrer"
+                              className="text-xs font-semibold text-brand-600 hover:underline">
+                              📎 {isAr ? 'فتح' : 'Open'}
+                            </a>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-brand-300">{isAr ? 'بدون' : 'None'}</span>
+                        )}
+                      </td>
+                      <td className={`py-3 ${isAr ? 'text-right' : ''}`}>
+                        <StatusBadge status={p.status} />
+                        {p.status === 'rejected' && p.approvalNotes && (
+                          <p className="text-[10px] text-red-500 mt-0.5">{p.approvalNotes}</p>
+                        )}
+                      </td>
+                      {canApprove && (
+                        <td className={`py-3 ${isAr ? 'text-right' : ''}`}>
+                          {p.status === 'pending' ? (
+                            <div className="flex gap-1">
+                              <button type="button" disabled={busyId === p.id} onClick={() => handleApprove(p.id)}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 hover:bg-green-100 text-xs font-medium border border-green-200 disabled:opacity-50">
+                                <Check className="w-3 h-3" /> {isAr ? 'موافقة' : 'Approve'}
+                              </button>
+                              <button type="button" disabled={busyId === p.id} onClick={() => handleReject(p.id)}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-red-50 text-red-700 hover:bg-red-100 text-xs font-medium border border-red-200 disabled:opacity-50">
+                                <X className="w-3 h-3" /> {isAr ? 'رفض' : 'Reject'}
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-brand-400">{p.approver?.name || '-'}</span>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+                {visibleApprovals.length === 0 && (
+                  <tr><td colSpan={canApprove ? 9 : 8} className="py-8 text-center text-brand-400">
+                    {isAr ? 'لا توجد دفعات' : 'No payments'}
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Clients list */}
         <div className="card p-4 lg:sticky lg:top-4 lg:self-start">
@@ -290,29 +508,40 @@ export default function CreditPayments() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {payments.map(p => (
+                    {payments.map(p => {
+                      const isImage = p.receiptUrl && /\.(png|jpe?g|webp|gif)$/i.test(p.receiptUrl);
+                      const receiptHref = p.receiptUrl ? `/uploads/${p.receiptUrl}` : null;
+                      return (
                       <div key={p.id} className={`p-3 rounded-lg border border-brand-100 flex items-start justify-between gap-3 ${isAr ? 'flex-row-reverse' : ''}`}>
-                        <div className={isAr ? 'text-right' : ''}>
-                          <p className="font-bold text-emerald-600">
-                            {p.amount.toLocaleString()} {isAr ? 'ر.س' : 'SAR'}
-                          </p>
-                          <p className="text-[11px] text-brand-500 mt-0.5">
-                            {p.contract?.contractRef} · {paymentTypeLabel(p.paymentType)}
-                            {p.reference ? ` · ${p.reference}` : ''}
-                          </p>
-                          {p.receiptUrl && (
-                            <a href={`/uploads/${p.receiptUrl}`} target="_blank" rel="noreferrer"
-                              className="inline-flex items-center gap-1 mt-1 text-[11px] font-semibold text-brand-600 hover:underline">
-                              📎 {isAr ? 'إيصال' : 'Receipt'}
+                        <div className={`flex items-start gap-3 ${isAr ? 'flex-row-reverse' : ''}`}>
+                          {receiptHref && isImage && (
+                            <a href={receiptHref} target="_blank" rel="noreferrer" className="flex-shrink-0">
+                              <img src={receiptHref} alt="receipt" className="w-16 h-16 object-cover rounded border border-brand-200 hover:border-brand-400 transition-colors" />
                             </a>
                           )}
+                          <div className={isAr ? 'text-right' : ''}>
+                            <p className="font-bold text-emerald-600">
+                              {p.amount.toLocaleString()} {isAr ? 'ر.س' : 'SAR'}
+                            </p>
+                            <p className="text-[11px] text-brand-500 mt-0.5">
+                              {p.contract?.contractRef} · {paymentTypeLabel(p.paymentType)}
+                              {p.reference ? ` · ${p.reference}` : ''}
+                            </p>
+                            {receiptHref && (
+                              <a href={receiptHref} target="_blank" rel="noreferrer"
+                                className="inline-flex items-center gap-1 mt-1 text-[11px] font-semibold text-brand-600 hover:underline">
+                                📎 {isAr ? (isImage ? 'فتح الصورة' : 'فتح الإيصال') : (isImage ? 'Open Image' : 'Open Receipt')}
+                              </a>
+                            )}
+                          </div>
                         </div>
                         <div className={`text-[11px] text-brand-400 ${isAr ? 'text-left' : 'text-right'}`}>
                           <p>{format(parseISO(p.paymentDate), 'dd MMM yyyy', { locale })}</p>
                           {p.collector?.name && <p className="mt-0.5">{p.collector.name}</p>}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -320,6 +549,7 @@ export default function CreditPayments() {
           )}
         </div>
       </div>
+      )}
 
       {/* Payment Modal */}
       <Modal open={showModal} onClose={() => setShowModal(false)}

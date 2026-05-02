@@ -15,9 +15,15 @@ build/
 **/.env
 **/.env.local
 
-# Database journals
+# Database (SQLite local dev only - server has its own data)
+*.db
+**/*.db
 *.db-journal
 **/*.db-journal
+
+# Claude Code
+.claude/
+**/.claude/
 
 # Logs
 *.log

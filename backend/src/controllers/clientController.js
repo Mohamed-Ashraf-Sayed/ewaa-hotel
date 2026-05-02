@@ -7,8 +7,8 @@ const MANAGER_ROLES = ['sales_director'];
 
 const buildAccessFilter = async (user) => {
   if (ADMIN_ROLES.includes(user.role)) return {};
-  // Credit team and contract_officer need cross-rep visibility to record/review payments
-  if (['credit_manager', 'credit_officer', 'contract_officer'].includes(user.role)) return {};
+  // Credit team, contract_officer, and reservations need cross-rep visibility
+  if (['credit_manager', 'credit_officer', 'contract_officer', 'reservations'].includes(user.role)) return {};
   // Assistant sales sees same team as their director (sibling reps + director)
   if (user.role === 'assistant_sales' && user.managerId) {
     const teamIds = await getSubordinateIds(user.managerId);
@@ -225,6 +225,24 @@ const updateClient = async (req, res) => {
     if (data.longitude !== undefined) data.longitude = data.longitude === '' || data.longitude == null ? null : parseFloat(data.longitude);
     delete data.salesRepId;
 
+    // Once a sales rep has saved a geo location, they cannot change or clear it.
+    // Only admins / general managers / vice GMs can override.
+    if (data.latitude !== undefined || data.longitude !== undefined) {
+      const ADMIN_OVERRIDE_ROLES = ['admin', 'general_manager', 'vice_gm'];
+      if (!ADMIN_OVERRIDE_ROLES.includes(req.user.role)) {
+        const existing = await prisma.client.findUnique({
+          where: { id: clientId },
+          select: { latitude: true, longitude: true },
+        });
+        const alreadySet = existing && existing.latitude != null && existing.longitude != null;
+        if (alreadySet) {
+          return res.status(403).json({
+            message: 'الموقع الجغرافي تم حفظه مسبقاً ولا يمكن تغييره. تواصل مع الإدارة للتعديل.',
+          });
+        }
+      }
+    }
+
     // Brand-aware conflict check: allow same reg/tax across clients only if brands don't overlap
     if (data.commercialRegNo !== undefined || data.taxCardNo !== undefined || data.brands !== undefined) {
       const current = await prisma.client.findUnique({ where: { id: clientId } });
@@ -328,4 +346,187 @@ const deleteClient = async (req, res) => {
   }
 };
 
-module.exports = { getClients, getClient, createClient, updateClient, deleteClient, lookupClient };
+// === Bulk import from Excel/CSV ===
+// Expected columns (Arabic headers, matches scripts/clients_template.csv):
+//   اسم الشركة, اسم الشركة بالإنجليزي, جهة الاتصال, المنصب, رقم الهاتف, الإيميل,
+//   المدينة / العنوان, القطاع, نوع العميل, مصدر العميل, الفندق المقترح,
+//   المجموعات المهتم بها, عدد الغرف المتوقع سنوياً, الميزانية السنوية (ر.س),
+//   الموقع الإلكتروني, ملاحظات, رقم السجل التجاري (optional), رقم البطاقة الضريبية (optional)
+const COL = {
+  companyName: ['اسم الشركة', 'اسم الشركة (مطلوب)', 'companyName', 'company name', 'company'],
+  companyNameEn: ['اسم الشركة بالإنجليزي', 'companyNameEn', 'company name en'],
+  contactPerson: ['جهة الاتصال', 'جهة الاتصال (مطلوب)', 'contactPerson', 'contact person', 'contact'],
+  phone: ['رقم الهاتف', 'الهاتف', 'phone'],
+  email: ['الإيميل', 'البريد الإلكتروني', 'email'],
+  address: ['المدينة / العنوان', 'العنوان', 'address'],
+  industry: ['القطاع', 'industry'],
+  clientType: ['نوع العميل', 'نوع العميل (مطلوب)', 'clientType', 'type'],
+  source: ['مصدر العميل', 'source'],
+  hotelName: ['الفندق المقترح', 'الفندق المقترح (اسم الفندق بالعربي)', 'hotel'],
+  brands: ['المجموعات المهتم بها', 'البراندات', 'brands'],
+  estimatedRooms: ['عدد الغرف المتوقع سنوياً', 'عدد الغرف المتوقع', 'estimatedRooms'],
+  annualBudget: ['الميزانية السنوية (ر.س)', 'الميزانية السنوية', 'annualBudget', 'budget'],
+  website: ['الموقع الإلكتروني', 'website'],
+  notes: ['ملاحظات', 'notes'],
+  commercialRegNo: ['رقم السجل التجاري', 'commercialRegNo', 'cr no'],
+  taxCardNo: ['رقم البطاقة الضريبية', 'taxCardNo', 'tax card'],
+};
+
+const pick = (row, keys) => {
+  for (const k of keys) {
+    for (const rk of Object.keys(row)) {
+      if (rk.toString().trim().toLowerCase() === k.toLowerCase()) {
+        const v = row[rk];
+        if (v == null || v === '') return null;
+        return String(v).trim();
+      }
+    }
+  }
+  return null;
+};
+
+const importClients = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'لم يتم رفع ملف' });
+
+    const xlsx = require('xlsx');
+    let rows;
+    try {
+      const wb = xlsx.read(req.file.buffer, { type: 'buffer' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      rows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+    } catch (e) {
+      return res.status(400).json({ message: 'ملف غير صالح. تأكد من استخدام صيغة Excel أو CSV.' });
+    }
+    if (!rows || rows.length === 0) return res.status(400).json({ message: 'الملف فارغ' });
+
+    const allClients = await prisma.client.findMany({
+      where: { isActive: true },
+      include: { salesRep: { select: { name: true } } },
+    });
+    const allHotels = await prisma.hotel.findMany({ where: { isActive: true }, select: { id: true, name: true } });
+    const findHotelByName = (name) => {
+      if (!name) return null;
+      const n = name.trim().toLowerCase();
+      return allHotels.find(h => h.name.toLowerCase() === n) || null;
+    };
+
+    const validTypes = new Set(['active', 'lead', 'inactive']);
+    const validSources = new Set(['cold_call', 'referral', 'exhibition', 'website', 'social_media', 'walk_in', 'other']);
+    const validBrands = new Set(['muhaidib_serviced', 'awa_hotels', 'grand_plaza']);
+
+    const summary = { created: 0, skipped: 0, errors: [], duplicates: [] };
+    // Clone the master list — push newly created clients into it so dedup catches duplicates within the same upload.
+    const liveList = [...allClients];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const lineNo = i + 2; // +2 = +1 for header row, +1 for human-readable line numbers
+      try {
+        const companyName = pick(row, COL.companyName);
+        const contactPerson = pick(row, COL.contactPerson);
+        const clientType = (pick(row, COL.clientType) || 'lead').toLowerCase();
+
+        if (!companyName) { summary.errors.push({ line: lineNo, message: 'اسم الشركة مطلوب' }); continue; }
+        if (!contactPerson) { summary.errors.push({ line: lineNo, message: `سطر ${lineNo} (${companyName}): جهة الاتصال مطلوبة` }); continue; }
+        if (!validTypes.has(clientType)) {
+          summary.errors.push({ line: lineNo, message: `سطر ${lineNo} (${companyName}): نوع العميل غير صحيح — استخدم active/lead/inactive` });
+          continue;
+        }
+
+        const source = (pick(row, COL.source) || '').toLowerCase() || null;
+        if (source && !validSources.has(source)) {
+          summary.errors.push({ line: lineNo, message: `سطر ${lineNo} (${companyName}): مصدر العميل غير صحيح` });
+          continue;
+        }
+
+        const brandsRaw = pick(row, COL.brands) || '';
+        const brandsArr = brandsRaw.split(',').map(s => s.trim()).filter(Boolean);
+        const invalidBrand = brandsArr.find(b => !validBrands.has(b));
+        if (invalidBrand) {
+          summary.errors.push({ line: lineNo, message: `سطر ${lineNo} (${companyName}): براند غير معروف "${invalidBrand}"` });
+          continue;
+        }
+
+        const phone = pick(row, COL.phone);
+        const email = pick(row, COL.email);
+        const commercialRegNo = pick(row, COL.commercialRegNo);
+        const taxCardNo = pick(row, COL.taxCardNo);
+
+        // Duplicate detection (mirrors createClient logic with brand-overlap rule)
+        const normalizedCompany = normalizeName(companyName);
+        const normalizedPhone = (phone || '').replace(/\D/g, '');
+        const normalizedEmail = (email || '').toLowerCase();
+        const normalizedCommercial = normalizeRegNo(commercialRegNo);
+        const normalizedTax = normalizeRegNo(taxCardNo);
+
+        const matches = liveList.filter(c => {
+          if (normalizedCommercial && c.commercialRegNo && normalizeRegNo(c.commercialRegNo) === normalizedCommercial) return true;
+          if (normalizedTax && c.taxCardNo && normalizeRegNo(c.taxCardNo) === normalizedTax) return true;
+          if (normalizeName(c.companyName) === normalizedCompany) return true;
+          if (normalizedPhone && c.phone && c.phone.replace(/\D/g, '') === normalizedPhone) return true;
+          if (normalizedEmail && c.email && c.email.toLowerCase() === normalizedEmail) return true;
+          return false;
+        });
+        const conflict = matches.find(c => {
+          const existingBrands = parseBrands(c.brands);
+          if (existingBrands.length === 0) return true;
+          if (brandsArr.length === 0) return true;
+          return brandsArr.some(b => existingBrands.includes(b));
+        });
+        if (conflict) {
+          summary.duplicates.push({
+            line: lineNo,
+            companyName,
+            existingSalesRep: conflict.salesRep?.name || '-',
+          });
+          summary.skipped += 1;
+          continue;
+        }
+
+        const hotelName = pick(row, COL.hotelName);
+        const hotel = hotelName ? findHotelByName(hotelName) : null;
+
+        const estimatedRooms = pick(row, COL.estimatedRooms);
+        const annualBudget = pick(row, COL.annualBudget);
+
+        const created = await prisma.client.create({
+          data: {
+            companyName,
+            companyNameEn: pick(row, COL.companyNameEn) || null,
+            contactPerson,
+            phone: phone || null,
+            email: email || null,
+            address: pick(row, COL.address) || null,
+            industry: pick(row, COL.industry) || null,
+            clientType,
+            source,
+            salesRepId: req.user.id,
+            hotelId: hotel?.id || null,
+            brands: brandsArr.length > 0 ? brandsArr.join(',') : null,
+            estimatedRooms: estimatedRooms ? parseInt(estimatedRooms) || null : null,
+            annualBudget: annualBudget ? parseFloat(annualBudget) || null : null,
+            website: pick(row, COL.website) || null,
+            commercialRegNo: commercialRegNo || null,
+            taxCardNo: taxCardNo || null,
+            notes: pick(row, COL.notes) || null,
+          },
+          include: { salesRep: { select: { name: true } } },
+        });
+
+        await prisma.dealPulseScore.create({ data: { clientId: created.id, salesRepId: req.user.id } }).catch(() => null);
+
+        liveList.push(created);
+        summary.created += 1;
+      } catch (rowErr) {
+        summary.errors.push({ line: lineNo, message: rowErr.message });
+      }
+    }
+
+    res.json(summary);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+module.exports = { getClients, getClient, createClient, updateClient, deleteClient, lookupClient, importClients };

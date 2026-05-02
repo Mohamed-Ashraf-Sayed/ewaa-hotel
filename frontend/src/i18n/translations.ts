@@ -17,6 +17,8 @@ const translations = {
   nav_reports: { ar: 'التقارير', en: 'Reports' },
   nav_org_chart: { ar: 'الهيكل التنظيمي', en: 'Org Chart' },
   nav_chat: { ar: 'المحادثات', en: 'Chat' },
+  nav_bookings: { ar: 'الحجوزات', en: 'Bookings' },
+  nav_inbox: { ar: 'الوارد', en: 'Inbox' },
 
   // === Auth ===
   login_title: { ar: 'تسجيل الدخول', en: 'Sign In' },

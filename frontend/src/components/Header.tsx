@@ -72,6 +72,7 @@ export default function Header({ onMenuClick }: Props) {
   const typeIcon: Record<string, string> = {
     contract_expiring: '⏰', target_missed: '📉', pending_approval: '📋',
     client_inactive: '😴', task_assigned: '📌', general: '🔔',
+    booking_confirmed: '🛏️', booking_cancelled: '❌',
   };
 
   const timeAgo = (d: string) => {

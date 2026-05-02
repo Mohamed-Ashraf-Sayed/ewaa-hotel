@@ -59,7 +59,12 @@ export const clientsApi = {
   create: (data: any) => api.post('/clients', data),
   update: (id: number, data: any) => api.put(`/clients/${id}`, data),
   delete: (id: number) => api.delete(`/clients/${id}`),
-  lookup: (params: { regNo?: string; taxNo?: string }) => api.get('/clients/lookup', { params })
+  lookup: (params: { regNo?: string; taxNo?: string }) => api.get('/clients/lookup', { params }),
+  bulkImport: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/clients/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
 };
 
 // Contracts
@@ -96,7 +101,7 @@ export const activitiesApi = {
 
 // Payments
 export const paymentsApi = {
-  getAll: (params?: { contractId?: number; clientId?: number }) => api.get('/payments', { params }),
+  getAll: (params?: { contractId?: number; clientId?: number; status?: string }) => api.get('/payments', { params }),
   getSummary: (params: { contractId?: number; clientId?: number }) => api.get('/payments/summary', { params }),
   create: (data: any) => {
     if (data instanceof FormData) {
@@ -104,6 +109,8 @@ export const paymentsApi = {
     }
     return api.post('/payments', data);
   },
+  approve: (id: number) => api.post(`/payments/${id}/approve`),
+  reject: (id: number, approvalNotes?: string) => api.post(`/payments/${id}/reject`, { approvalNotes }),
   delete: (id: number) => api.delete(`/payments/${id}`)
 };
 
@@ -172,6 +179,16 @@ export const emailApi = {
   getLogs: (params?: any) => api.get('/email/logs', { params }),
 };
 
+// Inbox (incoming client emails)
+export const inboxApi = {
+  list: (params?: { unreadOnly?: boolean; clientId?: number; q?: string; take?: number }) =>
+    api.get('/inbox', { params }),
+  getOne: (id: number) => api.get(`/inbox/${id}`),
+  markRead: (id: number, isRead = true) => api.put(`/inbox/${id}/read`, { isRead }),
+  markAllRead: () => api.put('/inbox/read-all'),
+  pollNow: () => api.post('/inbox/poll-now'),
+};
+
 // Client Attachments
 export const attachmentsApi = {
   list: (clientId: number) => api.get(`/clients/${clientId}/attachments`),
@@ -218,4 +235,33 @@ export const remindersApi = {
 // Dashboard
 export const dashboardApi = {
   get: () => api.get('/dashboard'),
+};
+
+// Bookings
+export const bookingsApi = {
+  getAll: (params?: { status?: string; hotelId?: number; clientId?: number; assignedRepId?: number; search?: string; fromDate?: string; toDate?: string }) =>
+    api.get('/bookings', { params }),
+  getOne: (id: number) => api.get(`/bookings/${id}`),
+  getByClient: (clientId: number) => api.get(`/bookings/client/${clientId}`),
+  create: (data: any, file?: File) => {
+    const fd = new FormData();
+    Object.keys(data).forEach(k => {
+      const v = data[k];
+      if (v !== undefined && v !== null && v !== '') fd.append(k, String(v));
+    });
+    if (file) fd.append('confirmationLetter', file);
+    return api.post('/bookings', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  update: (id: number, data: any, file?: File) => {
+    const fd = new FormData();
+    Object.keys(data).forEach(k => {
+      const v = data[k];
+      if (v !== undefined && v !== null && v !== '') fd.append(k, String(v));
+    });
+    if (file) fd.append('confirmationLetter', file);
+    return api.put(`/bookings/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  updateStatus: (id: number, status: string, cancellationReason?: string) =>
+    api.put(`/bookings/${id}/status`, { status, cancellationReason }),
+  delete: (id: number) => api.delete(`/bookings/${id}`),
 };

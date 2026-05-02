@@ -55,6 +55,8 @@ app.use('/api/reminders', require('./routes/reminders'));
 app.use('/api/local-events', require('./routes/localEvents'));
 app.use('/api', require('./routes/attachments'));
 app.use('/api/messages', require('./routes/messages'));
+app.use('/api/inbox', require('./routes/inbox'));
+app.use('/api/bookings', require('./routes/bookings'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
 
@@ -74,4 +76,6 @@ app.listen(PORT, () => {
   require('./jobs/taskOverdueChecker').startTaskOverdueChecker();
   // Background job: sync local holidays from Nager.Date API
   require('./jobs/holidaySync').startHolidaySync();
+  // Background job: poll IMAP for client emails into the Inbox
+  require('./jobs/inboxPoll').startInboxPoll();
 });

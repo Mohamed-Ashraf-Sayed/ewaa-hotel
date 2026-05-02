@@ -39,10 +39,15 @@ export interface Payment {
   notes?: string;
   receiptUrl?: string;
   collectedBy: number;
+  status: 'pending' | 'approved' | 'rejected';
+  approvedById?: number | null;
+  approvedAt?: string | null;
+  approvalNotes?: string | null;
   createdAt: string;
   contract?: { id: number; contractRef?: string; totalValue?: number };
   client?: { id: number; companyName: string };
   collector?: { id: number; name: string };
+  approver?: { id: number; name: string } | null;
 }
 
 export interface PaymentSummary {
@@ -168,6 +173,51 @@ export interface Activity {
   createdAt: string;
   client?: { id: number; companyName: string };
   user?: { id: number; name: string; role: Role };
+}
+
+export type BookingStatus = 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled' | 'no_show';
+export type BookingSource = 'outlook' | 'phone' | 'walk_in' | 'other';
+
+export interface Booking {
+  id: number;
+  clientId: number;
+  hotelId: number;
+  contractId?: number | null;
+  assignedRepId: number;
+  bookedById: number;
+  operaConfirmationNo: string;
+  guestName: string;
+  reservationMadeBy?: string | null;
+  arrivalDate: string;
+  departureDate: string;
+  nights: number;
+  roomsCount: number;
+  adultsCount: number;
+  childrenCount: number;
+  roomType?: string | null;
+  ratePerNight?: number | null;
+  ratePackage?: string | null;
+  totalAmount?: number | null;
+  currency: string;
+  vatPercent: number;
+  municipalityFeePercent: number;
+  paymentMethod?: string | null;
+  source: BookingSource;
+  status: BookingStatus;
+  cancelledAt?: string | null;
+  cancelledById?: number | null;
+  cancellationReason?: string | null;
+  confirmationLetterUrl?: string | null;
+  confirmationLetterName?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  client?: { id: number; companyName: string; contactPerson: string; phone?: string; email?: string };
+  hotel?: { id: number; name: string; nameEn?: string };
+  contract?: { id: number; contractRef?: string } | null;
+  assignedRep?: { id: number; name: string; email?: string };
+  bookedBy?: { id: number; name: string };
+  cancelledBy?: { id: number; name: string } | null;
 }
 
 export interface DashboardData {

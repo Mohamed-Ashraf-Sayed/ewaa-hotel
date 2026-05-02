@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Search, ChevronLeft, ChevronRight, User, Download, FileSearch } from 'lucide-react';
+import { Plus, Search, ChevronLeft, ChevronRight, User, Download, FileSearch, Upload } from 'lucide-react';
 import { clientsApi, hotelsApi, pdfApi } from '../services/api';
 import { Client, Hotel } from '../types';
 import Modal from '../components/Modal';
@@ -49,6 +49,14 @@ export default function Clients() {
   const [lookupRegNo, setLookupRegNo] = useState('');
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupResult, setLookupResult] = useState<null | { exists: boolean; matches: { salesRepName: string; brandLabels: string[] }[] }>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<null | {
+    created: number; skipped: number;
+    errors: { line: number; message: string }[];
+    duplicates: { line: number; companyName: string; existingSalesRep: string }[];
+  }>(null);
   const [searchParams] = useSearchParams();
   const { hasRole } = useAuth();
 
@@ -127,6 +135,11 @@ export default function Clients() {
           <button className="btn-secondary" onClick={() => { setLookupResult(null); setLookupRegNo(''); setShowLookup(true); }}>
             <FileSearch className="w-4 h-4" /> {isAr ? 'استعلام بالسجل التجاري' : 'Lookup by Commercial Reg No'}
           </button>
+          {!hasRole('contract_officer') && (
+            <button className="btn-secondary" onClick={() => { setImportResult(null); setImportFile(null); setShowImport(true); }}>
+              <Upload className="w-4 h-4" /> {isAr ? 'رفع ملف عملاء' : 'Import Excel/CSV'}
+            </button>
+          )}
           {hasRole('general_manager', 'vice_gm', 'sales_director') && (
             <button className="btn-secondary" onClick={async () => {
               try {
@@ -427,6 +440,114 @@ export default function Clients() {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+        </form>
+      </Modal>
+
+      <Modal open={showImport} onClose={() => setShowImport(false)} title={isAr ? 'رفع ملف عملاء (Excel / CSV)' : 'Import Clients (Excel / CSV)'} size="lg">
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!importFile) return;
+            setImporting(true);
+            setImportResult(null);
+            try {
+              const res = await clientsApi.bulkImport(importFile);
+              setImportResult(res.data);
+              loadClients();
+            } catch (err: any) {
+              alert(err?.response?.data?.message || (isAr ? 'فشل رفع الملف' : 'Upload failed'));
+            } finally {
+              setImporting(false);
+            }
+          }}
+          className="space-y-4"
+        >
+          <div className="rounded-lg bg-brand-50 border border-brand-100 p-3 text-sm text-brand-700">
+            <p className="font-semibold mb-2">
+              {isAr ? '📋 خطوات الرفع:' : '📋 How to import:'}
+            </p>
+            <ol className={`list-decimal text-xs space-y-1 ${isAr ? 'pr-5 text-right' : 'pl-5 text-left'}`}>
+              <li>{isAr ? 'حمّل القالب وعبّيه ببيانات عملائك' : 'Download the template and fill in your clients'}</li>
+              <li>{isAr ? 'احفظ الملف بصيغة CSV UTF-8 أو XLSX' : 'Save as CSV UTF-8 or XLSX'}</li>
+              <li>{isAr ? 'ارفعه هنا — هتظهر النتيجة بعد المعالجة' : 'Upload here — results will show after processing'}</li>
+            </ol>
+            <div className={`flex gap-2 mt-3 ${isAr ? 'flex-row-reverse' : ''}`}>
+              <a href="/clients_template.xlsx" download className="text-xs font-semibold text-brand-600 hover:underline inline-flex items-center gap-1">
+                <Download className="w-3 h-3" /> {isAr ? 'تحميل قالب Excel' : 'Download Excel template'}
+              </a>
+              <a href="/clients_template.csv" download className="text-xs font-semibold text-brand-600 hover:underline inline-flex items-center gap-1">
+                <Download className="w-3 h-3" /> {isAr ? 'تحميل قالب CSV' : 'Download CSV template'}
+              </a>
+            </div>
+          </div>
+
+          <div>
+            <label className="label">{isAr ? 'الملف' : 'File'} *</label>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              required
+              className="input"
+              onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+            />
+            {importFile && (
+              <p className="text-xs text-brand-500 mt-1">
+                📎 {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-3">
+            <button type="button" className="btn-secondary" onClick={() => setShowImport(false)}>
+              {isAr ? 'إغلاق' : 'Close'}
+            </button>
+            <button type="submit" className="btn-primary flex-1 justify-center" disabled={importing || !importFile}>
+              {importing ? (isAr ? 'جاري المعالجة...' : 'Processing...') : (isAr ? 'رفع ومعالجة' : 'Upload & Process')}
+            </button>
+          </div>
+
+          {importResult && (
+            <div className="space-y-2 mt-2">
+              <div className={`flex gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+                <span className="px-3 py-1 rounded-full bg-green-50 border border-green-200 text-green-700 text-xs font-semibold">
+                  ✓ {isAr ? 'تم إضافة' : 'Added'}: {importResult.created}
+                </span>
+                <span className="px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold">
+                  ⊘ {isAr ? 'مكرر (تخطي)' : 'Duplicates (skipped)'}: {importResult.skipped}
+                </span>
+                {importResult.errors.length > 0 && (
+                  <span className="px-3 py-1 rounded-full bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
+                    ✕ {isAr ? 'أخطاء' : 'Errors'}: {importResult.errors.length}
+                  </span>
+                )}
+              </div>
+
+              {importResult.duplicates.length > 0 && (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs">
+                  <p className="font-semibold text-amber-800 mb-2">{isAr ? 'العملاء المكررون:' : 'Duplicates:'}</p>
+                  <ul className={`space-y-1 ${isAr ? 'pr-3 text-right' : 'pl-3 text-left'}`}>
+                    {importResult.duplicates.map((d, i) => (
+                      <li key={i} className="text-amber-700">
+                        {isAr ? `سطر ${d.line}: ` : `Line ${d.line}: `}<b>{d.companyName}</b>
+                        {d.existingSalesRep && ` — ${isAr ? 'مسجل لدى' : 'owned by'}: ${d.existingSalesRep}`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {importResult.errors.length > 0 && (
+                <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs">
+                  <p className="font-semibold text-red-800 mb-2">{isAr ? 'أخطاء:' : 'Errors:'}</p>
+                  <ul className={`space-y-1 ${isAr ? 'pr-3 text-right' : 'pl-3 text-left'}`}>
+                    {importResult.errors.map((e, i) => (
+                      <li key={i} className="text-red-700">{e.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </form>

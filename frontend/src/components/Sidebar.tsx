@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, FileText, MapPin,
-  Hotel, CreditCard, Target, CheckSquare, Trophy, CalendarDays, X, BarChart3, Network, MessageCircle, Wallet
+  Hotel, CreditCard, Target, CheckSquare, Trophy, CalendarDays, X, BarChart3, Network, MessageCircle, Wallet, Inbox as InboxIcon, BedDouble
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -15,12 +15,14 @@ const navItems: NavItem[] = [
   { to: '/', icon: LayoutDashboard, labelKey: 'nav_dashboard' },
   { to: '/clients', icon: Building2, labelKey: 'nav_clients', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer'] },
   { to: '/contracts', icon: FileText, labelKey: 'nav_contracts' },
+  { to: '/bookings', icon: BedDouble, labelKey: 'nav_bookings', roles: ['admin', 'general_manager', 'vice_gm', 'reservations', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer'] },
   { to: '/visits', icon: MapPin, labelKey: 'nav_visits', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer'] },
   { to: '/payments', icon: CreditCard, labelKey: 'nav_payments', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer', 'credit_manager', 'credit_officer'] },
   { to: '/credit-payments', icon: Wallet, labelKey: 'nav_credit_payments', roles: ['admin', 'general_manager', 'vice_gm', 'credit_manager', 'credit_officer'] },
   { to: '/targets', icon: Target, labelKey: 'nav_targets', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep'] },
   { to: '/calendar', icon: CalendarDays, labelKey: 'nav_calendar' },
   { to: '/chat', icon: MessageCircle, labelKey: 'nav_chat' },
+  { to: '/inbox', icon: InboxIcon, labelKey: 'nav_inbox', roles: ['admin', 'general_manager', 'vice_gm', 'reservations', 'sales_director', 'assistant_sales', 'sales_rep'] },
   { to: '/tasks', icon: CheckSquare, labelKey: 'nav_tasks', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep'] },
   { to: '/leaderboard', icon: Trophy, labelKey: 'nav_leaderboard', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep'] },
   { to: '/reports', icon: BarChart3, labelKey: 'nav_reports', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales'] },

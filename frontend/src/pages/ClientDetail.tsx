@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowRight, FileText, Plus, Clock, MapPin, CreditCard, Receipt, Mail, ExternalLink } from 'lucide-react';
+import { ArrowRight, FileText, Plus, Clock, MapPin, CreditCard, Receipt, Mail, ExternalLink, BedDouble, Building2, Calendar, Pencil, XCircle, LogIn, LogOut } from 'lucide-react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
-import { clientsApi, visitsApi, activitiesApi, contractsApi, hotelsApi, paymentsApi, pdfApi, emailApi, attachmentsApi } from '../services/api';
-import { Client, Visit, Activity, Contract, Hotel, Payment } from '../types';
+import { clientsApi, visitsApi, activitiesApi, contractsApi, hotelsApi, paymentsApi, pdfApi, emailApi, attachmentsApi, bookingsApi } from '../services/api';
+import { Client, Visit, Activity, Contract, Hotel, Payment, Booking, BookingStatus } from '../types';
 import Modal from '../components/Modal';
+import BookingFormModal from '../components/BookingFormModal';
 
 import { useLanguage } from '../contexts/LanguageContext';
 import { format, parseISO } from 'date-fns';
@@ -26,9 +27,13 @@ export default function ClientDetail() {
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'visits' | 'contracts' | 'activities' | 'payments' | 'receipts' | 'emails' | 'attachments'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'visits' | 'contracts' | 'bookings' | 'activities' | 'payments' | 'receipts' | 'emails' | 'attachments'>('overview');
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [bookingBusy, setBookingBusy] = useState<number | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ contactPerson: '', countryCode: '+966', phoneNumber: '', email: '', address: '', commercialRegNo: '', taxCardNo: '', notes: '' });
   const [locUpdating, setLocUpdating] = useState(false);
@@ -131,16 +136,18 @@ export default function ClientDetail() {
   const [paymentReceipt, setPaymentReceipt] = useState<File | null>(null);
 
   const load = async () => {
-    const [clientRes, paymentsRes, emailRes, attRes] = await Promise.all([
+    const [clientRes, paymentsRes, emailRes, attRes, bookRes] = await Promise.all([
       clientsApi.getOne(parseInt(id!)),
       paymentsApi.getAll({ clientId: parseInt(id!) }),
       emailApi.getLogs({ clientId: id }),
       attachmentsApi.list(parseInt(id!)).catch(() => ({ data: [] })),
+      bookingsApi.getByClient(parseInt(id!)).catch(() => ({ data: [] })),
     ]);
     setClient(clientRes.data);
     setPayments(paymentsRes.data);
     setEmailLogs(emailRes.data);
     setAttachments(attRes.data);
+    setBookings(bookRes.data);
     setLoading(false);
   };
 
@@ -287,6 +294,7 @@ export default function ClientDetail() {
     { key: 'overview', label: t('tab_overview') },
     { key: 'visits', label: `${t('tab_visits')} (${clientData.visits?.length || 0})` },
     { key: 'contracts', label: `${t('tab_contracts')} (${clientData.contracts?.length || 0})` },
+    { key: 'bookings', label: `${isAr ? 'الحجوزات' : 'Bookings'} (${bookings.length})` },
     { key: 'activities', label: `${t('tab_activities')} (${clientData.activities?.length || 0})` },
     { key: 'payments', label: `${t('tab_payments')} (${payments.length})` },
     { key: 'receipts', label: `${isAr ? 'إيصالات السداد' : 'Receipts'} (${paymentsWithReceipt.length})` },
@@ -392,12 +400,20 @@ export default function ClientDetail() {
                     {client.latitude.toFixed(5)}, {client.longitude.toFixed(5)}
                     <ExternalLink className="w-3 h-3" />
                   </a>
-                  <button type="button" className="btn-secondary text-xs" onClick={updateLocation} disabled={locUpdating}>
-                    {locUpdating ? (isAr ? 'جاري التحديث...' : 'Updating...') : (isAr ? 'تحديث الموقع' : 'Update location')}
-                  </button>
-                  <button type="button" className="text-xs text-red-500 hover:underline" onClick={clearLocation}>
-                    {isAr ? 'مسح' : 'Clear'}
-                  </button>
+                  {hasRole('admin', 'general_manager', 'vice_gm') ? (
+                    <>
+                      <button type="button" className="btn-secondary text-xs" onClick={updateLocation} disabled={locUpdating}>
+                        {locUpdating ? (isAr ? 'جاري التحديث...' : 'Updating...') : (isAr ? 'تحديث الموقع' : 'Update location')}
+                      </button>
+                      <button type="button" className="text-xs text-red-500 hover:underline" onClick={clearLocation}>
+                        {isAr ? 'مسح' : 'Clear'}
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-[11px] text-brand-400 inline-flex items-center gap-1">
+                      🔒 {isAr ? 'الموقع محفوظ ولا يمكن تغييره' : 'Location locked'}
+                    </span>
+                  )}
                 </>
               ) : (
                 <>
@@ -431,7 +447,7 @@ export default function ClientDetail() {
           <button className="btn-secondary text-sm" onClick={() => setShowVisitModal(true)}>
             <MapPin className="w-4 h-4" /> {t('log_visit')}
           </button>
-          {approvedContracts.length > 0 && (
+          {approvedContracts.length > 0 && hasRole('credit_officer', 'admin', 'general_manager', 'vice_gm') && (
             <button className="btn-secondary text-sm" onClick={() => setShowPaymentModal(true)}>
               <CreditCard className="w-4 h-4" /> {t('add_payment')}
             </button>
@@ -450,6 +466,15 @@ export default function ClientDetail() {
             setShowEmailModal(true);
           }}>
             <Mail className="w-4 h-4" /> {isAr ? 'إرسال إيميل' : 'Send Email'}
+          </button>
+        </div>
+      )}
+
+      {/* Reservations action: New Booking */}
+      {hasRole('reservations', 'admin', 'general_manager', 'vice_gm') && (
+        <div className={`flex gap-3 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
+          <button className="btn-primary text-sm" onClick={() => { setEditingBooking(null); setShowBookingModal(true); }}>
+            <BedDouble className="w-4 h-4" /> {isAr ? 'حجز جديد' : 'New Booking'}
           </button>
         </div>
       )}
@@ -566,6 +591,110 @@ export default function ClientDetail() {
         </div>
       )}
 
+      {/* Bookings Tab */}
+      {activeTab === 'bookings' && (
+        <div className="space-y-3">
+          {bookings.length === 0 && (
+            <div className="card p-10 text-center text-brand-400">
+              <BedDouble className="w-10 h-10 mx-auto mb-3 opacity-40" />
+              <p>{isAr ? 'لا توجد حجوزات لهذا العميل' : 'No bookings for this client'}</p>
+            </div>
+          )}
+          {bookings.map(b => {
+            const statusMap: Record<BookingStatus, { ar: string; en: string; cls: string }> = {
+              confirmed: { ar: 'مؤكد', en: 'Confirmed', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+              checked_in: { ar: 'داخل الفندق', en: 'Checked-in', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+              checked_out: { ar: 'خرج', en: 'Checked-out', cls: 'bg-brand-100 text-brand-600 border-brand-200' },
+              cancelled: { ar: 'ملغي', en: 'Cancelled', cls: 'bg-red-50 text-red-700 border-red-200' },
+              no_show: { ar: 'لم يحضر', en: 'No-show', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+            };
+            const sm = statusMap[b.status];
+            const updateBookingStatus = async (status: BookingStatus) => {
+              let reason: string | undefined;
+              if (status === 'cancelled') {
+                const r = prompt(isAr ? 'سبب الإلغاء (اختياري):' : 'Cancellation reason (optional):') ?? null;
+                if (r === null) return;
+                reason = r || undefined;
+              }
+              setBookingBusy(b.id);
+              try { await bookingsApi.updateStatus(b.id, status, reason); await load(); }
+              catch (err: any) { alert(err?.response?.data?.message || (isAr ? 'فشل التحديث' : 'Failed')); }
+              finally { setBookingBusy(null); }
+            };
+            return (
+              <div key={b.id} className="card p-4">
+                <div className={`flex flex-wrap items-start justify-between gap-3 ${isAr ? 'flex-row-reverse text-right' : ''}`}>
+                  <div className="flex-1 min-w-[260px]">
+                    <div className={`flex items-center gap-2 mb-2 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] ${sm.cls}`}>{isAr ? sm.ar : sm.en}</span>
+                      <span className="text-xs text-brand-400 font-mono">#{b.operaConfirmationNo}</span>
+                    </div>
+                    <div className="font-semibold text-brand-900">{b.guestName}</div>
+                    <div className={`grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2 text-sm ${isAr ? 'text-right' : ''}`}>
+                      <div>
+                        <div className="text-[11px] text-brand-400">{isAr ? 'الفندق' : 'Hotel'}</div>
+                        <div className="text-brand-700 flex items-center gap-1"><Building2 className="w-3 h-3" /> {b.hotel?.name}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-brand-400">{isAr ? 'الوصول' : 'Arrival'}</div>
+                        <div className="text-brand-700 flex items-center gap-1"><Calendar className="w-3 h-3" /> {format(parseISO(b.arrivalDate), 'dd MMM yyyy', { locale })}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-brand-400">{isAr ? 'الليالي' : 'Nights'}</div>
+                        <div className="text-brand-700">{b.nights}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-brand-400">{isAr ? 'الغرف' : 'Rooms'}</div>
+                        <div className="text-brand-700">{b.roomsCount} {b.roomType ? `· ${b.roomType}` : ''}</div>
+                      </div>
+                    </div>
+                    {b.totalAmount && (
+                      <div className={`mt-2 text-sm ${isAr ? 'text-right' : ''}`}>
+                        <span className="font-medium text-brand-700">{b.totalAmount.toLocaleString()} {b.currency}</span>
+                        {b.ratePackage && <span className="text-brand-500 text-xs"> · {b.ratePackage}</span>}
+                      </div>
+                    )}
+                    {b.status === 'cancelled' && b.cancellationReason && (
+                      <p className="text-xs text-red-600 mt-2">{isAr ? 'سبب الإلغاء:' : 'Reason:'} {b.cancellationReason}</p>
+                    )}
+                  </div>
+
+                  {hasRole('reservations', 'admin', 'general_manager', 'vice_gm') && (
+                    <div className={`flex items-center gap-1.5 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
+                      {b.confirmationLetterUrl && (
+                        <a href={b.confirmationLetterUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs py-1.5" title={isAr ? 'الخطاب' : 'Letter'}>
+                          <FileText className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {b.status === 'confirmed' && (
+                        <button className="btn-secondary text-xs py-1.5" disabled={bookingBusy === b.id} onClick={() => updateBookingStatus('checked_in')} title={isAr ? 'تسجيل وصول' : 'Check-in'}>
+                          <LogIn className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {b.status === 'checked_in' && (
+                        <button className="btn-secondary text-xs py-1.5" disabled={bookingBusy === b.id} onClick={() => updateBookingStatus('checked_out')} title={isAr ? 'تسجيل مغادرة' : 'Check-out'}>
+                          <LogOut className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {b.status !== 'cancelled' && b.status !== 'checked_out' && (
+                        <>
+                          <button className="btn-secondary text-xs py-1.5" onClick={() => { setEditingBooking(b); setShowBookingModal(true); }} title={isAr ? 'تعديل' : 'Edit'}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button className="btn-secondary text-xs py-1.5 text-red-600 hover:bg-red-50" disabled={bookingBusy === b.id} onClick={() => updateBookingStatus('cancelled')} title={isAr ? 'إلغاء' : 'Cancel'}>
+                            <XCircle className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Activities Tab */}
       {activeTab === 'activities' && (
         <div className="space-y-2">
@@ -591,32 +720,56 @@ export default function ClientDetail() {
       {activeTab === 'payments' && (
         <div className="space-y-3">
           {payments.length === 0 && <p className="text-brand-400 text-sm text-center py-8">{t('no_payments')}</p>}
-          {payments.map((p: Payment) => (
-            <div key={p.id} className={`card p-4 flex items-start justify-between ${isAr ? 'flex-row-reverse' : ''}`}>
-              <div className={isAr ? 'text-right' : 'text-left'}>
-                <p className="font-bold text-green-600 text-lg">{p.amount.toLocaleString()} {t('sar')}</p>
-                <p className="text-xs text-brand-400 mt-0.5">
-                  {p.contract?.contractRef} · {p.paymentType ? t(`payment_${p.paymentType}` as any) : ''}
-                  {p.reference ? ` · ${p.reference}` : ''}
-                </p>
-                {p.notes && <p className="text-xs text-brand-400 mt-1">{p.notes}</p>}
-                {p.receiptUrl && (
-                  <a
-                    href={`/uploads/${p.receiptUrl}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 mt-2 text-xs font-semibold text-brand-600 hover:text-brand-800 underline"
-                  >
-                    📎 {isAr ? 'عرض صورة السداد' : 'View Receipt'}
-                  </a>
-                )}
+          {payments.map((p: Payment) => {
+            const status = p.status || 'approved';
+            const badge = status === 'approved'
+              ? { cls: 'bg-green-50 text-green-700 border-green-200', label: isAr ? 'معتمد' : 'Approved' }
+              : status === 'pending'
+              ? { cls: 'bg-amber-50 text-amber-700 border-amber-200', label: isAr ? 'بانتظار الموافقة' : 'Pending Approval' }
+              : { cls: 'bg-red-50 text-red-700 border-red-200', label: isAr ? 'مرفوض' : 'Rejected' };
+            const amountColor = status === 'approved' ? 'text-green-600' : status === 'pending' ? 'text-amber-600' : 'text-brand-400';
+            return (
+              <div key={p.id} className={`card p-4 flex items-start justify-between ${isAr ? 'flex-row-reverse' : ''}`}>
+                <div className={isAr ? 'text-right' : 'text-left'}>
+                  <div className={`flex items-center gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+                    <p className={`font-bold text-lg ${amountColor}`}>{p.amount.toLocaleString()} {t('sar')}</p>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] ${badge.cls}`}>
+                      {badge.label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-brand-400 mt-0.5">
+                    {p.contract?.contractRef} · {p.paymentType ? t(`payment_${p.paymentType}` as any) : ''}
+                    {p.reference ? ` · ${p.reference}` : ''}
+                  </p>
+                  {p.notes && <p className="text-xs text-brand-400 mt-1">{p.notes}</p>}
+                  {status === 'rejected' && p.approvalNotes && (
+                    <p className="text-xs text-red-500 mt-1">
+                      {isAr ? 'سبب الرفض:' : 'Rejection reason:'} {p.approvalNotes}
+                    </p>
+                  )}
+                  {p.receiptUrl && (
+                    <a
+                      href={`/uploads/${p.receiptUrl}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 mt-2 text-xs font-semibold text-brand-600 hover:text-brand-800 underline"
+                    >
+                      📎 {isAr ? 'عرض صورة السداد' : 'View Receipt'}
+                    </a>
+                  )}
+                </div>
+                <div className={`text-xs text-brand-400 ${isAr ? 'text-left' : 'text-right'}`}>
+                  <p>{p.paymentDate ? format(parseISO(p.paymentDate), 'dd MMM yyyy', { locale }) : ''}</p>
+                  <p className="mt-1">{p.collector?.name}</p>
+                  {p.approver?.name && status !== 'pending' && (
+                    <p className="mt-0.5 text-[10px]">
+                      {isAr ? `${status === 'approved' ? 'اعتمدها' : 'رفضها'}: ${p.approver.name}` : `${status === 'approved' ? 'Approved by' : 'Rejected by'}: ${p.approver.name}`}
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className={`text-xs text-brand-400 ${isAr ? 'text-left' : 'text-right'}`}>
-                <p>{p.paymentDate ? format(parseISO(p.paymentDate), 'dd MMM yyyy', { locale }) : ''}</p>
-                <p className="mt-1">{p.collector?.name}</p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -1288,6 +1441,14 @@ export default function ClientDetail() {
           </div>
         </form>
       </Modal>
+
+      <BookingFormModal
+        open={showBookingModal}
+        onClose={() => { setShowBookingModal(false); setEditingBooking(null); }}
+        onSaved={() => load()}
+        clientId={parseInt(id!)}
+        editing={editingBooking}
+      />
     </div>
   );
 }

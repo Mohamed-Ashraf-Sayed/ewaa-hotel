@@ -23,6 +23,7 @@ model Hotel {
 
   clients    Client[]
   contracts  Contract[]
+  bookings   Booking[]
   userHotels UserHotel[]
 }
 
@@ -53,6 +54,7 @@ model User {
   hotels          UserHotel[]
   pulseScores     DealPulseScore[]
   payments        Payment[]
+  approvedPayments Payment[] @relation("PaymentApprover")
   targets         SalesTarget[]  @relation("TargetUser")
   setTargets      SalesTarget[]  @relation("TargetSetBy")
   notifications   Notification[]
@@ -66,6 +68,9 @@ model User {
   messagesSent    Message[]      @relation("MessagesSent")
   messagesReceived Message[]     @relation("MessagesReceived")
   localEvents     LocalEvent[]
+  bookingsAssigned  Booking[]    @relation("BookingAssignedRep")
+  bookingsBooked    Booking[]    @relation("BookingBookedBy")
+  bookingsCancelled Booking[]    @relation("BookingCancelledBy")
 }
 
 model Message {
@@ -132,6 +137,8 @@ model Client {
   emailLogs   EmailLog[]
   reminders   Reminder[]
   attachments ClientAttachment[]
+  bookings    Booking[]
+  inboxEmails InboxEmail[]
 }
 
 model ClientAttachment {
@@ -183,6 +190,7 @@ model Contract {
   approvals ContractApproval[]
   payments  Payment[]
   tasks     Task[]
+  bookings  Booking[]
 }
 
 model ContractApproval {
@@ -237,11 +245,42 @@ model Payment {
   notes       String?
   receiptUrl  String?  // uploaded receipt image/file filename
   collectedBy Int
+  status         String   @default("pending") // pending | approved | rejected
+  approvedById   Int?
+  approvedAt     DateTime?
+  approvalNotes  String?
   createdAt   DateTime @default(now())
 
   contract  Contract @relation(fields: [contractId], references: [id])
   client    Client   @relation(fields: [clientId], references: [id])
   collector User     @relation(fields: [collectedBy], references: [id])
+  approver  User?    @relation("PaymentApprover", fields: [approvedById], references: [id])
+}
+
+// === EMAIL INBOX (incoming emails from clients) ===
+model InboxEmail {
+  id            Int      @id @default(autoincrement())
+  messageId     String   @unique // RFC822 Message-ID for dedup
+  fromEmail     String
+  fromName      String?
+  toEmail       String?
+  subject       String
+  bodyText      String?  // plaintext body
+  bodyHtml      String?  // HTML body if available
+  receivedAt    DateTime
+  category      String   @default("client") // client | reservations
+  isRead        Boolean  @default(false)
+  isReplied     Boolean  @default(false)
+  hasAttachments Boolean @default(false)
+  attachmentsJson String? // JSON array: [{filename, url, size}]
+  clientId      Int?
+  createdAt     DateTime @default(now())
+
+  client        Client?  @relation(fields: [clientId], references: [id])
+
+  @@index([receivedAt])
+  @@index([clientId])
+  @@index([isRead])
 }
 
 // === SALES TARGETS ===
@@ -394,6 +433,66 @@ model LocalEvent {
 
   @@unique([source, externalId])
   @@index([eventDate])
+}
+
+// === BOOKINGS (per-stay reservations from Opera) ===
+model Booking {
+  id                    Int       @id @default(autoincrement())
+  clientId              Int
+  hotelId               Int
+  contractId            Int?
+  assignedRepId         Int
+  bookedById            Int
+
+  operaConfirmationNo   String
+  guestName             String
+  reservationMadeBy     String?
+
+  arrivalDate           DateTime
+  departureDate         DateTime
+  nights                Int
+
+  roomsCount            Int       @default(1)
+  adultsCount           Int       @default(1)
+  childrenCount         Int       @default(0)
+  roomType              String?
+
+  ratePerNight          Float?
+  ratePackage           String?
+  totalAmount           Float?
+  currency              String    @default("SAR")
+  vatPercent            Float     @default(15)
+  municipalityFeePercent Float    @default(2.5)
+
+  paymentMethod         String?
+  source                String    @default("outlook")
+
+  status                String    @default("confirmed")
+  cancelledAt           DateTime?
+  cancelledById         Int?
+  cancellationReason    String?
+
+  confirmationLetterUrl  String?
+  confirmationLetterName String?
+
+  notes                 String?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  client       Client    @relation(fields: [clientId], references: [id])
+  hotel        Hotel     @relation(fields: [hotelId], references: [id])
+  contract     Contract? @relation(fields: [contractId], references: [id])
+  assignedRep  User      @relation("BookingAssignedRep", fields: [assignedRepId], references: [id])
+  bookedBy     User      @relation("BookingBookedBy", fields: [bookedById], references: [id])
+  cancelledBy  User?     @relation("BookingCancelledBy", fields: [cancelledById], references: [id])
+
+  @@index([clientId])
+  @@index([hotelId])
+  @@index([assignedRepId])
+  @@index([status])
+  @@index([arrivalDate])
+  @@index([operaConfirmationNo])
 }
 
 // === PERFORMANCE & GAMIFICATION ===
