@@ -26,7 +26,6 @@ export default function Login() {
     }
   };
 
-  const quickLogin = (e: string, p: string) => { setEmail(e); setPassword(p); };
 
   return (
     <div className="min-h-screen bg-brand-900 flex">
@@ -108,29 +107,6 @@ export default function Login() {
               </button>
             </form>
 
-            {/* Quick Login Demo */}
-            <div className="mt-6 pt-5 border-t border-brand-100">
-              <p className="text-xs text-brand-400 mb-3 font-semibold text-right">دخول سريع للتجربة</p>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: 'مدير النظام (IT)', e: 'admin@hotelcrm.com', p: 'admin123' },
-                  { label: 'مدير عام', e: 'gm@hotelcrm.com', p: 'gm123' },
-                  { label: 'نائب المدير العام', e: 'vgm@hotelcrm.com', p: 'vgm123' },
-                  { label: 'مدير مبيعات', e: 'dir1@hotelcrm.com', p: 'dir123' },
-                  { label: 'مساعد مدير مبيعات', e: 'asst1@hotelcrm.com', p: 'asst123' },
-                  { label: 'مندوب مبيعات', e: 'omar@hotelcrm.com', p: 'sales123' },
-                  { label: 'مسئول العقود', e: 'contracts@hotelcrm.com', p: 'contracts123' },
-                  { label: 'قسم الحجوزات', e: 'reservations@hotelcrm.com', p: 'res123' },
-                  { label: 'مدير الائتمان', e: 'credit@hotelcrm.com', p: 'credit123' },
-                  { label: 'موظف ائتمان', e: 'creditofficer@hotelcrm.com', p: 'credit123' },
-                ].map(({ label, e, p }) => (
-                  <button key={e} onClick={() => quickLogin(e, p)}
-                    className="text-xs p-2.5 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-600 hover:text-brand-800 text-right transition-all duration-200 border border-brand-100 hover:border-brand-200 font-medium">
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
           <p className="lg:hidden text-center text-[11px] text-white/50 mt-6 leading-relaxed">
             الجهة المنفذة • إدارة تقنية المعلومات بمجموعة فنادق إيواء
