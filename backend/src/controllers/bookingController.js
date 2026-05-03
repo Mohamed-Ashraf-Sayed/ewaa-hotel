@@ -222,6 +222,32 @@ const createBooking = async (req, res) => {
   }
 };
 
+// Compute diff between old and new booking data (only for tracked fields)
+const TRACKED_FIELDS = [
+  'operaConfirmationNo', 'guestName', 'reservationMadeBy',
+  'arrivalDate', 'departureDate', 'nights',
+  'roomsCount', 'adultsCount', 'childrenCount', 'roomType',
+  'ratePerNight', 'ratePackage', 'totalAmount', 'currency',
+  'vatPercent', 'municipalityFeePercent',
+  'paymentMethod', 'source', 'hotelId', 'contractId', 'notes',
+];
+
+const computeDiff = (existing, updated) => {
+  const changes = {};
+  const fieldsList = [];
+  for (const f of TRACKED_FIELDS) {
+    const oldVal = existing[f] instanceof Date ? existing[f].toISOString() : existing[f];
+    const newVal = updated[f] instanceof Date ? updated[f].toISOString() : updated[f];
+    if (oldVal !== newVal && !(oldVal == null && newVal == null)) {
+      changes[f] = { from: oldVal ?? null, to: newVal ?? null };
+      fieldsList.push(f);
+    }
+  }
+  return { changes, fieldsList };
+};
+
+const MATERIAL_FIELDS = ['arrivalDate', 'departureDate', 'roomsCount', 'guestName', 'hotelId'];
+
 // PUT /bookings/:id
 const updateBooking = async (req, res) => {
   try {
@@ -236,7 +262,13 @@ const updateBooking = async (req, res) => {
       ratePerNight, ratePackage, totalAmount, currency,
       vatPercent, municipalityFeePercent,
       paymentMethod, source, hotelId, contractId, notes,
+      changeReason,
     } = req.body;
+
+    // Mandatory change reason
+    if (!changeReason || !String(changeReason).trim()) {
+      return res.status(400).json({ message: 'سبب التعديل مطلوب' });
+    }
 
     const arr = arrivalDate ? new Date(arrivalDate) : existing.arrivalDate;
     const dep = departureDate ? new Date(departureDate) : existing.departureDate;
@@ -288,6 +320,44 @@ const updateBooking = async (req, res) => {
       include: bookingInclude,
     });
 
+    // Compute diff and write change log
+    const { changes, fieldsList } = computeDiff(existing, booking);
+    if (fieldsList.length > 0) {
+      await prisma.bookingChangeLog.create({
+        data: {
+          bookingId: booking.id,
+          changedById: req.user.id,
+          action: 'edit',
+          reason: String(changeReason).trim(),
+          changesJson: JSON.stringify(changes),
+          fieldsList: fieldsList.join(','),
+        },
+      });
+
+      // Notify rep on material changes (dates, rooms, guest, hotel)
+      const materialChanged = fieldsList.some(f => MATERIAL_FIELDS.includes(f));
+      if (materialChanged && booking.assignedRepId !== req.user.id) {
+        await prisma.notification.create({
+          data: {
+            userId: booking.assignedRepId,
+            type: 'booking_updated',
+            title: 'تعديل على حجز لعميلك',
+            message: `حجز ${booking.operaConfirmationNo} - ${booking.guestName} تم تعديله. السبب: ${String(changeReason).trim()}`,
+            link: `/bookings/${booking.id}`,
+          },
+        });
+      }
+
+      await prisma.activity.create({
+        data: {
+          clientId: booking.clientId,
+          userId: req.user.id,
+          type: 'booking_edited',
+          description: `تعديل حجز ${booking.operaConfirmationNo} (${fieldsList.length} حقول): ${String(changeReason).trim()}`,
+        },
+      });
+    }
+
     res.json(booking);
   } catch (err) {
     console.error('updateBooking error:', err);
@@ -299,10 +369,15 @@ const updateBooking = async (req, res) => {
 const updateStatus = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { status, cancellationReason } = req.body;
+    const { status, cancellationReason, statusReason } = req.body;
     const allowedStatuses = ['confirmed', 'checked_in', 'checked_out', 'cancelled', 'no_show'];
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({ message: 'Invalid status' });
+    }
+
+    // Cancellation requires a non-empty reason
+    if (status === 'cancelled' && (!cancellationReason || !String(cancellationReason).trim())) {
+      return res.status(400).json({ message: 'سبب الإلغاء مطلوب' });
     }
 
     const existing = await prisma.booking.findUnique({ where: { id } });
@@ -312,13 +387,29 @@ const updateStatus = async (req, res) => {
     if (status === 'cancelled') {
       data.cancelledAt = new Date();
       data.cancelledById = req.user.id;
-      data.cancellationReason = cancellationReason || null;
+      data.cancellationReason = String(cancellationReason).trim();
     }
 
     const booking = await prisma.booking.update({
       where: { id },
       data,
       include: bookingInclude,
+    });
+
+    // Build the reason for the change log
+    const logReason = status === 'cancelled'
+      ? String(cancellationReason).trim()
+      : (statusReason ? String(statusReason).trim() : `تغيير الحالة إلى ${status}`);
+
+    await prisma.bookingChangeLog.create({
+      data: {
+        bookingId: booking.id,
+        changedById: req.user.id,
+        action: status === 'cancelled' ? 'cancel' : 'status_change',
+        reason: logReason,
+        changesJson: JSON.stringify({ status: { from: existing.status, to: status } }),
+        fieldsList: 'status',
+      },
     });
 
     // Notify rep on cancellation
@@ -328,7 +419,7 @@ const updateStatus = async (req, res) => {
           userId: booking.assignedRepId,
           type: 'booking_cancelled',
           title: 'حجز تم إلغاؤه',
-          message: `حجز ${booking.operaConfirmationNo} للضيف ${booking.guestName} تم إلغاؤه`,
+          message: `حجز ${booking.operaConfirmationNo} للضيف ${booking.guestName} تم إلغاؤه. السبب: ${String(cancellationReason).trim()}`,
           link: `/bookings/${booking.id}`,
         },
       });
@@ -339,13 +430,37 @@ const updateStatus = async (req, res) => {
         clientId: booking.clientId,
         userId: req.user.id,
         type: 'booking_status_changed',
-        description: `حجز ${booking.operaConfirmationNo}: ${existing.status} → ${status}`,
+        description: `حجز ${booking.operaConfirmationNo}: ${existing.status} → ${status}${status === 'cancelled' ? ` (${String(cancellationReason).trim()})` : ''}`,
       },
     });
 
     res.json(booking);
   } catch (err) {
     console.error('updateStatus error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// GET /bookings/:id/history
+const getBookingHistory = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    // Access check: ensure user can see this booking
+    const accessFilter = await buildBookingFilter(req.user);
+    const allowed = await prisma.booking.findFirst({
+      where: { id, ...accessFilter },
+      select: { id: true },
+    });
+    if (!allowed) return res.status(403).json({ message: 'Access denied' });
+
+    const logs = await prisma.bookingChangeLog.findMany({
+      where: { bookingId: id },
+      include: { changedBy: { select: { id: true, name: true, role: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(logs);
+  } catch (err) {
+    console.error('getBookingHistory error:', err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -414,4 +529,5 @@ module.exports = {
   updateStatus,
   deleteBooking,
   extractFromLetter,
+  getBookingHistory,
 };

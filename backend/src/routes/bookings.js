@@ -9,6 +9,7 @@ const {
   updateStatus,
   deleteBooking,
   extractFromLetter,
+  getBookingHistory,
 } = require('../controllers/bookingController');
 const { authenticate, authorize } = require('../middleware/auth');
 const upload = require('../middleware/upload');
@@ -17,6 +18,7 @@ const RES_ROLES = ['reservations', 'general_manager', 'vice_gm', 'admin'];
 
 router.get('/', authenticate, getBookings);
 router.get('/client/:clientId', authenticate, getClientBookings);
+router.get('/:id/history', authenticate, getBookingHistory);
 router.get('/:id', authenticate, getBooking);
 
 router.post('/extract', authenticate, authorize(...RES_ROLES), upload.single('file'), extractFromLetter);

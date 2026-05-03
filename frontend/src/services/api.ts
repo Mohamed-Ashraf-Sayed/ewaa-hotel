@@ -261,12 +261,13 @@ export const bookingsApi = {
     if (file) fd.append('confirmationLetter', file);
     return api.put(`/bookings/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
-  updateStatus: (id: number, status: string, cancellationReason?: string) =>
-    api.put(`/bookings/${id}/status`, { status, cancellationReason }),
+  updateStatus: (id: number, status: string, opts?: { cancellationReason?: string; statusReason?: string }) =>
+    api.put(`/bookings/${id}/status`, { status, ...(opts || {}) }),
   delete: (id: number) => api.delete(`/bookings/${id}`),
   extract: (file: File) => {
     const fd = new FormData();
     fd.append('file', file);
     return api.post('/bookings/extract', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
+  history: (id: number) => api.get(`/bookings/${id}/history`),
 };

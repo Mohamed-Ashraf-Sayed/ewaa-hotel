@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, FileText, Pencil, XCircle, CheckCircle, LogIn, LogOut, Calendar, Building2, BedDouble } from 'lucide-react';
+import { Plus, Search, FileText, Pencil, XCircle, LogIn, LogOut, Calendar, Building2, BedDouble, History } from 'lucide-react';
 import { bookingsApi, hotelsApi } from '../services/api';
 import { Booking, Hotel, BookingStatus } from '../types';
 import BookingFormModal from '../components/BookingFormModal';
+import CancelBookingModal from '../components/CancelBookingModal';
+import BookingHistoryModal from '../components/BookingHistoryModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { format, parseISO } from 'date-fns';
@@ -28,6 +30,8 @@ export default function Bookings() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Booking | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<Booking | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -94,15 +98,14 @@ export default function Bookings() {
   );
 
   const updateStatus = async (b: Booking, status: BookingStatus) => {
-    let reason: string | undefined;
     if (status === 'cancelled') {
-      const r = prompt(isAr ? 'سبب الإلغاء (اختياري):' : 'Cancellation reason (optional):') ?? null;
-      if (r === null) return;
-      reason = r || undefined;
+      // Cancel uses dedicated modal (mandatory reason)
+      setCancelTarget(b);
+      return;
     }
     setBusy(b.id);
     try {
-      await bookingsApi.updateStatus(b.id, status, reason);
+      await bookingsApi.updateStatus(b.id, status);
       await load();
     } catch (err: any) {
       alert(err?.response?.data?.message || (isAr ? 'فشل التحديث' : 'Failed'));
@@ -220,6 +223,9 @@ export default function Bookings() {
                 {/* Actions */}
                 {canManage && (
                   <div className={`flex items-center gap-1.5 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
+                    <button className="btn-secondary text-xs py-1.5" onClick={() => setHistoryTarget(b)} title={isAr ? 'سجل التغييرات' : 'Change History'}>
+                      <History className="w-3.5 h-3.5" />
+                    </button>
                     {b.confirmationLetterUrl && (
                       <a href={b.confirmationLetterUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs py-1.5" title={isAr ? 'الخطاب' : 'Letter'}>
                         <FileText className="w-3.5 h-3.5" />
@@ -258,6 +264,19 @@ export default function Bookings() {
         onClose={() => { setShowForm(false); setEditing(null); }}
         onSaved={() => load()}
         editing={editing}
+      />
+
+      <CancelBookingModal
+        open={!!cancelTarget}
+        booking={cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        onCancelled={() => load()}
+      />
+
+      <BookingHistoryModal
+        open={!!historyTarget}
+        booking={historyTarget}
+        onClose={() => setHistoryTarget(null)}
       />
     </div>
   );

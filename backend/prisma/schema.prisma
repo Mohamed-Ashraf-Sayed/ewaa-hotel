@@ -71,6 +71,7 @@ model User {
   bookingsAssigned  Booking[]    @relation("BookingAssignedRep")
   bookingsBooked    Booking[]    @relation("BookingBookedBy")
   bookingsCancelled Booking[]    @relation("BookingCancelledBy")
+  bookingChangesByMe BookingChangeLog[] @relation("BookingChangedBy")
 }
 
 model Message {
@@ -486,6 +487,7 @@ model Booking {
   assignedRep  User      @relation("BookingAssignedRep", fields: [assignedRepId], references: [id])
   bookedBy     User      @relation("BookingBookedBy", fields: [bookedById], references: [id])
   cancelledBy  User?     @relation("BookingCancelledBy", fields: [cancelledById], references: [id])
+  changeLogs   BookingChangeLog[]
 
   @@index([clientId])
   @@index([hotelId])
@@ -493,6 +495,24 @@ model Booking {
   @@index([status])
   @@index([arrivalDate])
   @@index([operaConfirmationNo])
+}
+
+// === BOOKING CHANGE LOG (audit trail for edits/cancellations) ===
+model BookingChangeLog {
+  id          Int      @id @default(autoincrement())
+  bookingId   Int
+  changedById Int
+  action      String   // edit | cancel | status_change | reactivate
+  reason      String   // mandatory — sبب التعديل/الإلغاء
+  changesJson String?  // JSON: { fieldName: { from, to } }
+  fieldsList  String?  // comma-separated changed field names for quick display
+  createdAt   DateTime @default(now())
+
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  changedBy User    @relation("BookingChangedBy", fields: [changedById], references: [id])
+
+  @@index([bookingId])
+  @@index([createdAt])
 }
 
 // === PERFORMANCE & GAMIFICATION ===

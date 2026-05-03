@@ -80,6 +80,9 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
   const [extractedKeys, setExtractedKeys] = useState<Set<string>>(new Set());
   const [extractMsg, setExtractMsg] = useState('');
 
+  // Edit mode: mandatory change reason
+  const [changeReason, setChangeReason] = useState('');
+
   // Load supporting data when modal opens
   useEffect(() => {
     if (!open) return;
@@ -127,6 +130,7 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
     setError('');
     setExtractedKeys(new Set());
     setExtractMsg('');
+    setChangeReason('');
   }, [open, editing, clientId]);
 
   // Load contracts for the selected client
@@ -236,6 +240,7 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
     if (!form.guestName.trim()) return setError(isAr ? 'اسم الضيف مطلوب' : 'Guest name is required');
     if (!form.arrivalDate || !form.departureDate) return setError(isAr ? 'تاريخ الوصول والمغادرة مطلوبان' : 'Arrival and departure dates required');
     if (nights <= 0) return setError(isAr ? 'تاريخ المغادرة لازم يكون بعد الوصول' : 'Departure must be after arrival');
+    if (editing && !changeReason.trim()) return setError(isAr ? 'سبب التعديل مطلوب' : 'Change reason is required');
 
     setSaving(true);
     try {
@@ -261,6 +266,7 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
         paymentMethod: form.paymentMethod || undefined,
         source: form.source,
         notes: form.notes.trim() || undefined,
+        ...(editing && { changeReason: changeReason.trim() }),
       };
 
       const res = editing
@@ -295,6 +301,25 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
     >
       <div className="space-y-5">
         {error && <div className="bg-red-50 text-red-700 text-sm px-4 py-2.5 rounded-lg border border-red-200">{error}</div>}
+
+        {/* Change reason — required in edit mode */}
+        {editing && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <label className="text-sm font-bold text-amber-900 mb-2 block">
+              {isAr ? 'سبب التعديل' : 'Change Reason'} <span className="text-red-500">*</span>
+              <span className="text-xs text-amber-700 font-normal ms-2">
+                {isAr ? '(إجباري — هيتسجل في سجل التغييرات)' : '(required — saved in change log)'}
+              </span>
+            </label>
+            <textarea
+              className="input bg-white"
+              rows={2}
+              value={changeReason}
+              onChange={e => setChangeReason(e.target.value)}
+              placeholder={isAr ? 'مثلاً: العميل غيّر تاريخ الوصول، أو تعديل عدد الغرف بناءً على طلب الفندق...' : 'e.g. Guest changed arrival date, or rooms count adjusted...'}
+            />
+          </div>
+        )}
 
         {/* Extract from confirmation letter (optional) */}
         {!editing && (

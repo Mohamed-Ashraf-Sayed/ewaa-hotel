@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowRight, FileText, Plus, Clock, MapPin, CreditCard, Receipt, Mail, ExternalLink, BedDouble, Building2, Calendar, Pencil, XCircle, LogIn, LogOut } from 'lucide-react';
+import { ArrowRight, FileText, Plus, Clock, MapPin, CreditCard, Receipt, Mail, ExternalLink, BedDouble, Building2, Calendar, Pencil, XCircle, LogIn, LogOut, History } from 'lucide-react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { clientsApi, visitsApi, activitiesApi, contractsApi, hotelsApi, paymentsApi, pdfApi, emailApi, attachmentsApi, bookingsApi } from '../services/api';
 import { Client, Visit, Activity, Contract, Hotel, Payment, Booking, BookingStatus } from '../types';
 import Modal from '../components/Modal';
 import BookingFormModal from '../components/BookingFormModal';
+import CancelBookingModal from '../components/CancelBookingModal';
+import BookingHistoryModal from '../components/BookingHistoryModal';
 
 import { useLanguage } from '../contexts/LanguageContext';
 import { format, parseISO } from 'date-fns';
@@ -34,6 +36,8 @@ export default function ClientDetail() {
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [bookingBusy, setBookingBusy] = useState<number | null>(null);
+  const [cancelBookingTarget, setCancelBookingTarget] = useState<Booking | null>(null);
+  const [historyBookingTarget, setHistoryBookingTarget] = useState<Booking | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ contactPerson: '', countryCode: '+966', phoneNumber: '', email: '', address: '', commercialRegNo: '', taxCardNo: '', notes: '' });
   const [locUpdating, setLocUpdating] = useState(false);
@@ -610,14 +614,12 @@ export default function ClientDetail() {
             };
             const sm = statusMap[b.status];
             const updateBookingStatus = async (status: BookingStatus) => {
-              let reason: string | undefined;
               if (status === 'cancelled') {
-                const r = prompt(isAr ? 'سبب الإلغاء (اختياري):' : 'Cancellation reason (optional):') ?? null;
-                if (r === null) return;
-                reason = r || undefined;
+                setCancelBookingTarget(b);
+                return;
               }
               setBookingBusy(b.id);
-              try { await bookingsApi.updateStatus(b.id, status, reason); await load(); }
+              try { await bookingsApi.updateStatus(b.id, status); await load(); }
               catch (err: any) { alert(err?.response?.data?.message || (isAr ? 'فشل التحديث' : 'Failed')); }
               finally { setBookingBusy(null); }
             };
@@ -661,6 +663,9 @@ export default function ClientDetail() {
 
                   {hasRole('reservations', 'admin', 'general_manager', 'vice_gm') && (
                     <div className={`flex items-center gap-1.5 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
+                      <button className="btn-secondary text-xs py-1.5" onClick={() => setHistoryBookingTarget(b)} title={isAr ? 'سجل التغييرات' : 'History'}>
+                        <History className="w-3.5 h-3.5" />
+                      </button>
                       {b.confirmationLetterUrl && (
                         <a href={b.confirmationLetterUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs py-1.5" title={isAr ? 'الخطاب' : 'Letter'}>
                           <FileText className="w-3.5 h-3.5" />
@@ -1448,6 +1453,19 @@ export default function ClientDetail() {
         onSaved={() => load()}
         clientId={parseInt(id!)}
         editing={editingBooking}
+      />
+
+      <CancelBookingModal
+        open={!!cancelBookingTarget}
+        booking={cancelBookingTarget}
+        onClose={() => setCancelBookingTarget(null)}
+        onCancelled={() => load()}
+      />
+
+      <BookingHistoryModal
+        open={!!historyBookingTarget}
+        booking={historyBookingTarget}
+        onClose={() => setHistoryBookingTarget(null)}
       />
     </div>
   );
