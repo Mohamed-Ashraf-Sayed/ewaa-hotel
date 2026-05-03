@@ -401,7 +401,7 @@ export default function Inbox() {
                         </button>
                       </div>
                     </div>
-                    {imapTestResult?.id === a.id && (
+                    {imapTestResult && imapTestResult.id === a.id && (
                       <div className={`mt-2 text-[11px] px-2 py-1 rounded ${imapTestResult.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                         {imapTestResult.msg}
                       </div>
