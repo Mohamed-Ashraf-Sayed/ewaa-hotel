@@ -17,9 +17,11 @@ const passwordRules = {
 
 router.get('/', authenticate, getUsers);
 router.get('/org-chart', authenticate, getOrgChart);
-router.post('/', authenticate, authorize('general_manager', 'vice_gm'), sanitizeBody(['password']), validateFields(userRules), createUser);
-router.put('/:id', authenticate, authorize('general_manager', 'vice_gm'), sanitizeBody(['password']), updateUser);
-router.put('/:id/reset-password', authenticate, authorize('general_manager', 'vice_gm'), sanitizeBody(['newPassword']), validateFields(passwordRules), resetPassword);
-router.put('/:id/commission', authenticate, authorize('general_manager'), updateCommissionRate);
+// User management is admin-only. The authorize() middleware lets `admin` bypass automatically;
+// listing 'admin' here makes the intent explicit and blocks GM / VGM.
+router.post('/', authenticate, authorize('admin'), sanitizeBody(['password']), validateFields(userRules), createUser);
+router.put('/:id', authenticate, authorize('admin'), sanitizeBody(['password']), updateUser);
+router.put('/:id/reset-password', authenticate, authorize('admin'), sanitizeBody(['newPassword']), validateFields(passwordRules), resetPassword);
+router.put('/:id/commission', authenticate, authorize('admin'), updateCommissionRate);
 
 module.exports = router;

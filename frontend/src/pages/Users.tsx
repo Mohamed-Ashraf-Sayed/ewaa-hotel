@@ -106,8 +106,9 @@ export default function Users() {
   };
 
   const managers = users.filter(u => ['general_manager', 'vice_gm', 'sales_director'].includes(u.role));
-  const canAdmin = hasRole('general_manager', 'vice_gm');
-  const isGM = hasRole('general_manager');
+  // Only system Admin can add/edit/reset users
+  const canAdmin = hasRole('admin');
+  const isGM = hasRole('admin');
   const grouped = ROLES.map(r => ({ ...r, members: users.filter(u => u.role === r.value) })).filter(g => g.members.length > 0);
   const isAr = lang === 'ar';
 
