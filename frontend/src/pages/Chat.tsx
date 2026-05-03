@@ -6,11 +6,27 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { format, parseISO, isToday, isYesterday } from 'date-fns';
 import { arSA, enUS } from 'date-fns/locale';
 
+type Department = 'management' | 'credit' | 'reservations' | 'contracts' | 'sales_muhaidib' | 'sales_grand_awa' | 'sales_other' | 'other';
+
 interface Contact {
   id: number; name: string; role: string; email: string;
+  department: Department;
   lastMessage?: { content: string; createdAt: string; fromUserId: number };
   unreadCount: number;
 }
+
+const DEPARTMENT_LABELS: Record<Department, { ar: string; en: string; emoji: string }> = {
+  management:      { ar: 'الإدارة',                en: 'Management',          emoji: '🏛️' },
+  credit:          { ar: 'الائتمان',               en: 'Credit',              emoji: '💳' },
+  reservations:    { ar: 'الحجوزات',                en: 'Reservations',        emoji: '🛎️' },
+  contracts:       { ar: 'العقود',                  en: 'Contracts',           emoji: '📄' },
+  sales_muhaidib:  { ar: 'مبيعات المهيدب',          en: 'Muhaidib Sales',      emoji: '🏨' },
+  sales_grand_awa: { ar: 'مبيعات إيواء وجراند بلازا', en: 'Awa & Grand Sales', emoji: '🌟' },
+  sales_other:     { ar: 'مبيعات أخرى',             en: 'Other Sales',         emoji: '👥' },
+  other:           { ar: 'أخرى',                   en: 'Other',               emoji: '👤' },
+};
+
+const DEPARTMENT_ORDER: Department[] = ['management', 'credit', 'reservations', 'contracts', 'sales_muhaidib', 'sales_grand_awa', 'sales_other', 'other'];
 
 interface Message {
   id: number; fromUserId: number; toUserId: number;
@@ -148,44 +164,74 @@ export default function Chat() {
                 {isAr ? 'لا يوجد جهات اتصال' : 'No contacts'}
               </div>
             ) : (
-              filteredContacts.map(c => (
-                <button key={c.id} onClick={() => openConversation(c)}
-                  className={`w-full text-right p-3 hover:bg-brand-50 transition-colors border-b border-brand-50 ${
-                    activeContact?.id === c.id ? 'bg-brand-50' : ''
-                  } ${isAr ? 'text-right' : 'text-left'}`}>
-                  <div className={`flex items-start gap-3 ${isAr ? 'flex-row-reverse' : ''}`}>
-                    <div className="relative flex-shrink-0">
-                      <div className="w-10 h-10 rounded-full bg-brand-800 flex items-center justify-center text-white font-bold text-sm">
-                        {c.name.charAt(0)}
-                      </div>
-                      {c.unreadCount > 0 && (
-                        <div className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                          {c.unreadCount}
+              DEPARTMENT_ORDER.map(dept => {
+                // Filter contacts by department, then by unread first / last-message time
+                const group = filteredContacts.filter(c => (c.department || 'other') === dept);
+                if (group.length === 0) return null;
+                group.sort((a, b) => {
+                  if ((b.unreadCount || 0) !== (a.unreadCount || 0)) return (b.unreadCount || 0) - (a.unreadCount || 0);
+                  const at = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
+                  const bt = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
+                  if (at !== bt) return bt - at;
+                  return a.name.localeCompare(b.name, isAr ? 'ar' : 'en');
+                });
+                const dl = DEPARTMENT_LABELS[dept];
+                const groupUnread = group.reduce((s, c) => s + (c.unreadCount || 0), 0);
+                return (
+                  <div key={dept}>
+                    <div className={`sticky top-0 z-10 bg-brand-50/95 backdrop-blur-sm px-3 py-1.5 text-[11px] font-bold text-brand-600 border-y border-brand-100 flex items-center justify-between ${isAr ? 'flex-row-reverse' : ''}`}>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span>{dl.emoji}</span>
+                        <span>{isAr ? dl.ar : dl.en}</span>
+                        <span className="text-brand-400 font-medium">({group.length})</span>
+                      </span>
+                      {groupUnread > 0 && (
+                        <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full">
+                          {groupUnread}
+                        </span>
+                      )}
+                    </div>
+                    {group.map(c => (
+                      <button key={c.id} onClick={() => openConversation(c)}
+                        className={`w-full text-right p-3 hover:bg-brand-50 transition-colors border-b border-brand-50 ${
+                          activeContact?.id === c.id ? 'bg-brand-50' : ''
+                        } ${isAr ? 'text-right' : 'text-left'}`}>
+                        <div className={`flex items-start gap-3 ${isAr ? 'flex-row-reverse' : ''}`}>
+                          <div className="relative flex-shrink-0">
+                            <div className="w-10 h-10 rounded-full bg-brand-800 flex items-center justify-center text-white font-bold text-sm">
+                              {c.name.charAt(0)}
+                            </div>
+                            {c.unreadCount > 0 && (
+                              <div className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                                {c.unreadCount}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className={`flex items-center justify-between gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+                              <p className="font-bold text-brand-900 text-sm truncate">{c.name}</p>
+                              {c.lastMessage && (
+                                <span className="text-[10px] text-brand-400 flex-shrink-0">
+                                  {formatMsgTime(c.lastMessage.createdAt)}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-brand-400 mt-0.5">
+                              {ROLE_LABEL[c.role]?.[isAr ? 'ar' : 'en'] || c.role}
+                            </p>
+                            {c.lastMessage && (
+                              <p className={`text-xs mt-1 truncate ${c.unreadCount > 0 ? 'text-brand-700 font-semibold' : 'text-brand-400'}`}>
+                                {c.lastMessage.fromUserId === user?.id ? (isAr ? 'أنت: ' : 'You: ') : ''}
+                                {c.lastMessage.content}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className={`flex items-center justify-between gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
-                        <p className="font-bold text-brand-900 text-sm truncate">{c.name}</p>
-                        {c.lastMessage && (
-                          <span className="text-[10px] text-brand-400 flex-shrink-0">
-                            {formatMsgTime(c.lastMessage.createdAt)}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-brand-400 mt-0.5">
-                        {ROLE_LABEL[c.role]?.[isAr ? 'ar' : 'en'] || c.role}
-                      </p>
-                      {c.lastMessage && (
-                        <p className={`text-xs mt-1 truncate ${c.unreadCount > 0 ? 'text-brand-700 font-semibold' : 'text-brand-400'}`}>
-                          {c.lastMessage.fromUserId === user?.id ? (isAr ? 'أنت: ' : 'You: ') : ''}
-                          {c.lastMessage.content}
-                        </p>
-                      )}
-                    </div>
+                      </button>
+                    ))}
                   </div>
-                </button>
-              ))
+                );
+              })
             )}
           </div>
         </div>

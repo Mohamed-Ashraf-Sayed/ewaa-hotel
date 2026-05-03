@@ -2,43 +2,18 @@ const { PrismaClient } = require('@prisma/client');
 const { getSubordinateIds } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
-// GET /messages/contacts — list users available to chat with based on hierarchy
+// GET /messages/contacts — list every active user across all departments so
+// staff can chat with their managers' managers and across teams.
 const getContacts = async (req, res) => {
   try {
     const me = req.user;
-    let where = {};
-
-    let baseIds = new Set();
-    if (me.role === 'admin' || me.role === 'general_manager' || me.role === 'vice_gm') {
-      const all = await prisma.user.findMany({ where: { isActive: true, NOT: { id: me.id } }, select: { id: true } });
-      all.forEach(u => baseIds.add(u.id));
-    } else if (me.role === 'sales_director') {
-      const subIds = await getSubordinateIds(me.id);
-      [...subIds, me.managerId].filter(Boolean).forEach(id => baseIds.add(id));
-    } else if (me.role === 'assistant_sales' && me.managerId) {
-      const teamIds = await getSubordinateIds(me.managerId);
-      [me.managerId, ...teamIds.filter(id => id !== me.id)].forEach(id => baseIds.add(id));
-    } else if (me.managerId) {
-      const siblings = await prisma.user.findMany({
-        where: { managerId: me.managerId, isActive: true, NOT: { id: me.id } },
-        select: { id: true }
-      });
-      [me.managerId, ...siblings.map(s => s.id)].forEach(id => baseIds.add(id));
-    }
-
-    // Include anyone who has had a message conversation with me (so admins/anyone outside hierarchy still appear)
-    const conversationPartners = await prisma.message.findMany({
-      where: { OR: [{ fromUserId: me.id }, { toUserId: me.id }] },
-      select: { fromUserId: true, toUserId: true },
-    });
-    conversationPartners.forEach(m => {
-      if (m.fromUserId !== me.id) baseIds.add(m.fromUserId);
-      if (m.toUserId !== me.id) baseIds.add(m.toUserId);
-    });
 
     const contacts = await prisma.user.findMany({
-      where: { isActive: true, id: { in: Array.from(baseIds) } },
-      select: { id: true, name: true, role: true, email: true },
+      where: { isActive: true, NOT: { id: me.id } },
+      select: {
+        id: true, name: true, role: true, email: true,
+        hotels: { select: { hotel: { select: { group: true } } } },
+      },
       orderBy: { name: 'asc' },
     });
 
@@ -56,7 +31,23 @@ const getContacts = async (req, res) => {
       const unreadCount = await prisma.message.count({
         where: { fromUserId: c.id, toUserId: me.id, isRead: false },
       });
-      return { ...c, lastMessage: lastMsg, unreadCount };
+      // Compute department: management / credit / reservations / sales-muhaidib / sales-grand-awa / other
+      let department = 'other';
+      if (['admin', 'general_manager', 'vice_gm'].includes(c.role)) department = 'management';
+      else if (c.role === 'credit_manager' || c.role === 'credit_officer') department = 'credit';
+      else if (c.role === 'reservations') department = 'reservations';
+      else if (c.role === 'contract_officer') department = 'contracts';
+      else if (['sales_director', 'assistant_sales', 'sales_rep'].includes(c.role)) {
+        const groups = (c.hotels || []).map(uh => uh.hotel?.group).filter(Boolean);
+        const hasMuhaidib = groups.includes('muhaidib_serviced');
+        const hasGrandAwa = groups.includes('awa_hotels') || groups.includes('grand_plaza');
+        if (hasMuhaidib && !hasGrandAwa) department = 'sales_muhaidib';
+        else if (hasGrandAwa && !hasMuhaidib) department = 'sales_grand_awa';
+        else if (hasMuhaidib && hasGrandAwa) department = 'sales_muhaidib'; // pick one if mixed
+        else department = 'sales_other';
+      }
+      const { hotels, ...rest } = c;
+      return { ...rest, department, lastMessage: lastMsg, unreadCount };
     }));
 
     // Sort by last message time desc, then by name
