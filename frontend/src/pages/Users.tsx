@@ -252,13 +252,57 @@ export default function Users() {
           </div>
           <div>
             <label className="label">{t('user_hotels')}</label>
-            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border border-brand-200 rounded-lg p-2">
-              {hotels.map(h => (
-                <label key={h.id} className={`flex items-center gap-2 p-2 rounded-lg border border-brand-100 hover:bg-brand-50 cursor-pointer ${isAr ? 'flex-row-reverse' : ''}`}>
-                  <span className="text-xs truncate">{isAr ? h.name : (h.nameEn || h.name)}</span>
-                  <input type="checkbox" checked={form.hotelIds.includes(h.id.toString())} onChange={() => toggleHotel(h.id.toString())} className="rounded text-brand-600 flex-shrink-0" />
-                </label>
-              ))}
+            <div className="space-y-3 max-h-72 overflow-y-auto border border-brand-200 rounded-lg p-3">
+              {([
+                { key: 'muhaidib_serviced', ar: 'شقق المهيدب المخدومة', en: 'Muhaidib Serviced Apartments' },
+                { key: 'awa_hotels',        ar: 'فنادق إيواء',          en: 'Awa Hotels' },
+                { key: 'grand_plaza',       ar: 'جراند بلازا',          en: 'Grand Plaza' },
+              ] as const).map(brand => {
+                const brandHotels = hotels.filter(h => h.isActive && h.group === brand.key);
+                if (brandHotels.length === 0) return null;
+                const brandIds = brandHotels.map(h => h.id.toString());
+                const allSelected = brandIds.every(id => form.hotelIds.includes(id));
+                const someSelected = !allSelected && brandIds.some(id => form.hotelIds.includes(id));
+                const toggleBrand = () => {
+                  if (allSelected) {
+                    setForm(p => ({ ...p, hotelIds: p.hotelIds.filter(id => !brandIds.includes(id)) }));
+                  } else {
+                    setForm(p => ({ ...p, hotelIds: Array.from(new Set([...p.hotelIds, ...brandIds])) }));
+                  }
+                };
+                return (
+                  <div key={brand.key} className="rounded-lg border border-brand-100 overflow-hidden">
+                    <label className={`flex items-center gap-2 p-2.5 bg-brand-50/70 cursor-pointer hover:bg-brand-100 ${isAr ? 'flex-row-reverse' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        ref={el => { if (el) el.indeterminate = someSelected; }}
+                        onChange={toggleBrand}
+                        className="rounded text-brand-600 w-4 h-4 flex-shrink-0"
+                      />
+                      <span className={`flex-1 font-bold text-sm text-brand-900 ${isAr ? 'text-right' : 'text-left'}`}>
+                        {isAr ? brand.ar : brand.en}
+                      </span>
+                      <span className="text-[11px] text-brand-500 flex-shrink-0">
+                        {brandIds.filter(id => form.hotelIds.includes(id)).length} / {brandHotels.length}
+                      </span>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 p-2 bg-white">
+                      {brandHotels.map(h => (
+                        <label key={h.id} className={`flex items-center gap-2 px-2 py-1.5 rounded hover:bg-brand-50 cursor-pointer ${isAr ? 'flex-row-reverse' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={form.hotelIds.includes(h.id.toString())}
+                            onChange={() => toggleHotel(h.id.toString())}
+                            className="rounded text-brand-600 flex-shrink-0"
+                          />
+                          <span className="text-xs text-brand-700 truncate">{isAr ? h.name : (h.nameEn || h.name)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
           <div className="flex gap-3">
