@@ -189,6 +189,16 @@ export const inboxApi = {
   pollNow: () => api.post('/inbox/poll-now'),
 };
 
+// IMAP accounts (mailboxes the system polls)
+export const imapApi = {
+  list: () => api.get('/imap-accounts'),
+  create: (data: any) => api.post('/imap-accounts', data),
+  update: (id: number, data: any) => api.put(`/imap-accounts/${id}`, data),
+  remove: (id: number) => api.delete(`/imap-accounts/${id}`),
+  test: (id: number) => api.post(`/imap-accounts/${id}/test`),
+  pollNow: () => api.post('/imap-accounts/poll-now'),
+};
+
 // Client Attachments
 export const attachmentsApi = {
   list: (clientId: number) => api.get(`/clients/${clientId}/attachments`),

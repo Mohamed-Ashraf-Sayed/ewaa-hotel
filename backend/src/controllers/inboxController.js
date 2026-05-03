@@ -69,8 +69,8 @@ const markAllRead = async (_req, res) => {
 
 const pollNow = async (_req, res) => {
   try {
-    const { pollOnce } = require('../jobs/inboxPoll');
-    pollOnce().catch(() => {});
+    const { pollAllAccounts } = require('../jobs/inboxPoll');
+    pollAllAccounts().catch(() => {});
     res.json({ message: 'Poll triggered' });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });

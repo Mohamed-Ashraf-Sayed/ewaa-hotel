@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, Search, RefreshCw, Inbox as InboxIcon, MailOpen, CheckCheck, Building2, Paperclip } from 'lucide-react';
-import { inboxApi } from '../services/api';
+import { Mail, Search, RefreshCw, Inbox as InboxIcon, MailOpen, CheckCheck, Building2, Paperclip, Settings, Plus, Trash2, TestTube2, AlertCircle } from 'lucide-react';
+import { inboxApi, imapApi } from '../services/api';
+import Modal from '../components/Modal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
@@ -40,6 +41,7 @@ export default function Inbox() {
   const isAr = lang === 'ar';
   const locale = isAr ? arSA : enUS;
   const canPoll = hasRole('admin', 'general_manager', 'vice_gm', 'reservations');
+  const canManageImap = hasRole('admin', 'general_manager', 'vice_gm');
 
   const [items, setItems] = useState<InboxItem[]>([]);
   const [unread, setUnread] = useState(0);
@@ -48,6 +50,65 @@ export default function Inbox() {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [polling, setPolling] = useState(false);
+  const [showImapSettings, setShowImapSettings] = useState(false);
+  const [imapAccounts, setImapAccounts] = useState<any[]>([]);
+  const emptyImapForm = { label: '', host: 'outlook.office365.com', port: '993', secure: true, username: '', password: '', mailbox: 'INBOX', isActive: true, captureAll: false, pollIntervalMs: '180000' };
+  const [imapForm, setImapForm] = useState<any>(emptyImapForm);
+  const [imapEditing, setImapEditing] = useState<any>(null);
+  const [imapBusy, setImapBusy] = useState<number | 'new' | null>(null);
+  const [imapTestResult, setImapTestResult] = useState<{ id: number; ok: boolean; msg: string } | null>(null);
+
+  const loadImapAccounts = async () => {
+    try { const r = await imapApi.list(); setImapAccounts(r.data); } catch { setImapAccounts([]); }
+  };
+  const openImapModal = () => { loadImapAccounts(); setImapForm(emptyImapForm); setImapEditing(null); setImapTestResult(null); setShowImapSettings(true); };
+  const startEditImap = (a: any) => {
+    setImapEditing(a);
+    setImapForm({
+      label: a.label, host: a.host, port: String(a.port), secure: a.secure,
+      username: a.username, password: '', mailbox: a.mailbox || 'INBOX',
+      isActive: a.isActive, captureAll: a.captureAll, pollIntervalMs: String(a.pollIntervalMs || 180000),
+    });
+    setImapTestResult(null);
+  };
+  const saveImap = async () => {
+    if (!imapForm.label || !imapForm.host || !imapForm.username) { alert(isAr ? 'الاسم والمضيف والبريد مطلوبين' : 'Label, host, and username required'); return; }
+    if (!imapEditing && !imapForm.password) { alert(isAr ? 'الباسورد مطلوب' : 'Password required'); return; }
+    setImapBusy(imapEditing?.id || 'new');
+    try {
+      const body: any = { ...imapForm, port: parseInt(imapForm.port) || 993, pollIntervalMs: parseInt(imapForm.pollIntervalMs) || 180000 };
+      if (imapEditing && !body.password) delete body.password; // don't overwrite existing password
+      if (imapEditing) await imapApi.update(imapEditing.id, body);
+      else await imapApi.create(body);
+      await loadImapAccounts();
+      setImapForm(emptyImapForm);
+      setImapEditing(null);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || (isAr ? 'فشل الحفظ' : 'Save failed'));
+    } finally {
+      setImapBusy(null);
+    }
+  };
+  const removeImap = async (a: any) => {
+    if (!confirm(isAr ? `حذف الحساب "${a.label}"؟` : `Delete account "${a.label}"?`)) return;
+    setImapBusy(a.id);
+    try { await imapApi.remove(a.id); await loadImapAccounts(); }
+    catch { alert(isAr ? 'فشل الحذف' : 'Failed'); }
+    finally { setImapBusy(null); }
+  };
+  const testImap = async (a: any) => {
+    setImapBusy(a.id);
+    setImapTestResult(null);
+    try {
+      const r = await imapApi.test(a.id);
+      setImapTestResult({ id: a.id, ok: true, msg: isAr ? `الاتصال نجح — ${r.data.messages} إيميل (${r.data.unseen} غير مقروء)` : `Connected — ${r.data.messages} emails (${r.data.unseen} unread)` });
+    } catch (err: any) {
+      setImapTestResult({ id: a.id, ok: false, msg: err?.response?.data?.message || (isAr ? 'فشل الاتصال' : 'Connection failed') });
+    } finally {
+      setImapBusy(null);
+      loadImapAccounts();
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -160,6 +221,11 @@ export default function Inbox() {
           {counts.unread > 0 && (
             <button onClick={handleMarkAllRead} className="btn-secondary text-sm">
               <CheckCheck className="w-4 h-4" /> {isAr ? 'تعليم الكل كمقروء' : 'Mark all read'}
+            </button>
+          )}
+          {canManageImap && (
+            <button onClick={openImapModal} className="btn-secondary text-sm">
+              <Settings className="w-4 h-4" /> {isAr ? 'إعدادات الإيميل' : 'Email Settings'}
             </button>
           )}
         </div>
@@ -290,6 +356,127 @@ export default function Inbox() {
           )}
         </div>
       </div>
+
+      {/* IMAP Settings Modal */}
+      <Modal open={showImapSettings} onClose={() => setShowImapSettings(false)} title={isAr ? 'إعدادات حسابات البريد (IMAP)' : 'Email Accounts (IMAP)'} size="xl">
+        <div className="space-y-4">
+          {/* Existing accounts list */}
+          <div>
+            <h3 className="text-sm font-bold text-brand-900 mb-2">{isAr ? 'الحسابات المضافة' : 'Configured Accounts'}</h3>
+            {imapAccounts.length === 0 ? (
+              <p className="text-xs text-brand-400 py-3 text-center">{isAr ? 'لا يوجد حسابات بعد' : 'No accounts yet'}</p>
+            ) : (
+              <div className="space-y-2">
+                {imapAccounts.map(a => (
+                  <div key={a.id} className={`p-3 rounded-lg border ${a.lastError ? 'border-red-200 bg-red-50/30' : a.isActive ? 'border-emerald-200 bg-emerald-50/30' : 'border-brand-100 bg-brand-50/30'}`}>
+                    <div className={`flex items-center justify-between gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+                      <div className={isAr ? 'text-right' : ''}>
+                        <p className="font-bold text-sm text-brand-900">
+                          {a.label}
+                          {a.isActive ? <span className="ms-2 text-[10px] text-emerald-600">●</span> : <span className="ms-2 text-[10px] text-brand-400">○</span>}
+                        </p>
+                        <p className="text-[11px] text-brand-500" dir="ltr">{a.username} @ {a.host}:{a.port}</p>
+                        <p className="text-[10px] text-brand-400 mt-0.5">
+                          {a.captureAll ? (isAr ? '🌐 يحفظ كل الإيميلات' : '🌐 Captures all emails') : (isAr ? '👤 يحفظ بريد العملاء فقط' : '👤 Client emails only')}
+                          {a.lastPolledAt && <span className="ms-2">· {isAr ? 'آخر فحص:' : 'Last poll:'} {new Date(a.lastPolledAt).toLocaleString(isAr ? 'ar-EG' : 'en-US')}</span>}
+                        </p>
+                        {a.lastError && (
+                          <p className="text-[11px] text-red-600 mt-1 inline-flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" /> {a.lastError}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button type="button" onClick={() => testImap(a)} disabled={imapBusy === a.id}
+                          className="text-[11px] px-2 py-1 rounded bg-brand-100 text-brand-700 hover:bg-brand-200 inline-flex items-center gap-1 disabled:opacity-50">
+                          <TestTube2 className="w-3 h-3" /> {isAr ? 'اختبار' : 'Test'}
+                        </button>
+                        <button type="button" onClick={() => startEditImap(a)}
+                          className="text-[11px] px-2 py-1 rounded bg-brand-100 text-brand-700 hover:bg-brand-200">
+                          {isAr ? 'تعديل' : 'Edit'}
+                        </button>
+                        <button type="button" onClick={() => removeImap(a)} disabled={imapBusy === a.id}
+                          className="text-[11px] px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100 inline-flex items-center gap-1 disabled:opacity-50">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                    {imapTestResult?.id === a.id && (
+                      <div className={`mt-2 text-[11px] px-2 py-1 rounded ${imapTestResult.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                        {imapTestResult.msg}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add / edit form */}
+          <div className="border-t border-brand-100 pt-4">
+            <h3 className="text-sm font-bold text-brand-900 mb-2 inline-flex items-center gap-1">
+              <Plus className="w-4 h-4" />
+              {imapEditing ? (isAr ? `تعديل حساب: ${imapEditing.label}` : `Edit: ${imapEditing.label}`) : (isAr ? 'إضافة حساب جديد' : 'Add New Account')}
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="label text-xs">{isAr ? 'الاسم (عشان تتعرفي عليه)' : 'Label'} *</label>
+                <input className="input" placeholder={isAr ? 'مثلاً: حجوزات إيواء' : 'e.g. Reservations Inbox'} value={imapForm.label} onChange={e => setImapForm((p: any) => ({ ...p, label: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label text-xs">{isAr ? 'البريد الإلكتروني' : 'Username / Email'} *</label>
+                <input className="input" type="email" dir="ltr" value={imapForm.username} onChange={e => setImapForm((p: any) => ({ ...p, username: e.target.value }))} placeholder="reservations@ewaahotels.com" />
+              </div>
+              <div>
+                <label className="label text-xs">
+                  {isAr ? 'الباسورد' : 'Password'} {imapEditing && <span className="text-brand-400 font-normal">{isAr ? '(اتركه فاضي عشان يفضل اللي قبل)' : '(leave empty to keep)'}</span>} {!imapEditing && '*'}
+                </label>
+                <input className="input" type="password" dir="ltr" value={imapForm.password} onChange={e => setImapForm((p: any) => ({ ...p, password: e.target.value }))} placeholder="App Password" />
+              </div>
+              <div>
+                <label className="label text-xs">{isAr ? 'الخادم (Host)' : 'Host'} *</label>
+                <input className="input" dir="ltr" value={imapForm.host} onChange={e => setImapForm((p: any) => ({ ...p, host: e.target.value }))} placeholder="outlook.office365.com" />
+              </div>
+              <div>
+                <label className="label text-xs">{isAr ? 'البورت' : 'Port'}</label>
+                <input className="input" type="number" dir="ltr" value={imapForm.port} onChange={e => setImapForm((p: any) => ({ ...p, port: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label text-xs">{isAr ? 'الفولدر' : 'Mailbox'}</label>
+                <input className="input" dir="ltr" value={imapForm.mailbox} onChange={e => setImapForm((p: any) => ({ ...p, mailbox: e.target.value }))} placeholder="INBOX" />
+              </div>
+              <div>
+                <label className="label text-xs">{isAr ? 'الفحص كل (ميلي ثانية)' : 'Poll Interval (ms)'}</label>
+                <input className="input" type="number" dir="ltr" value={imapForm.pollIntervalMs} onChange={e => setImapForm((p: any) => ({ ...p, pollIntervalMs: e.target.value }))} placeholder="180000" />
+              </div>
+              <div className="col-span-2 flex flex-wrap gap-4 pt-2">
+                <label className={`inline-flex items-center gap-2 text-sm ${isAr ? 'flex-row-reverse' : ''}`}>
+                  <input type="checkbox" checked={imapForm.secure} onChange={e => setImapForm((p: any) => ({ ...p, secure: e.target.checked }))} />
+                  {isAr ? 'TLS / SSL مفعّل' : 'TLS / SSL'}
+                </label>
+                <label className={`inline-flex items-center gap-2 text-sm ${isAr ? 'flex-row-reverse' : ''}`}>
+                  <input type="checkbox" checked={imapForm.isActive} onChange={e => setImapForm((p: any) => ({ ...p, isActive: e.target.checked }))} />
+                  {isAr ? 'فعّال (يتم الفحص)' : 'Active (polling)'}
+                </label>
+                <label className={`inline-flex items-center gap-2 text-sm ${isAr ? 'flex-row-reverse' : ''}`}>
+                  <input type="checkbox" checked={imapForm.captureAll} onChange={e => setImapForm((p: any) => ({ ...p, captureAll: e.target.checked }))} />
+                  {isAr ? 'يحفظ كل الإيميلات (مش بس من العملاء)' : 'Capture all emails (not just from clients)'}
+                </label>
+              </div>
+            </div>
+            <div className={`flex gap-2 mt-4 ${isAr ? 'flex-row-reverse' : ''}`}>
+              <button type="button" onClick={saveImap} disabled={imapBusy !== null} className="btn-primary">
+                {imapEditing ? (isAr ? 'حفظ التعديلات' : 'Save Changes') : (isAr ? 'إضافة الحساب' : 'Add Account')}
+              </button>
+              {imapEditing && (
+                <button type="button" onClick={() => { setImapEditing(null); setImapForm(emptyImapForm); }} className="btn-secondary">
+                  {isAr ? 'إلغاء التعديل' : 'Cancel Edit'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

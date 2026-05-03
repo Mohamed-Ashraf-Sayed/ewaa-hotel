@@ -258,6 +258,25 @@ model Payment {
   approver  User?    @relation("PaymentApprover", fields: [approvedById], references: [id])
 }
 
+// === IMAP ACCOUNTS — mailboxes the system polls for incoming emails ===
+model ImapAccount {
+  id              Int       @id @default(autoincrement())
+  label           String    // friendly name, e.g. "Reservations"
+  host            String
+  port            Int       @default(993)
+  secure          Boolean   @default(true)
+  username        String    // login email
+  password        String    // app password / mailbox password
+  mailbox         String    @default("INBOX")
+  isActive        Boolean   @default(true)
+  captureAll      Boolean   @default(false) // false = only emails from registered clients; true = capture every email
+  pollIntervalMs  Int       @default(180000)
+  lastPolledAt    DateTime?
+  lastError       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
 // === EMAIL INBOX (incoming emails from clients) ===
 model InboxEmail {
   id            Int      @id @default(autoincrement())
@@ -275,6 +294,7 @@ model InboxEmail {
   hasAttachments Boolean @default(false)
   attachmentsJson String? // JSON array: [{filename, url, size}]
   clientId      Int?
+  imapAccountId Int?     // which mailbox this came from
   createdAt     DateTime @default(now())
 
   client        Client?  @relation(fields: [clientId], references: [id])

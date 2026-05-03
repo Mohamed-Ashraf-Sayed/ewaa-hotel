@@ -1,88 +1,81 @@
-// Background job that connects to a configured IMAP mailbox, fetches new
-// messages, and stores any whose `From` matches a registered client.
-//
-// Configuration via environment variables:
-//   IMAP_HOST       e.g. "outlook.office365.com" or "imap.gmail.com"
-//   IMAP_PORT       e.g. 993 (defaults to 993)
-//   IMAP_SECURE     "true"/"false" (defaults to true; TLS on port 993)
-//   IMAP_USER       mailbox login (e.g. reservations@example.com)
-//   IMAP_PASS       mailbox password / app password
-//   IMAP_MAILBOX    folder to watch (defaults to "INBOX")
-//   INBOX_POLL_INTERVAL_MS   poll interval in ms (defaults to 180000 = 3min)
-//
-// Behaviour: only emails whose sender matches a `Client.email` (case-insensitive)
-// are persisted. Others are ignored. Each message is stored once (uses RFC822
-// Message-ID for dedup).
+// Background job that polls every active ImapAccount in the DB and stores
+// matching emails as InboxEmail rows. Falls back to env-var config (single
+// account) when there are no DB-defined accounts.
 
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-let pollTimer = null;
-let isPolling = false;
+const SCHEDULER_TICK_MS = 60_000; // master tick every minute; each account decides whether to run based on its own interval
 
-const isEnabled = () => Boolean(process.env.IMAP_HOST && process.env.IMAP_USER && process.env.IMAP_PASS);
-
-const buildClient = () => {
-  const { ImapFlow } = require('imapflow');
-  return new ImapFlow({
-    host: process.env.IMAP_HOST,
-    port: parseInt(process.env.IMAP_PORT || '993', 10),
-    secure: (process.env.IMAP_SECURE || 'true') === 'true',
-    auth: { user: process.env.IMAP_USER, pass: process.env.IMAP_PASS },
-    logger: false,
-  });
-};
+let schedulerTimer = null;
+const polling = new Set(); // ids currently polling, prevent overlap per-account
 
 const safeText = (s) => (s == null ? null : String(s).slice(0, 500_000));
 
-const pollOnce = async () => {
-  if (isPolling) return;
-  if (!isEnabled()) return;
-  isPolling = true;
-
+const pollAccount = async (account) => {
+  if (!account || polling.has(account.id)) return;
+  polling.add(account.id);
   let client;
   try {
-    client = buildClient();
+    const { ImapFlow } = require('imapflow');
+    const { simpleParser } = require('mailparser');
+
+    client = new ImapFlow({
+      host: account.host,
+      port: account.port,
+      secure: account.secure,
+      auth: { user: account.username, pass: account.password },
+      logger: false,
+    });
     await client.connect();
 
-    const mailbox = process.env.IMAP_MAILBOX || 'INBOX';
-    const lock = await client.getMailboxLock(mailbox);
+    const lock = await client.getMailboxLock(account.mailbox || 'INBOX');
     try {
-      // Fetch only the most recent 200 messages (reverse) so we don't choke on
-      // large mailboxes. Dedup by messageId means re-running is cheap.
-      const status = await client.status(mailbox, { messages: true });
+      const status = await client.status(account.mailbox || 'INBOX', { messages: true });
       const total = status.messages || 0;
-      if (total === 0) return;
+      if (total === 0) {
+        await prisma.imapAccount.update({ where: { id: account.id }, data: { lastPolledAt: new Date(), lastError: null } });
+        return;
+      }
       const start = Math.max(1, total - 200);
       const range = `${start}:${total}`;
 
-      // Cache client email lookup so we don't query DB per message
-      const clients = await prisma.client.findMany({
-        where: { isActive: true, email: { not: null } },
-        select: { id: true, email: true, companyName: true },
-      });
-      const clientByEmail = new Map();
-      for (const c of clients) {
-        if (c.email) clientByEmail.set(c.email.trim().toLowerCase(), c);
-      }
-      if (clientByEmail.size === 0) return; // no clients with emails — nothing to match
+      // Cache the client lookup map only when needed
+      let clientByEmail = null;
+      const ensureClientMap = async () => {
+        if (clientByEmail) return clientByEmail;
+        const list = await prisma.client.findMany({
+          where: { isActive: true, email: { not: null } },
+          select: { id: true, email: true },
+        });
+        clientByEmail = new Map();
+        for (const c of list) {
+          if (c.email) clientByEmail.set(c.email.trim().toLowerCase(), c);
+        }
+        return clientByEmail;
+      };
 
-      const { simpleParser } = require('mailparser');
-
+      let stored = 0;
       for await (const msg of client.fetch(range, { source: true, envelope: true, internalDate: true })) {
         try {
-          const messageId = msg.envelope?.messageId || `<${msg.uid}@local>`;
+          const messageId = msg.envelope?.messageId || `<${msg.uid}@${account.id}>`;
           const exists = await prisma.inboxEmail.findUnique({ where: { messageId } });
           if (exists) continue;
 
-          // Extract From email and check against client list before parsing the full body
           const fromAddr = (msg.envelope?.from && msg.envelope.from[0]) || null;
-          const fromEmailRaw = fromAddr?.address || '';
-          const fromEmail = fromEmailRaw.trim().toLowerCase();
+          const fromEmail = (fromAddr?.address || '').trim().toLowerCase();
           if (!fromEmail) continue;
 
-          const matchedClient = clientByEmail.get(fromEmail);
-          if (!matchedClient) continue; // only client emails go to the inbox
+          // Filter: only client emails unless captureAll
+          let matchedClient = null;
+          if (!account.captureAll) {
+            const map = await ensureClientMap();
+            matchedClient = map.get(fromEmail);
+            if (!matchedClient) continue;
+          } else {
+            const map = await ensureClientMap();
+            matchedClient = map.get(fromEmail) || null;
+          }
 
           const parsed = await simpleParser(msg.source);
           const attachments = (parsed.attachments || []).map(a => ({
@@ -96,7 +89,7 @@ const pollOnce = async () => {
               messageId,
               fromEmail,
               fromName: fromAddr?.name || null,
-              toEmail: (msg.envelope?.to && msg.envelope.to[0]?.address) || process.env.IMAP_USER,
+              toEmail: (msg.envelope?.to && msg.envelope.to[0]?.address) || account.username,
               subject: parsed.subject || msg.envelope?.subject || '(no subject)',
               bodyText: safeText(parsed.text),
               bodyHtml: safeText(parsed.html || null),
@@ -104,35 +97,59 @@ const pollOnce = async () => {
               category: 'client',
               hasAttachments: attachments.length > 0,
               attachmentsJson: attachments.length > 0 ? JSON.stringify(attachments) : null,
-              clientId: matchedClient.id,
+              clientId: matchedClient?.id || null,
+              imapAccountId: account.id,
             },
           });
-          console.log(`[InboxPoll] Stored email from ${fromEmail} (client #${matchedClient.id})`);
+          stored += 1;
         } catch (perMsgErr) {
-          console.warn('[InboxPoll] Skip message:', perMsgErr.message);
+          // skip this message but continue
+          console.warn(`[InboxPoll:${account.label}] skip message:`, perMsgErr.message);
         }
       }
+      await prisma.imapAccount.update({ where: { id: account.id }, data: { lastPolledAt: new Date(), lastError: null } });
+      if (stored > 0) console.log(`[InboxPoll:${account.label}] stored ${stored} new email(s)`);
     } finally {
       lock.release();
     }
   } catch (err) {
-    console.warn('[InboxPoll] Poll failed:', err.message);
+    console.warn(`[InboxPoll:${account.label}] failed:`, err.message);
+    try { await prisma.imapAccount.update({ where: { id: account.id }, data: { lastError: err.message } }); } catch (_) {}
   } finally {
-    if (client) { try { await client.logout(); } catch (_) { /* swallow */ } }
-    isPolling = false;
+    if (client) { try { await client.logout(); } catch (_) {} }
+    polling.delete(account.id);
+  }
+};
+
+// Pick all active accounts and run any whose interval has elapsed since lastPolledAt
+const runDueAccounts = async () => {
+  try {
+    const accounts = await prisma.imapAccount.findMany({ where: { isActive: true } });
+    const now = Date.now();
+    for (const a of accounts) {
+      const due = !a.lastPolledAt || (now - new Date(a.lastPolledAt).getTime()) >= (a.pollIntervalMs || 180000);
+      if (due) pollAccount(a).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('[InboxPoll] tick failed:', err.message);
+  }
+};
+
+// Run every account once, regardless of last poll time — used by manual "Fetch Now" endpoint
+const pollAllAccounts = async () => {
+  try {
+    const accounts = await prisma.imapAccount.findMany({ where: { isActive: true } });
+    for (const a of accounts) pollAccount(a).catch(() => {});
+  } catch (err) {
+    console.warn('[InboxPoll] manual run failed:', err.message);
   }
 };
 
 const startInboxPoll = () => {
-  if (!isEnabled()) {
-    console.log('[InboxPoll] Disabled — set IMAP_HOST/IMAP_USER/IMAP_PASS to enable');
-    return;
-  }
-  const interval = parseInt(process.env.INBOX_POLL_INTERVAL_MS || '180000', 10);
-  console.log(`[InboxPoll] Started (interval: ${Math.round(interval / 1000)}s)`);
-  // Initial poll after 5s, then on interval
-  setTimeout(() => { pollOnce().catch(() => {}); }, 5000);
-  pollTimer = setInterval(() => { pollOnce().catch(() => {}); }, interval);
+  console.log('[InboxPoll] Scheduler started — checks every 60s, polls each account at its own interval');
+  // Initial tick after 5s, then every minute
+  setTimeout(() => { runDueAccounts().catch(() => {}); }, 5000);
+  schedulerTimer = setInterval(() => { runDueAccounts().catch(() => {}); }, SCHEDULER_TICK_MS);
 };
 
-module.exports = { startInboxPoll, pollOnce };
+module.exports = { startInboxPoll, pollAllAccounts };
