@@ -10,7 +10,8 @@ interface Message {
   timestamp: number;
 }
 
-const STORAGE_KEY = 'ai_assistant_history_v1';
+const STORAGE_PREFIX = 'ai_assistant_history_v2_';
+const LEGACY_KEY = 'ai_assistant_history_v1';
 
 export default function AiAssistant() {
   const { lang } = useLanguage();
@@ -19,12 +20,24 @@ export default function AiAssistant() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const [history, setHistory] = useState<Message[]>(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
-  });
+  const [history, setHistory] = useState<Message[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
+  const storageKey = user ? `${STORAGE_PREFIX}${user.id}` : '';
 
-  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(-30))); }, [history]);
+  // Drop the legacy shared-history key from older builds (was leaking between users).
+  useEffect(() => { localStorage.removeItem(LEGACY_KEY); }, []);
+
+  // Reload history whenever the logged-in user changes (login/logout/switch).
+  useEffect(() => {
+    if (!storageKey) { setHistory([]); return; }
+    try { setHistory(JSON.parse(localStorage.getItem(storageKey) || '[]')); }
+    catch { setHistory([]); }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageKey) return;
+    localStorage.setItem(storageKey, JSON.stringify(history.slice(-30)));
+  }, [history, storageKey]);
   useEffect(() => {
     if (open) setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   }, [open, history.length]);
@@ -92,7 +105,7 @@ export default function AiAssistant() {
   const clear = () => {
     if (!confirm(isAr ? 'مسح المحادثة؟' : 'Clear chat?')) return;
     setHistory([]);
-    localStorage.removeItem(STORAGE_KEY);
+    if (storageKey) localStorage.removeItem(storageKey);
   };
 
   const suggestions = isAr
