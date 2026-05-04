@@ -658,6 +658,12 @@ CRITICAL — RESPECT THE SCOPE STRICTLY:
 - NEVER fabricate CRM numbers, names, or facts. If a tool returns 0 results or a permission error, say so honestly — don't guess.
 - When in doubt about whether the user can see something, refuse rather than risk leaking data.
 
+TOOL USAGE DISCIPLINE:
+- Call AT MOST 3 tool steps per question. Don't loop trying variations of the same call.
+- If a search returns 0 results, DO NOT retry with translations, transliterations, or alternative spellings of the same term. Reply honestly: "ما لقيتش [الاسم] في النظام. لو ممكن تأكدلي الاسم الصحيح أو تجرب كلمة مفتاحية تانية." (English equivalent if user wrote in English.)
+- Use the user's exact words when searching company/contact names — don't translate Arabic names to English or vice versa.
+- One tool call per piece of info. Don't call the same tool twice with similar args in one question.
+
 YOUR JOB (within scope): be the user's most helpful assistant.
 - Answer questions about the user's OWN CRM data using the tools.
 - Combine multiple tools when needed for richer answers (e.g., performance + targets + commission).
@@ -713,6 +719,7 @@ OUTPUT RULES (very important):
     };
 
     const usedTools = [];
+    const seenCallSigs = new Set();
     let finalText = '';
     let response;
     try {
@@ -728,9 +735,10 @@ OUTPUT RULES (very important):
       }
     }
 
-    // Tool-call loop (non-streamed) for up to 7 iterations
+    // Tool-call loop. Cap at 4 iterations — anything more usually means the model
+    // is fishing with name variations, which produces no useful answer and burns time.
     let toolLoopDone = false;
-    for (let i = 0; i < 7 && !toolLoopDone; i++) {
+    for (let i = 0; i < 4 && !toolLoopDone; i++) {
       const calls = response.response.functionCalls();
       if (!calls || calls.length === 0) { toolLoopDone = true; break; }
       const toolResults = [];
@@ -740,6 +748,16 @@ OUTPUT RULES (very important):
           toolResults.push({ functionResponse: { name: call.name, response: { error: 'Unknown tool' } } });
           continue;
         }
+        // Short-circuit if we've already run this exact call in this conversation —
+        // happens when the model fishes with translated names of the same entity.
+        const sig = call.name + ':' + JSON.stringify(call.args || {});
+        if (seenCallSigs.has(sig)) {
+          toolResults.push({ functionResponse: { name: call.name, response: {
+            error: 'You already called this with the same arguments. Stop retrying — the result will not change. If the previous call returned 0 results, tell the user honestly the entity was not found and ask them to confirm the exact name.',
+          } } });
+          continue;
+        }
+        seenCallSigs.add(sig);
         try {
           const result = await fn(call.args || {}, req.user);
           usedTools.push({ name: call.name, args: call.args });
