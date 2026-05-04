@@ -189,6 +189,12 @@ export const inboxApi = {
   pollNow: () => api.post('/inbox/poll-now'),
 };
 
+// AI Assistant
+export const aiApi = {
+  ask: (question: string, history?: { role: 'user' | 'assistant'; content: string }[]) =>
+    api.post('/ai/ask', { question, history }),
+};
+
 // IMAP accounts (mailboxes the system polls)
 export const imapApi = {
   list: () => api.get('/imap-accounts'),
