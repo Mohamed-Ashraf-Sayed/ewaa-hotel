@@ -599,19 +599,28 @@ const ask = async (req, res) => {
     }
 
     const nowFmt = new Date().toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Asia/Riyadh' });
-    const systemInstruction = `You are a friendly Arabic-speaking assistant for Ewaa Hotels CRM. The user is ${req.user.name}. Today's date is ${today}. Current Riyadh time: ${nowFmt}.
+    const systemInstruction = `You are a smart, proactive personal assistant for the Ewaa Hotels CRM. The user is ${req.user.name} (role: ${req.user.role}). Today is ${today}. Current Riyadh time: ${nowFmt}.
 
-For CRM data questions (clients, contracts, payments, visits, bookings), use the available tools. Pick the tool whose entity matches the question.
+YOUR JOB: be the user's most helpful assistant. Be willing to:
+- Answer ANY question — CRM data, general knowledge, time, dates, opinions, advice, casual chat. Never say "I cannot" unless something is truly impossible (like writing data, which is read-only).
+- Combine multiple tools in sequence when needed. Example: if asked "what's your opinion of my sales team?" → call get_team_overview, then analyze and give a thoughtful opinion based on the numbers.
+- Use the conversation history. If the user said something earlier (like a list of names), remember it and reuse it.
+- Give opinions and analysis when asked. Base them on the data you have. Be confident.
+- Suggest follow-up questions or actions when helpful.
 
-For non-CRM questions (time, general knowledge, casual chat, greetings), reply naturally using your own knowledge — DO NOT decline. The current time and date are above; use them when the user asks.
+For CRM data questions, use the matching tool first. The user's role limits what you can see — that's enforced server-side, don't worry about it.
 
-CRITICAL OUTPUT RULES:
-- Reply ONLY with the final user-facing message. NEVER include your reasoning, thoughts, tool descriptions, or phrases like "I used the tool" / "The tool returned" / "I will inform the user".
+For factual questions you don't have a tool for (weather today, live news, stock prices), say "I don't have live internet access" briefly. For everything else (history, geography, math, language, customs, holidays, etc.), answer from your knowledge.
+
+OUTPUT RULES (very important):
+- Reply ONLY with the user-facing message. NEVER mention tool names, function names, or any technical CRM internals.
+- FORBIDDEN strings in your response: "search_clients", "search_contracts", "search_visits", "search_payments", "search_bookings", "get_my_*", "get_team_overview", "get_dashboard_summary", "the tool returned", "I used the tool", "I called", "function".
+- When suggesting actions, write them in plain natural language (e.g., "ابحث عن العملاء المحتملين" not "use search_clients(client_type='lead')").
 - Reply in Arabic if the user wrote in Arabic, otherwise English.
-- Be concise — 1-3 sentences plus a short list when listing rows.
-- For "0 results" cases, say so plainly in one line.
-- Format money "X,XXX ر.س". Format dates DD/MM/YYYY.
-- Read-only: politely refuse to create/update/delete data.`;
+- Be conversational and warm, but concise. 1-4 sentences typically; longer only when explicitly listing or planning.
+- For lists, use bullet points with the most important info per item.
+- Money: "X,XXX ر.س". Dates: DD/MM/YYYY.
+- Refusing data writes (create/update/delete) is fine — just say it's read-only and suggest the right page.`;
 
     const model = genAI.getGenerativeModel({
       model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
@@ -619,18 +628,25 @@ CRITICAL OUTPUT RULES:
       tools: [{ functionDeclarations: toolDeclarations }],
     });
 
-    const chat = model.startChat({
-      history: Array.isArray(history) ? history.map(h => ({
-        role: h.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: String(h.content || '') }],
-      })) : [],
-    });
+    // Filter out empty/error turns from history — they confuse the model
+    const cleanHistory = Array.isArray(history)
+      ? history.filter(h => h && h.content && !/AI query failed|⚠️/.test(h.content))
+        .slice(-12) // keep last 12 turns max
+        .map(h => ({
+          role: h.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: String(h.content) }],
+        }))
+      : [];
+    // Gemini chat history must start with a 'user' role
+    while (cleanHistory.length > 0 && cleanHistory[0].role !== 'user') cleanHistory.shift();
+    const chat = model.startChat({ history: cleanHistory });
 
     let response = await chat.sendMessage(workingQuestion);
     const usedTools = [];
 
-    // Tool-execution loop (limit iterations to prevent runaway)
-    for (let i = 0; i < 5; i++) {
+    // Tool-execution loop — allow up to 8 turns so the model can chain tools
+    // (e.g. list users → analyze → answer)
+    for (let i = 0; i < 8; i++) {
       const calls = response.response.functionCalls();
       if (!calls || calls.length === 0) break;
 
@@ -656,15 +672,28 @@ CRITICAL OUTPUT RULES:
     try { text = response.response.text(); } catch (_) { /* model returned only tool calls without final text */ }
     if (!text) {
       // Fall back: render a simple summary from the last tool result if any
-      const last = usedTools[usedTools.length - 1];
-      text = last
-        ? `(تم تنفيذ ${last.name})`
-        : 'عذراً، لم أتمكن من فهم السؤال. حاول إعادة صياغته.';
+      text = usedTools.length > 0
+        ? 'تم جلب البيانات لكن لم تتولد رسالة نهائية. حاولي تسألي بشكل أوضح.'
+        : 'عذراً، لم أتمكن من فهم السؤال. حاولي إعادة صياغته.';
     }
+    // Safety filter: strip any leaked internal tool names or implementation chatter
+    text = text
+      .replace(/`?search_(clients|contracts|payments|visits|bookings|users)(\([^)]*\))?`?/gi, '')
+      .replace(/`?get_(my_targets|my_tasks|my_reminders|my_commission|my_performance|team_overview|dashboard_summary)(\([^)]*\))?`?/gi, '')
+      .replace(/I (used|called|invoked) the [\w_]+ tool[^.]*\.?/gi, '')
+      .replace(/the (tool|function) returned[^.]*\.?/gi, '');
     res.json({ answer: trim(text, 4000), toolsUsed: usedTools });
   } catch (err) {
-    console.error('AI query error:', err.message);
-    res.status(500).json({ message: 'AI query failed', error: err.message });
+    console.error('AI query error:', err.message, err.stack);
+    // Return a friendly Arabic message but include the technical detail for debugging
+    const friendly = /quota|rate limit|429/i.test(err.message)
+      ? 'الخدمة عليها ضغط دلوقتي، حاولي بعد دقيقة'
+      : /api key|unauthorized|401/i.test(err.message)
+      ? 'مفتاح الذكاء الاصطناعي غير مفعّل أو منتهي'
+      : /timeout|ECONN/i.test(err.message)
+      ? 'انقطاع في الاتصال، حاولي تاني'
+      : 'حصل خطأ مؤقت. حاولي تعيدي السؤال أو تصيغيه بشكل مختلف';
+    res.status(500).json({ message: friendly, error: err.message });
   }
 };
 
