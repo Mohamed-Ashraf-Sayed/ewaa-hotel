@@ -9,6 +9,25 @@ const { getSubordinateIds } = require('../middleware/auth');
 
 const prisma = new PrismaClient();
 
+// Retry on transient Gemini errors (503 overload, 429 rate limit, network blips).
+// Each call gets up to 3 attempts with exponential backoff.
+const isTransient = (err) => {
+  const msg = String(err?.message || '');
+  return /503|429|overloaded|high demand|ECONN|timeout|temporarily unavailable/i.test(msg);
+};
+const retry = async (fn, attempts = 2, baseDelay = 400) => {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); } catch (err) {
+      lastErr = err;
+      if (!isTransient(err) || i === attempts - 1) throw err;
+      const delay = baseDelay * Math.pow(2, i);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+};
+
 const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
 
 // ---- Access scope helpers ---------------------------------------------------
@@ -589,10 +608,10 @@ const ask = async (req, res) => {
     // selection stays reliable. The final reply is still rendered in Arabic.
     if (hasArabic) {
       try {
-        const translator = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-        const tx = await translator.generateContent(
+        const translator = genAI.getGenerativeModel({ model: process.env.GEMINI_TRANSLATOR_MODEL || 'gemini-flash-latest' });
+        const tx = await retry(() => translator.generateContent(
           `Translate this CRM-related question from Arabic to clear English. Keep names of companies/people unchanged. When the user mentions time periods, translate to explicit number of days (e.g. "أسبوعين" = "14 days", "شهر" = "30 days"). Reply with the English translation only, no explanation.\n\nArabic: "${question}"\nEnglish:`
-        );
+        ));
         const enText = (tx.response.text() || '').trim().replace(/^["']|["']$/g, '');
         if (enText) workingQuestion = `[Original Arabic question: ${question}]\n[English translation: ${enText}]\n\nAnswer the question. Reply in Arabic.`;
       } catch (_) { /* fall back to original */ }
@@ -622,11 +641,18 @@ OUTPUT RULES (very important):
 - Money: "X,XXX ر.س". Dates: DD/MM/YYYY.
 - Refusing data writes (create/update/delete) is fine — just say it's read-only and suggest the right page.`;
 
-    const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    // Build a model with fallback chain: try primary model first, then fallback if 503
+    const buildModel = (modelName) => genAI.getGenerativeModel({
+      model: modelName,
       systemInstruction,
       tools: [{ functionDeclarations: toolDeclarations }],
     });
+    // Primary = flash-latest (Google's fastest preview model — currently routes to
+    // gemini-3-flash-preview, ~1-3s typical). Fallback = stable 2.5-flash if the
+    // preview is overloaded or unavailable.
+    const primaryModel = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+    const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash';
+    let model = buildModel(primaryModel);
 
     // Filter out empty/error turns from history — they confuse the model
     const cleanHistory = Array.isArray(history)
@@ -639,7 +665,7 @@ OUTPUT RULES (very important):
       : [];
     // Gemini chat history must start with a 'user' role
     while (cleanHistory.length > 0 && cleanHistory[0].role !== 'user') cleanHistory.shift();
-    const chat = model.startChat({ history: cleanHistory });
+    let chat = model.startChat({ history: cleanHistory });
 
     // === Streaming mode (Server-Sent Events) ===
     res.setHeader('Content-Type', 'text/event-stream');
@@ -653,7 +679,19 @@ OUTPUT RULES (very important):
 
     const usedTools = [];
     let finalText = '';
-    let response = await chat.sendMessage(workingQuestion);
+    let response;
+    try {
+      response = await retry(() => chat.sendMessage(workingQuestion));
+    } catch (err) {
+      if (isTransient(err)) {
+        console.warn(`[AI] Primary model ${primaryModel} unavailable, falling back to ${fallbackModel}`);
+        model = buildModel(fallbackModel);
+        chat = model.startChat({ history: cleanHistory });
+        response = await retry(() => chat.sendMessage(workingQuestion));
+      } else {
+        throw err;
+      }
+    }
 
     // Tool-call loop (non-streamed) for up to 7 iterations
     let toolLoopDone = false;
@@ -677,7 +715,7 @@ OUTPUT RULES (very important):
       }
       // Send the final tool results as a STREAMED message — this is the real speed boost.
       // The model's natural-language summary will arrive token-by-token.
-      const stream = await chat.sendMessageStream(toolResults);
+      const stream = await retry(() => chat.sendMessageStream(toolResults));
       let assembled = '';
       let sawCalls = false;
       for await (const chunk of stream.stream) {
