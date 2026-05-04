@@ -311,6 +311,59 @@ const tools = {
     };
   },
 
+  search_users: async (args, user) => {
+    // Access scope: admins/GM/VGM see all; sales_director sees their team; others restricted
+    if (!ADMIN_ROLES.includes(user.role) && user.role !== 'sales_director') {
+      return { count: 0, message: 'You do not have permission to list users.' };
+    }
+    const where = { isActive: true };
+    if (user.role === 'sales_director') {
+      const subs = await getSubordinateIds(user.id);
+      where.id = { in: [user.id, ...subs] };
+    }
+    if (args.role) where.role = args.role;
+    if (args.search) {
+      where.OR = [
+        { name: { contains: args.search } },
+        { email: { contains: args.search } },
+        { phone: { contains: args.search } },
+      ];
+    }
+    const users = await prisma.user.findMany({
+      where,
+      orderBy: { name: 'asc' },
+      take: Math.min(Number(args.limit) || 50, 200),
+      select: {
+        id: true, name: true, email: true, phone: true, role: true, commissionRate: true,
+        manager: { select: { name: true } },
+        hotels: { select: { hotel: { select: { name: true, group: true } } } },
+        _count: { select: { assignedClients: true, contracts: true, visits: true } },
+      },
+    });
+    return { count: users.length, items: users };
+  },
+
+  get_team_overview: async (args, user) => {
+    if (!ADMIN_ROLES.includes(user.role) && user.role !== 'sales_director') {
+      return { count: 0, message: 'You do not have permission to view team overview.' };
+    }
+    const teamWhere = { isActive: true, role: { in: ['sales_rep', 'sales_director', 'assistant_sales'] } };
+    if (user.role === 'sales_director') {
+      const subs = await getSubordinateIds(user.id);
+      teamWhere.id = { in: [user.id, ...subs] };
+    }
+    const team = await prisma.user.findMany({
+      where: teamWhere,
+      orderBy: { name: 'asc' },
+      take: Math.min(Number(args.limit) || 50, 200),
+      select: {
+        id: true, name: true, role: true, commissionRate: true,
+        _count: { select: { assignedClients: true, contracts: true, visits: true } },
+      },
+    });
+    return { count: team.length, items: team };
+  },
+
   get_my_performance: async (_args, user) => {
     const today = new Date();
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -492,6 +545,23 @@ const toolDeclarations = [
     name: 'get_my_performance',
     description: 'Get the LOGGED-IN USER\'S personal stats: # of clients/leads/contracts/visits assigned to them. Use for "أدائي", "أرقامي الشخصية", "my personal stats", "كم عميل عندي؟".',
     parameters: { type: SchemaType.OBJECT, properties: {} },
+  },
+  {
+    name: 'search_users',
+    description: 'List EMPLOYEES / USERS / TEAM MEMBERS (موظفين / فريق / السيلز / المناديب). Returns names, roles, contact info, and basic counts. Use for "قولي مين السيلز", "اعرض الموظفين", "show me the team", "list sales reps". Admins see all; sales directors see their team only.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        role: { type: SchemaType.STRING, description: 'Filter by role', enum: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer', 'reservations', 'credit_manager', 'credit_officer'] },
+        search: { type: SchemaType.STRING, description: 'Free-text search on name, email, phone' },
+        limit: { type: SchemaType.NUMBER },
+      },
+    },
+  },
+  {
+    name: 'get_team_overview',
+    description: 'Get the SALES TEAM with each member\'s clients/contracts/visits counts (أداء الفريق / team performance). Returns aggregated counts per member. Use for "أداء فريقي", "team leaderboard", "اعرض السيلز وأرقامهم".',
+    parameters: { type: SchemaType.OBJECT, properties: { limit: { type: SchemaType.NUMBER } } },
   },
 ];
 
