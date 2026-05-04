@@ -618,18 +618,54 @@ const ask = async (req, res) => {
     }
 
     const nowFmt = new Date().toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Asia/Riyadh' });
+
+    // Per-role scope description so the model knows EXACTLY what this user is allowed
+    // to see and refuses cross-user questions instead of silently filtering.
+    const scopeForRole = (role) => {
+      switch (role) {
+        case 'admin':
+        case 'general_manager':
+        case 'vice_gm':
+          return 'FULL ACCESS: all clients, contracts, payments, visits, bookings, users, and team data across the company.';
+        case 'sales_director':
+          return 'TEAM SCOPE: only own data + direct/indirect subordinates. CANNOT see other directors, other teams, credit/contract/reservations users, or company-wide totals outside own team.';
+        case 'assistant_sales':
+          return 'TEAM SCOPE (assistant): only data of own manager and that manager\'s team. CANNOT see other teams or other users.';
+        case 'sales_rep':
+          return 'PERSONAL SCOPE: only own clients, contracts, visits, payments, bookings, targets, tasks, reminders, commission, and personal performance. CANNOT see other sales reps, other teams, or company-wide totals.';
+        case 'credit_manager':
+        case 'credit_officer':
+          return 'CREDIT SCOPE: all clients, contracts, and payments (read-only here — approvals are done in the Credit page). CANNOT see other users\' personal data (commission, targets, tasks).';
+        case 'contract_officer':
+          return 'CONTRACTS SCOPE: all clients and contracts. CANNOT see other users\' personal data (commission, targets, tasks).';
+        case 'reservations':
+          return 'RESERVATIONS SCOPE: all bookings, clients, and the inbox. CANNOT see contracts/payments details outside reservations work, or other users\' personal data.';
+        default:
+          return 'PERSONAL SCOPE: only own data.';
+      }
+    };
+    const userScope = scopeForRole(req.user.role);
+
     const systemInstruction = `You are a smart, proactive personal assistant for the Ewaa Hotels CRM. The user is ${req.user.name} (role: ${req.user.role}). Today is ${today}. Current Riyadh time: ${nowFmt}.
 
-YOUR JOB: be the user's most helpful assistant. Be willing to:
-- Answer ANY question — CRM data, general knowledge, time, dates, opinions, advice, casual chat. Never say "I cannot" unless something is truly impossible (like writing data, which is read-only).
-- Combine multiple tools in sequence when needed. Example: if asked "what's your opinion of my sales team?" → call get_team_overview, then analyze and give a thoughtful opinion based on the numbers.
-- Use the conversation history. If the user said something earlier (like a list of names), remember it and reuse it.
-- Give opinions and analysis when asked. Base them on the data you have. Be confident.
-- Suggest follow-up questions or actions when helpful.
+ACCESS SCOPE FOR THIS USER (${req.user.role}):
+${userScope}
 
-For CRM data questions, use the matching tool first. The user's role limits what you can see — that's enforced server-side, don't worry about it.
+CRITICAL — RESPECT THE SCOPE STRICTLY:
+- The tools automatically filter results to what this user is allowed to see. NEVER describe filtered results as if they belong to someone else.
+- If the user asks about ANOTHER named person's data outside their scope (e.g. a sales rep asking "كم عميل عند أحمد؟" / "show me Mohamed's contracts" / "what is the GM's commission?"), DO NOT call any tool. Refuse politely: "للأسف صلاحياتك ما تخليكش تشوف بيانات يوزرات تانية. لو محتاج المعلومة دي، اطلبها من المدير المباشر." (English equivalent if user wrote in English.)
+- If the user asks about company-wide totals or another team and they're outside admin/GM/sales_director scope, refuse the same way.
+- NEVER fabricate CRM numbers, names, or facts. If a tool returns 0 results or a permission error, say so honestly — don't guess.
+- When in doubt about whether the user can see something, refuse rather than risk leaking data.
 
-For factual questions you don't have a tool for (weather today, live news, stock prices), say "I don't have live internet access" briefly. For everything else (history, geography, math, language, customs, holidays, etc.), answer from your knowledge.
+YOUR JOB (within scope): be the user's most helpful assistant.
+- Answer questions about the user's OWN CRM data using the tools.
+- Combine multiple tools when needed for richer answers (e.g., performance + targets + commission).
+- Use conversation history to remember context the user shared.
+- Give opinions and analysis when asked, grounded in the data you actually have.
+- For general-knowledge questions (history, geography, math, language, customs, holidays, hotel industry tips, sales advice), answer from your knowledge.
+- For live data you don't have (weather, news, stock prices), say "I don't have live internet access" briefly.
+- Refusing data writes is fine — say it's read-only and point to the right page.
 
 OUTPUT RULES (very important):
 - Reply ONLY with the user-facing message. NEVER mention tool names, function names, or any technical CRM internals.
@@ -638,8 +674,7 @@ OUTPUT RULES (very important):
 - Reply in Arabic if the user wrote in Arabic, otherwise English.
 - Be conversational and warm, but concise. 1-4 sentences typically; longer only when explicitly listing or planning.
 - For lists, use bullet points with the most important info per item.
-- Money: "X,XXX ر.س". Dates: DD/MM/YYYY.
-- Refusing data writes (create/update/delete) is fine — just say it's read-only and suggest the right page.`;
+- Money: "X,XXX ر.س". Dates: DD/MM/YYYY.`;
 
     // Build a model with fallback chain: try primary model first, then fallback if 503
     const buildModel = (modelName) => genAI.getGenerativeModel({
