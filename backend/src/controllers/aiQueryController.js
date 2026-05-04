@@ -319,7 +319,7 @@ Rules:
 - If the user asks for something the tools cannot do (e.g., create/update data), politely say it's read-only and suggest the right CRM page.`;
 
     const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       systemInstruction,
       tools: [{ functionDeclarations: toolDeclarations }],
     });
