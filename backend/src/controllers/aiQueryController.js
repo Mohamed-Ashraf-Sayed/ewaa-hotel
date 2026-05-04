@@ -641,15 +641,25 @@ OUTPUT RULES (very important):
     while (cleanHistory.length > 0 && cleanHistory[0].role !== 'user') cleanHistory.shift();
     const chat = model.startChat({ history: cleanHistory });
 
-    let response = await chat.sendMessage(workingQuestion);
+    // === Streaming mode (Server-Sent Events) ===
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    const sendEvent = (event, data) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
     const usedTools = [];
+    let finalText = '';
+    let response = await chat.sendMessage(workingQuestion);
 
-    // Tool-execution loop — allow up to 8 turns so the model can chain tools
-    // (e.g. list users → analyze → answer)
-    for (let i = 0; i < 8; i++) {
+    // Tool-call loop (non-streamed) for up to 7 iterations
+    let toolLoopDone = false;
+    for (let i = 0; i < 7 && !toolLoopDone; i++) {
       const calls = response.response.functionCalls();
-      if (!calls || calls.length === 0) break;
-
+      if (!calls || calls.length === 0) { toolLoopDone = true; break; }
       const toolResults = [];
       for (const call of calls) {
         const fn = tools[call.name];
@@ -665,27 +675,61 @@ OUTPUT RULES (very important):
           toolResults.push({ functionResponse: { name: call.name, response: { error: e.message } } });
         }
       }
-      response = await chat.sendMessage(toolResults);
+      // Send the final tool results as a STREAMED message — this is the real speed boost.
+      // The model's natural-language summary will arrive token-by-token.
+      const stream = await chat.sendMessageStream(toolResults);
+      let assembled = '';
+      let sawCalls = false;
+      for await (const chunk of stream.stream) {
+        try {
+          const calls2 = chunk.functionCalls && chunk.functionCalls();
+          if (calls2 && calls2.length > 0) { sawCalls = true; break; }
+        } catch (_) {}
+        const t = chunk.text ? chunk.text() : '';
+        if (t) {
+          assembled += t;
+          // Strip tool-name leaks before sending
+          const safe = t
+            .replace(/`?search_(clients|contracts|payments|visits|bookings|users)(\([^)]*\))?`?/gi, '')
+            .replace(/`?get_(my_targets|my_tasks|my_reminders|my_commission|my_performance|team_overview|dashboard_summary)(\([^)]*\))?`?/gi, '');
+          sendEvent('chunk', { text: safe });
+        }
+      }
+      response = await stream.response;
+      if (sawCalls) {
+        // Continue the loop to handle the new tool calls
+      } else {
+        finalText = assembled;
+        toolLoopDone = true;
+      }
     }
 
-    let text = '';
-    try { text = response.response.text(); } catch (_) { /* model returned only tool calls without final text */ }
-    if (!text) {
-      // Fall back: render a simple summary from the last tool result if any
-      text = usedTools.length > 0
+    if (!finalText) {
+      // Either the very first response has no tool call (direct answer) — stream it now
+      // OR we never produced text. Try once more.
+      try {
+        const t = response.response.text();
+        if (t) {
+          finalText = t;
+          // Send the whole thing as one chunk since we already have it
+          const safe = t
+            .replace(/`?search_(clients|contracts|payments|visits|bookings|users)(\([^)]*\))?`?/gi, '')
+            .replace(/`?get_(my_targets|my_tasks|my_reminders|my_commission|my_performance|team_overview|dashboard_summary)(\([^)]*\))?`?/gi, '');
+          sendEvent('chunk', { text: safe });
+        }
+      } catch (_) {}
+    }
+
+    if (!finalText) {
+      const fallback = usedTools.length > 0
         ? 'تم جلب البيانات لكن لم تتولد رسالة نهائية. حاولي تسألي بشكل أوضح.'
         : 'عذراً، لم أتمكن من فهم السؤال. حاولي إعادة صياغته.';
+      sendEvent('chunk', { text: fallback });
     }
-    // Safety filter: strip any leaked internal tool names or implementation chatter
-    text = text
-      .replace(/`?search_(clients|contracts|payments|visits|bookings|users)(\([^)]*\))?`?/gi, '')
-      .replace(/`?get_(my_targets|my_tasks|my_reminders|my_commission|my_performance|team_overview|dashboard_summary)(\([^)]*\))?`?/gi, '')
-      .replace(/I (used|called|invoked) the [\w_]+ tool[^.]*\.?/gi, '')
-      .replace(/the (tool|function) returned[^.]*\.?/gi, '');
-    res.json({ answer: trim(text, 4000), toolsUsed: usedTools });
+    sendEvent('done', { toolsUsed: usedTools });
+    res.end();
   } catch (err) {
-    console.error('AI query error:', err.message, err.stack);
-    // Return a friendly Arabic message but include the technical detail for debugging
+    console.error('AI query error:', err.message);
     const friendly = /quota|rate limit|429/i.test(err.message)
       ? 'الخدمة عليها ضغط دلوقتي، حاولي بعد دقيقة'
       : /api key|unauthorized|401/i.test(err.message)
@@ -693,7 +737,15 @@ OUTPUT RULES (very important):
       : /timeout|ECONN/i.test(err.message)
       ? 'انقطاع في الاتصال، حاولي تاني'
       : 'حصل خطأ مؤقت. حاولي تعيدي السؤال أو تصيغيه بشكل مختلف';
-    res.status(500).json({ message: friendly, error: err.message });
+    if (res.headersSent) {
+      // SSE already started — push error as event and end stream
+      try {
+        res.write(`event: error\ndata: ${JSON.stringify({ message: friendly, error: err.message })}\n\n`);
+        res.end();
+      } catch (_) { /* ignore */ }
+    } else {
+      res.status(500).json({ message: friendly, error: err.message });
+    }
   }
 };
 

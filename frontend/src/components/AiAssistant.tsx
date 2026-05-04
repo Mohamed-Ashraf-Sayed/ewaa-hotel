@@ -37,16 +37,53 @@ export default function AiAssistant() {
     const q = input.trim();
     if (!q || sending) return;
     const userMsg: Message = { role: 'user', content: q, timestamp: Date.now() };
-    setHistory(h => [...h, userMsg]);
+    const replyTs = Date.now() + 1;
+    setHistory(h => [...h, userMsg, { role: 'assistant', content: '', timestamp: replyTs }]);
     setInput('');
     setSending(true);
     try {
-      const res = await aiApi.ask(q, history.slice(-10).map(m => ({ role: m.role, content: m.content })));
-      const reply: Message = { role: 'assistant', content: res.data.answer || (isAr ? 'لا توجد إجابة' : 'No answer'), timestamp: Date.now() };
-      setHistory(h => [...h, reply]);
+      const token = localStorage.getItem('token') || '';
+      const histPayload = history.slice(-10).map(m => ({ role: m.role, content: m.content }));
+      const resp = await fetch('/api/ai/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ question: q, history: histPayload }),
+      });
+      if (!resp.ok || !resp.body) {
+        const errBody = await resp.json().catch(() => ({}));
+        throw new Error(errBody.message || `HTTP ${resp.status}`);
+      }
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // Parse SSE events: each event ends with \n\n
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+        for (const ev of events) {
+          const lines = ev.split('\n');
+          let event = 'message', dataStr = '';
+          for (const ln of lines) {
+            if (ln.startsWith('event:')) event = ln.slice(6).trim();
+            else if (ln.startsWith('data:')) dataStr += ln.slice(5).trim();
+          }
+          if (!dataStr) continue;
+          try {
+            const data = JSON.parse(dataStr);
+            if (event === 'chunk' && data.text) {
+              setHistory(h => h.map(m => m.timestamp === replyTs ? { ...m, content: m.content + data.text } : m));
+            } else if (event === 'error') {
+              setHistory(h => h.map(m => m.timestamp === replyTs ? { ...m, content: `⚠️ ${data.message}` } : m));
+            }
+          } catch (_) { /* ignore malformed chunk */ }
+        }
+      }
     } catch (err: any) {
-      const msg = err?.response?.data?.message || (isAr ? 'فشل الاتصال بالمساعد' : 'Assistant unavailable');
-      setHistory(h => [...h, { role: 'assistant', content: `⚠️ ${msg}`, timestamp: Date.now() }]);
+      const msg = err?.message || (isAr ? 'فشل الاتصال بالمساعد' : 'Assistant unavailable');
+      setHistory(h => h.map(m => m.timestamp === replyTs ? { ...m, content: `⚠️ ${msg}` } : m));
     } finally {
       setSending(false);
     }
@@ -133,7 +170,7 @@ export default function AiAssistant() {
                 </div>
               </div>
             ))}
-            {sending && (
+            {sending && history.length > 0 && history[history.length - 1].role === 'assistant' && !history[history.length - 1].content && (
               <div className="flex justify-start">
                 <div className="bg-white border border-brand-100 rounded-2xl rounded-bl-sm px-3 py-2 inline-flex items-center gap-2 text-xs text-brand-500">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" /> {isAr ? 'بفكر...' : 'Thinking...'}
