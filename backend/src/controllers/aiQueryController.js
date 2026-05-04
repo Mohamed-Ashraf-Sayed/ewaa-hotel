@@ -211,7 +211,7 @@ const tools = {
 const toolDeclarations = [
   {
     name: 'search_clients',
-    description: 'Search clients (companies) in the CRM. Use this when the user asks for clients, leads, accounts, شركات, عملاء, محتملين.',
+    description: 'List or search CLIENTS / COMPANIES / LEADS in the CRM. Returns rows of companies/leads. Use ONLY when the user asks specifically about clients, leads, companies, accounts, شركات, عملاء, محتملين. DO NOT use for visits, contracts, payments, or bookings.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
@@ -227,7 +227,7 @@ const toolDeclarations = [
   },
   {
     name: 'search_contracts',
-    description: 'Search contracts. Use for queries about contracts, deals, agreements, عقود, اتفاقيات.',
+    description: 'List or search CONTRACTS / DEALS / AGREEMENTS. Returns rows of signed/pending contracts with their value, dates, and status. Use ONLY when the user mentions contracts, deals, agreements, تجديد, عقود, اتفاقيات. Use expiring_in_days for "expiring soon" / "تنتهي خلال". DO NOT use for clients, visits, payments, or bookings.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
@@ -242,7 +242,7 @@ const toolDeclarations = [
   },
   {
     name: 'search_payments',
-    description: 'Search payments / collections. Use for دفعات, تحصيل, مدفوعات, payments, collections.',
+    description: 'List or search PAYMENTS / COLLECTIONS / RECEIPTS. Returns money received from clients. Use ONLY for payments, collections, دفعات, مدفوعات, تحصيل, إيصالات. Use status="pending" for "awaiting approval" / "بانتظار الموافقة". DO NOT use for clients, contracts, visits, or bookings.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
@@ -257,7 +257,7 @@ const toolDeclarations = [
   },
   {
     name: 'search_visits',
-    description: 'Search visits/calls/meetings logged by sales reps. Use for زيارات, اجتماعات, متابعات, visits, meetings.',
+    description: 'List or search VISITS / SALES MEETINGS / CALLS logged by sales reps when they meet with clients. Returns visit log entries. Use ONLY for visits, meetings, calls, زيارات, اجتماعات, مكالمات, متابعات. For "today\'s visits / النهاردة" pass from_date and to_date both = today (YYYY-MM-DD). DO NOT use for clients, contracts, payments, or bookings.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
@@ -272,7 +272,7 @@ const toolDeclarations = [
   },
   {
     name: 'search_bookings',
-    description: 'Search hotel bookings (Opera reservations). Use for حجوزات, bookings, reservations.',
+    description: 'List or search HOTEL BOOKINGS / GUEST RESERVATIONS in Opera. Returns guest stays at hotels with arrival/departure dates. Use ONLY for bookings, reservations, حجوزات. DO NOT use for clients, contracts, visits, or payments.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
@@ -287,7 +287,7 @@ const toolDeclarations = [
   },
   {
     name: 'get_dashboard_summary',
-    description: 'Get high-level totals: how many clients/leads/contracts/visits the user has. Use for "كم عميل عندي", "ايه أرقامي", "give me the totals".',
+    description: 'Get OVERVIEW / KPI TOTALS only. Returns counts: total clients, leads, active clients, contracts, pending contracts, approved contracts, visits this month. Use ONLY for general overview questions like "أرقامي", "ملخص", "overview", "dashboard", "totals". DO NOT use when the user asks about a specific entity type (clients/contracts/visits/etc.) — use the dedicated search tool for that.',
     parameters: { type: SchemaType.OBJECT, properties: {} },
   },
 ];
@@ -307,19 +307,28 @@ const ask = async (req, res) => {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const today = new Date().toISOString().split('T')[0];
-    const systemInstruction = `You are a helpful assistant for the Ewaa Hotels CRM. The current user is "${req.user.name}" with role "${req.user.role}". Today's date is ${today}.
+    // Arabic Unicode block 0x0600-0x06FF + Arabic Presentation Forms 0xFB50-0xFDFF + 0xFE70-0xFEFF
+    const hasArabic = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(question);
+    const originalQuestion = question;
+    let workingQuestion = question;
 
-Rules:
-- Use the provided tools to answer questions about clients, contracts, payments, visits, and bookings.
-- Always respond in the same language as the question (Arabic, English, or mixed).
-- When you return rows, summarize concisely — don't dump raw JSON. Mention key facts: company name, key numbers, status.
-- If a query is ambiguous, ask one clarifying question.
-- Format currency amounts with " SAR" suffix and use thousand separators.
-- Format dates as DD MMM YYYY.
-- If the user asks for something the tools cannot do (e.g., create/update data), politely say it's read-only and suggest the right CRM page.`;
+    // Two-step: when the question is Arabic, translate to English first so tool
+    // selection stays reliable. The final reply is still rendered in Arabic.
+    if (hasArabic) {
+      try {
+        const translator = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const tx = await translator.generateContent(
+          `Translate this CRM-related question from Arabic to clear English. Keep names of companies/people unchanged. When the user mentions time periods, translate to explicit number of days (e.g. "أسبوعين" = "14 days", "شهر" = "30 days"). Reply with the English translation only, no explanation.\n\nArabic: "${question}"\nEnglish:`
+        );
+        const enText = (tx.response.text() || '').trim().replace(/^["']|["']$/g, '');
+        if (enText) workingQuestion = `[Original Arabic question: ${question}]\n[English translation: ${enText}]\n\nAnswer the question. Reply in Arabic.`;
+      } catch (_) { /* fall back to original */ }
+    }
+
+    const systemInstruction = `You are a read-only CRM assistant for Ewaa Hotels. The user is ${req.user.name}. Today is ${today}. Use the available tools to answer data questions about clients/contracts/payments/visits/bookings. Pick the tool whose entity matches the user's question. Reply in Arabic if the user asked in Arabic, otherwise in English.`;
 
     const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-pro',
       systemInstruction,
       tools: [{ functionDeclarations: toolDeclarations }],
     });
@@ -331,7 +340,7 @@ Rules:
       })) : [],
     });
 
-    let response = await chat.sendMessage(question);
+    let response = await chat.sendMessage(workingQuestion);
     const usedTools = [];
 
     // Tool-execution loop (limit iterations to prevent runaway)
@@ -357,7 +366,15 @@ Rules:
       response = await chat.sendMessage(toolResults);
     }
 
-    const text = response.response.text();
+    let text = '';
+    try { text = response.response.text(); } catch (_) { /* model returned only tool calls without final text */ }
+    if (!text) {
+      // Fall back: render a simple summary from the last tool result if any
+      const last = usedTools[usedTools.length - 1];
+      text = last
+        ? `(تم تنفيذ ${last.name})`
+        : 'عذراً، لم أتمكن من فهم السؤال. حاول إعادة صياغته.';
+    }
     res.json({ answer: trim(text, 4000), toolsUsed: usedTools });
   } catch (err) {
     console.error('AI query error:', err.message);
