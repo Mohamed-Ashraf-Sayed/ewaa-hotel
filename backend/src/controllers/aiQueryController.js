@@ -768,7 +768,9 @@ OUTPUT RULES (very important):
           sendEvent('chunk', { text: safe });
         }
       }
-      response = await stream.response;
+      // Keep `response` shape consistent with sendMessage() result so the next
+      // iteration can call `response.response.functionCalls()` safely.
+      response = { response: await stream.response };
       if (sawCalls) {
         // Continue the loop to handle the new tool calls
       } else {
