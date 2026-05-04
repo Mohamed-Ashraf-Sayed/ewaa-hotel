@@ -383,6 +383,104 @@ const tools = {
     return { count: team.length, items: team };
   },
 
+  get_user_details: async (args, user) => {
+    // Comprehensive snapshot of one user — used when caller asks "tell me about X".
+    // Permission: admin/GM/VGM see anyone; sales_director sees own team; others denied.
+    if (!ADMIN_ROLES.includes(user.role) && user.role !== 'sales_director') {
+      return { message: 'You do not have permission to view another user\'s details.' };
+    }
+    let target = null;
+    if (args.user_id) {
+      target = await prisma.user.findUnique({ where: { id: Number(args.user_id) } });
+    } else if (args.name) {
+      target = await prisma.user.findFirst({
+        where: {
+          isActive: true,
+          OR: [
+            { name: { contains: args.name } },
+            { email: { contains: args.name } },
+          ],
+        },
+      });
+    }
+    if (!target) return { message: 'User not found. Please confirm the exact name.' };
+
+    // Sales director can only see themselves + their subordinates
+    if (user.role === 'sales_director') {
+      const subs = await getSubordinateIds(user.id);
+      if (target.id !== user.id && !subs.includes(target.id)) {
+        return { message: 'This user is not in your team. You can only see your own subordinates.' };
+      }
+    }
+
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const yearStart = new Date(today.getFullYear(), 0, 1);
+
+    const [
+      clientsTotal, leads, activeClients,
+      contractsTotal, contractsApproved, contractsPending,
+      visitsTotal, visitsThisMonth,
+      paymentsApprovedAgg, paymentsThisMonthAgg,
+      manager, hotels,
+    ] = await Promise.all([
+      prisma.client.count({ where: { salesRepId: target.id, isActive: true } }),
+      prisma.client.count({ where: { salesRepId: target.id, isActive: true, clientType: 'lead' } }),
+      prisma.client.count({ where: { salesRepId: target.id, isActive: true, clientType: 'active' } }),
+      prisma.contract.count({ where: { salesRepId: target.id } }),
+      prisma.contract.count({ where: { salesRepId: target.id, status: 'approved' } }),
+      prisma.contract.count({ where: { salesRepId: target.id, status: 'pending' } }),
+      prisma.visit.count({ where: { salesRepId: target.id } }),
+      prisma.visit.count({ where: { salesRepId: target.id, visitDate: { gte: monthStart } } }),
+      prisma.payment.aggregate({
+        where: { status: 'approved', contract: { salesRepId: target.id } },
+        _sum: { amount: true },
+      }),
+      prisma.payment.aggregate({
+        where: { status: 'approved', paymentDate: { gte: monthStart }, contract: { salesRepId: target.id } },
+        _sum: { amount: true },
+      }),
+      target.managerId ? prisma.user.findUnique({ where: { id: target.managerId }, select: { name: true } }) : null,
+      prisma.userHotel.findMany({ where: { userId: target.id }, select: { hotel: { select: { name: true, group: true } } } }),
+    ]);
+
+    const collectedTotal = paymentsApprovedAgg._sum.amount || 0;
+    const collectedThisMonth = paymentsThisMonthAgg._sum.amount || 0;
+    const rate = target.commissionRate || 0;
+    const commissionThisMonth = Math.round((collectedThisMonth * rate) / 100 * 100) / 100;
+    const commissionLifetime = Math.round((collectedTotal * rate) / 100 * 100) / 100;
+
+    // Current target (this month / current quarter)
+    const monthNow = today.getMonth() + 1;
+    const yearNow = today.getFullYear();
+    const currentTarget = await prisma.salesTarget.findFirst({
+      where: { userId: target.id, year: yearNow, OR: [{ period: 'monthly', month: monthNow }, { period: 'quarterly', quarter: Math.ceil(monthNow / 3) }] },
+      orderBy: { period: 'asc' },
+    });
+
+    return {
+      user: {
+        id: target.id, name: target.name, email: target.email, phone: target.phone,
+        role: target.role, commissionRate: rate,
+        manager: manager?.name || null,
+        hotels: hotels.map(h => h.hotel.name),
+        joinedAt: target.createdAt,
+      },
+      clients: { total: clientsTotal, leads, active: activeClients },
+      contracts: { total: contractsTotal, approved: contractsApproved, pending: contractsPending },
+      visits: { total: visitsTotal, thisMonth: visitsThisMonth },
+      collections: { lifetime: collectedTotal, thisMonth: collectedThisMonth },
+      commission: { thisMonth: commissionThisMonth, lifetime: commissionLifetime },
+      currentTarget: currentTarget ? {
+        period: currentTarget.period,
+        targetContracts: currentTarget.targetContracts,
+        targetVisits: currentTarget.targetVisits,
+        targetRevenue: currentTarget.targetRevenue,
+        targetClients: currentTarget.targetClients,
+      } : null,
+    };
+  },
+
   get_my_performance: async (_args, user) => {
     const today = new Date();
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -582,6 +680,17 @@ const toolDeclarations = [
     description: 'Get the SALES TEAM with each member\'s clients/contracts/visits counts (أداء الفريق / team performance). Returns aggregated counts per member. Use for "أداء فريقي", "team leaderboard", "اعرض السيلز وأرقامهم".',
     parameters: { type: SchemaType.OBJECT, properties: { limit: { type: SchemaType.NUMBER } } },
   },
+  {
+    name: 'get_user_details',
+    description: 'Get a COMPREHENSIVE PROFILE of ONE specific employee/sales rep by name (ملف شامل عن مندوب). Returns the user\'s info + clients/contracts/visits counts + lifetime collections + this month commission + current target — everything the caller needs to know about this person in ONE call. Use this whenever the caller asks "اعرف كل شي عن [اسم]", "tell me everything about [name]", "ايه أداء [اسم]", "ملف فلان". DO NOT use search_clients/search_contracts/search_visits with the user\'s name afterwards — this single tool already covers it. Restricted: admins/GM/VGM see anyone; sales_director sees own team only.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        name: { type: SchemaType.STRING, description: 'Full or partial name of the employee (use the user\'s exact wording, do not translate)' },
+        user_id: { type: SchemaType.NUMBER, description: 'Optional explicit user id if known' },
+      },
+    },
+  },
 ];
 
 // ---- Main handler -----------------------------------------------------------
@@ -675,7 +784,7 @@ YOUR JOB (within scope): be the user's most helpful assistant.
 
 OUTPUT RULES (very important):
 - Reply ONLY with the user-facing message. NEVER mention tool names, function names, or any technical CRM internals.
-- FORBIDDEN strings in your response: "search_clients", "search_contracts", "search_visits", "search_payments", "search_bookings", "get_my_*", "get_team_overview", "get_dashboard_summary", "the tool returned", "I used the tool", "I called", "function".
+- FORBIDDEN strings in your response: "search_clients", "search_contracts", "search_visits", "search_payments", "search_bookings", "get_my_*", "get_team_overview", "get_dashboard_summary", "get_user_details", "the tool returned", "I used the tool", "I called", "function".
 - When suggesting actions, write them in plain natural language (e.g., "ابحث عن العملاء المحتملين" not "use search_clients(client_type='lead')").
 - Reply in Arabic if the user wrote in Arabic, otherwise English.
 - Be conversational and warm, but concise. 1-4 sentences typically; longer only when explicitly listing or planning.
@@ -782,7 +891,7 @@ OUTPUT RULES (very important):
           // Strip tool-name leaks before sending
           const safe = t
             .replace(/`?search_(clients|contracts|payments|visits|bookings|users)(\([^)]*\))?`?/gi, '')
-            .replace(/`?get_(my_targets|my_tasks|my_reminders|my_commission|my_performance|team_overview|dashboard_summary)(\([^)]*\))?`?/gi, '');
+            .replace(/`?get_(my_targets|my_tasks|my_reminders|my_commission|my_performance|team_overview|dashboard_summary|user_details)(\([^)]*\))?`?/gi, '');
           sendEvent('chunk', { text: safe });
         }
       }
@@ -807,7 +916,7 @@ OUTPUT RULES (very important):
           // Send the whole thing as one chunk since we already have it
           const safe = t
             .replace(/`?search_(clients|contracts|payments|visits|bookings|users)(\([^)]*\))?`?/gi, '')
-            .replace(/`?get_(my_targets|my_tasks|my_reminders|my_commission|my_performance|team_overview|dashboard_summary)(\([^)]*\))?`?/gi, '');
+            .replace(/`?get_(my_targets|my_tasks|my_reminders|my_commission|my_performance|team_overview|dashboard_summary|user_details)(\([^)]*\))?`?/gi, '');
           sendEvent('chunk', { text: safe });
         }
       } catch (_) {}
