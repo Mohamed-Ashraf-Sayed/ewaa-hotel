@@ -184,6 +184,157 @@ const tools = {
     return { count: rows.length, items: rows };
   },
 
+  get_my_targets: async (args, user) => {
+    const where = { userId: user.id };
+    const yearNow = new Date().getFullYear();
+    const monthNow = new Date().getMonth() + 1;
+    if (args.year) where.year = Number(args.year);
+    else where.year = yearNow;
+    if (args.period === 'monthly' && !args.month) where.month = monthNow;
+    if (args.period) where.period = args.period;
+
+    const targets = await prisma.salesTarget.findMany({
+      where, orderBy: [{ year: 'desc' }, { month: 'desc' }, { quarter: 'desc' }],
+      include: { setBy: { select: { name: true } } },
+    });
+    if (targets.length === 0) {
+      return { count: 0, message: `No targets set for user ${user.name} for ${where.year}` };
+    }
+    // Compute progress for the most recent target
+    const t = targets[0];
+    const start = t.period === 'monthly'
+      ? new Date(t.year, (t.month || 1) - 1, 1)
+      : new Date(t.year, ((t.quarter || 1) - 1) * 3, 1);
+    const end = t.period === 'monthly'
+      ? new Date(t.year, t.month || 1, 0, 23, 59, 59)
+      : new Date(t.year, (t.quarter || 1) * 3, 0, 23, 59, 59);
+    const [contractsActual, visitsActual, revenueAgg, clientsActual] = await Promise.all([
+      prisma.contract.count({ where: { salesRepId: user.id, createdAt: { gte: start, lte: end }, status: 'approved' } }),
+      prisma.visit.count({ where: { salesRepId: user.id, visitDate: { gte: start, lte: end } } }),
+      prisma.contract.aggregate({ where: { salesRepId: user.id, createdAt: { gte: start, lte: end }, status: 'approved' }, _sum: { totalValue: true } }),
+      prisma.client.count({ where: { salesRepId: user.id, createdAt: { gte: start, lte: end } } }),
+    ]);
+    return {
+      count: targets.length,
+      currentTarget: {
+        period: t.period, year: t.year, month: t.month, quarter: t.quarter,
+        targetContracts: t.targetContracts, actualContracts: contractsActual,
+        targetVisits: t.targetVisits, actualVisits: visitsActual,
+        targetRevenue: t.targetRevenue, actualRevenue: revenueAgg._sum.totalValue || 0,
+        targetClients: t.targetClients, actualClients: clientsActual,
+        setBy: t.setBy?.name,
+      },
+      allTargets: targets,
+    };
+  },
+
+  get_my_tasks: async (args, user) => {
+    const where = { assigneeId: user.id };
+    if (args.status) where.status = args.status;
+    else where.status = { not: 'completed' }; // default: open tasks
+    if (args.priority) where.priority = args.priority;
+
+    const tasks = await prisma.task.findMany({
+      where,
+      orderBy: [{ priority: 'desc' }, { dueDate: 'asc' }],
+      take: Math.min(Number(args.limit) || 25, 100),
+      select: {
+        id: true, title: true, taskType: true, priority: true, status: true, dueDate: true,
+        client: { select: { id: true, companyName: true } },
+        createdBy: { select: { name: true } },
+      },
+    });
+    const overdue = tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date()).length;
+    return { count: tasks.length, overdue, items: tasks };
+  },
+
+  get_my_reminders: async (args, user) => {
+    const where = { userId: user.id, isCompleted: false };
+    if (args.from_date) where.reminderDate = { ...(where.reminderDate || {}), gte: new Date(args.from_date) };
+    if (args.to_date) where.reminderDate = { ...(where.reminderDate || {}), lte: new Date(`${args.to_date}T23:59:59`) };
+    if (!args.from_date && !args.to_date) {
+      // Default: next 7 days
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const week = new Date(); week.setDate(today.getDate() + 7); week.setHours(23, 59, 59);
+      where.reminderDate = { gte: today, lte: week };
+    }
+    const reminders = await prisma.reminder.findMany({
+      where, orderBy: { reminderDate: 'asc' },
+      take: Math.min(Number(args.limit) || 25, 100),
+      select: {
+        id: true, title: true, description: true, reminderDate: true, reminderTime: true, type: true,
+        client: { select: { id: true, companyName: true } },
+      },
+    });
+    return { count: reminders.length, items: reminders };
+  },
+
+  get_my_commission: async (args, user) => {
+    // Pull user with commission rate
+    const u = await prisma.user.findUnique({ where: { id: user.id }, select: { commissionRate: true, name: true } });
+    const rate = u?.commissionRate || 0;
+    const yearNow = new Date().getFullYear();
+    const monthNow = new Date().getMonth();
+    let from, to, label;
+    if (args.period === 'this_year' || args.year) {
+      const y = Number(args.year) || yearNow;
+      from = new Date(y, 0, 1); to = new Date(y, 11, 31, 23, 59, 59);
+      label = `${y}`;
+    } else if (args.period === 'last_month') {
+      from = new Date(yearNow, monthNow - 1, 1);
+      to = new Date(yearNow, monthNow, 0, 23, 59, 59);
+      label = from.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    } else {
+      // default: this month
+      from = new Date(yearNow, monthNow, 1);
+      to = new Date(yearNow, monthNow + 1, 0, 23, 59, 59);
+      label = from.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    }
+    // Sum approved payments on contracts owned by this rep within period
+    const payments = await prisma.payment.findMany({
+      where: {
+        status: 'approved',
+        paymentDate: { gte: from, lte: to },
+        contract: { salesRepId: user.id },
+      },
+      select: { amount: true },
+    });
+    const collectedTotal = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const commissionEarned = Math.round((collectedTotal * rate) / 100 * 100) / 100;
+    // Pending = approved-contract collectedAmount NOT yet covered + open contracts not approved
+    return {
+      period: label,
+      commissionRate: rate,
+      collectedAmount: collectedTotal,
+      commissionEarned,
+      paymentsCount: payments.length,
+    };
+  },
+
+  get_my_performance: async (_args, user) => {
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const weekStart = new Date(today); weekStart.setDate(today.getDate() - today.getDay()); weekStart.setHours(0, 0, 0, 0);
+    const [
+      myClients, myActiveClients, myLeads, myContracts, myApprovedContracts,
+      myVisitsTotal, myVisitsThisMonth, myVisitsThisWeek,
+    ] = await Promise.all([
+      prisma.client.count({ where: { salesRepId: user.id, isActive: true } }),
+      prisma.client.count({ where: { salesRepId: user.id, isActive: true, clientType: 'active' } }),
+      prisma.client.count({ where: { salesRepId: user.id, isActive: true, clientType: 'lead' } }),
+      prisma.contract.count({ where: { salesRepId: user.id } }),
+      prisma.contract.count({ where: { salesRepId: user.id, status: 'approved' } }),
+      prisma.visit.count({ where: { salesRepId: user.id } }),
+      prisma.visit.count({ where: { salesRepId: user.id, visitDate: { gte: monthStart } } }),
+      prisma.visit.count({ where: { salesRepId: user.id, visitDate: { gte: weekStart } } }),
+    ]);
+    return {
+      myClients, myActiveClients, myLeads,
+      myContracts, myApprovedContracts,
+      myVisitsTotal, myVisitsThisMonth, myVisitsThisWeek,
+    };
+  },
+
   get_dashboard_summary: async (_args, user) => {
     const scope = await buildClientScope(user);
     const [clients, leads, activeClients, totalContracts, pendingContracts, approvedContracts, visitsThisMonth] = await Promise.all([
@@ -288,6 +439,58 @@ const toolDeclarations = [
   {
     name: 'get_dashboard_summary',
     description: 'Get OVERVIEW / KPI TOTALS only. Returns counts: total clients, leads, active clients, contracts, pending contracts, approved contracts, visits this month. Use ONLY for general overview questions like "أرقامي", "ملخص", "overview", "dashboard", "totals". DO NOT use when the user asks about a specific entity type (clients/contracts/visits/etc.) — use the dedicated search tool for that.',
+    parameters: { type: SchemaType.OBJECT, properties: {} },
+  },
+  {
+    name: 'get_my_targets',
+    description: 'Get the LOGGED-IN USER\'S sales targets (تارجت / هدف / target / quota) and how much they achieved so far. Use for questions like "ايه التارجت بتاعي؟", "كم وصلت من هدفي؟", "my targets".',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        period: { type: SchemaType.STRING, enum: ['monthly', 'quarterly'], description: 'monthly or quarterly' },
+        year: { type: SchemaType.NUMBER },
+        month: { type: SchemaType.NUMBER, description: '1-12' },
+      },
+    },
+  },
+  {
+    name: 'get_my_tasks',
+    description: 'Get the LOGGED-IN USER\'S assigned tasks (مهام / tasks / to-do). Use for "ايه المهام عندي؟", "tasks I have", "ايه اللي علي".',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        status: { type: SchemaType.STRING, enum: ['new', 'in_progress', 'completed'], description: 'default: open tasks (not completed)' },
+        priority: { type: SchemaType.STRING, enum: ['urgent', 'normal'] },
+        limit: { type: SchemaType.NUMBER },
+      },
+    },
+  },
+  {
+    name: 'get_my_reminders',
+    description: 'Get the LOGGED-IN USER\'S calendar reminders (تذكيرات / reminders). Defaults to next 7 days. Use for "ايه التذكيرات عندي؟", "my reminders this week".',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        from_date: { type: SchemaType.STRING, description: 'YYYY-MM-DD' },
+        to_date: { type: SchemaType.STRING, description: 'YYYY-MM-DD' },
+        limit: { type: SchemaType.NUMBER },
+      },
+    },
+  },
+  {
+    name: 'get_my_commission',
+    description: 'Calculate the LOGGED-IN USER\'S commission earned (عمولة / commission). Defaults to current month. Use for "كم عمولتي؟", "commission this month", "earnings".',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        period: { type: SchemaType.STRING, enum: ['this_month', 'last_month', 'this_year'] },
+        year: { type: SchemaType.NUMBER },
+      },
+    },
+  },
+  {
+    name: 'get_my_performance',
+    description: 'Get the LOGGED-IN USER\'S personal stats: # of clients/leads/contracts/visits assigned to them. Use for "أدائي", "أرقامي الشخصية", "my personal stats", "كم عميل عندي؟".',
     parameters: { type: SchemaType.OBJECT, properties: {} },
   },
 ];
