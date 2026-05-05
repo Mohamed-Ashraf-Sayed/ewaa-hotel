@@ -423,6 +423,42 @@ const tools = {
     return { count: users.length, items: users };
   },
 
+  search_hotels: async (args, _user) => {
+    // Hotels are reference data visible to everyone in the company.
+    const where = { isActive: true };
+    if (args.brand) where.group = args.brand;
+    if (args.city) where.OR = [
+      { city: { contains: args.city } },
+      { location: { contains: args.city } },
+    ];
+    if (args.search) {
+      const s = args.search;
+      where.OR = [
+        ...(where.OR || []),
+        { name: { contains: s } },
+        { nameEn: { contains: s } },
+      ];
+    }
+    const take = Math.min(Number(args.limit) || 50, 200);
+    const rows = await prisma.hotel.findMany({
+      where,
+      take,
+      orderBy: [{ group: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true, name: true, nameEn: true, group: true,
+        city: true, location: true, country: true,
+        stars: true, type: true,
+      },
+    });
+    // Group counts for context
+    const byBrand = {};
+    for (const r of rows) {
+      const g = r.group || 'other';
+      byBrand[g] = (byBrand[g] || 0) + 1;
+    }
+    return { count: rows.length, byBrand, items: rows };
+  },
+
   get_team_overview: async (args, user) => {
     if (!ADMIN_ROLES.includes(user.role) && user.role !== 'sales_director') {
       return { count: 0, message: 'You do not have permission to view team overview.' };
@@ -738,6 +774,19 @@ const toolDeclarations = [
     },
   },
   {
+    name: 'search_hotels',
+    description: 'List Ewaa group HOTELS (الفنادق / فنادقنا / properties). Returns the hotel name, brand (group), city, location, stars, and type. Use for "ايه الفنادق اللي عندنا", "كم فندق عندنا", "فنادقنا في الرياض", "what hotels do we have in Jeddah". Hotels are public reference data — no permission check. NOTE: this tool does NOT return room rates/prices; rates are per-contract or per-booking, use search_contracts or search_bookings for that.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        brand: { type: SchemaType.STRING, enum: ['muhaidib_serviced','awa_hotels','grand_plaza'], description: 'Filter by brand' },
+        city: { type: SchemaType.STRING, description: 'Filter by city or location keyword (e.g. الرياض, جدة, مكة)' },
+        search: { type: SchemaType.STRING, description: 'Free-text search on hotel name (Arabic or English)' },
+        limit: { type: SchemaType.NUMBER, description: 'Max rows (default 50, max 200)' },
+      },
+    },
+  },
+  {
     name: 'get_team_overview',
     description: 'Get the SALES TEAM with each member\'s clients/contracts/visits counts (أداء الفريق / team performance). Returns aggregated counts per member. Use for "أداء فريقي", "team leaderboard", "اعرض السيلز وأرقامهم".',
     parameters: { type: SchemaType.OBJECT, properties: { limit: { type: SchemaType.NUMBER } } },
@@ -819,7 +868,9 @@ OUTPUT:
 - Reply in the user's language (Arabic if they wrote Arabic).
 - Concise, conversational, 1-4 sentences. Bullets for lists.
 - Money: "X,XXX ر.س". Dates: DD/MM/YYYY.
-- NEVER mention tool/function names like search_clients, get_user_details, etc.`;
+- NEVER mention tool/function names like search_clients, get_user_details, etc.
+
+REFERENCE DATA: Hotels (الفنادق) are public reference data visible to everyone — never refuse hotel info questions. If asked about hotel rates/prices, explain rates aren't on the hotel itself but on contracts/bookings, and offer to look those up.`;
 
     // Build a model with fallback chain: try primary model first, then fallback if 503
     const buildModel = (modelName) => genAI.getGenerativeModel({
@@ -923,7 +974,7 @@ OUTPUT:
           assembled += t;
           // Strip tool-name leaks before sending
           const safe = t
-            .replace(/`?search_(clients|contracts|payments|visits|bookings|users)(\([^)]*\))?`?/gi, '')
+            .replace(/`?search_(clients|contracts|payments|visits|bookings|users|hotels)(\([^)]*\))?`?/gi, '')
             .replace(/`?get_(my_targets|my_tasks|my_reminders|my_commission|my_performance|team_overview|dashboard_summary|user_details)(\([^)]*\))?`?/gi, '');
           sendEvent('chunk', { text: safe });
         }
@@ -947,7 +998,7 @@ OUTPUT:
           finalText = t;
           // Send the whole thing as one chunk since we already have it
           const safe = t
-            .replace(/`?search_(clients|contracts|payments|visits|bookings|users)(\([^)]*\))?`?/gi, '')
+            .replace(/`?search_(clients|contracts|payments|visits|bookings|users|hotels)(\([^)]*\))?`?/gi, '')
             .replace(/`?get_(my_targets|my_tasks|my_reminders|my_commission|my_performance|team_overview|dashboard_summary|user_details)(\([^)]*\))?`?/gi, '');
           sendEvent('chunk', { text: safe });
         }
