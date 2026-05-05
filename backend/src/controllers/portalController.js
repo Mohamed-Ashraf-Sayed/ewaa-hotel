@@ -10,8 +10,48 @@ const OTP_RATE_LIMIT_PER_HOUR = 5;
 const OTP_MAX_ATTEMPTS = 5;
 const PORTAL_TOKEN_TTL = '7d';
 
+// Per-client booking-submission cap (anti-spam, complements per-IP route limit)
+const BOOKING_RATE_PER_HOUR_PER_CLIENT = 10;
+const BOOKING_RATE_PER_DAY_PER_CLIENT = 30;
+
+// Hard input caps to prevent DoS / OOM
+const MAX_GUESTS_PER_BOOKING = 20;
+const MAX_NAME_LEN = 120;
+const MAX_NATIONALITY_LEN = 60;
+const MAX_NOTES_LEN = 1000;
+
+// RFC 5321 max email length is 254
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const isValidEmail = (s) => typeof s === 'string' && s.length <= 254 && EMAIL_RE.test(s);
+
 // Same generic message regardless of whether the email exists, to prevent email enumeration
 const GENERIC_OTP_MSG = 'إذا كان البريد مسجلاً لدينا، تم إرسال كود تحقق إليه.';
+
+// A throwaway hash used purely to keep request-otp's response time roughly
+// constant whether or not the email matches — defeats simple timing oracles
+// that try to enumerate registered emails by measuring response latency.
+const TIMING_DECOY_HASH = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'; // bcrypt('password')
+const constantTimeDelay = async () => {
+  // Run a real bcrypt op to mirror the work done in the success path.
+  await bcrypt.compare('decoy', TIMING_DECOY_HASH).catch(() => {});
+};
+
+// Audit logger — writes to Activity table where possible (so it shows in the
+// CRM activity feed under the relevant client) and falls back to console if
+// the client isn't known yet (e.g. an OTP request for an unregistered email).
+const audit = async ({ clientId, salesRepId, type, description }) => {
+  try {
+    if (clientId) {
+      await prisma.activity.create({
+        data: { clientId, userId: salesRepId, type, description },
+      });
+    } else {
+      console.log(`[Portal Audit] ${type}: ${description}`);
+    }
+  } catch (err) {
+    console.error('audit log error:', err.message);
+  }
+};
 
 const otpEmailHtml = (companyName, code) => `
 <div dir="rtl" style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:20px;background:#f0f4f8;">
@@ -33,25 +73,36 @@ const otpEmailHtml = (companyName, code) => `
 // POST /portal/auth/request-otp { email }
 const requestOtp = async (req, res) => {
   try {
-    const email = (req.body?.email || '').trim().toLowerCase();
-    if (!email) return res.status(400).json({ message: 'البريد الإلكتروني مطلوب' });
+    const rawEmail = String(req.body?.email || '').trim().toLowerCase();
 
-    // Rate-limit OTP requests per email
+    // Validate format. Always return generic message on bad email so we don't
+    // confirm whether shape was right or wrong.
+    if (!isValidEmail(rawEmail)) {
+      await constantTimeDelay();
+      return res.json({ message: GENERIC_OTP_MSG });
+    }
+
+    // Per-email rate limit (defense in depth on top of per-IP middleware).
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     const recent = await prisma.clientOtpCode.count({
-      where: { email, createdAt: { gte: oneHourAgo } },
+      where: { email: rawEmail, createdAt: { gte: oneHourAgo } },
     });
     if (recent >= OTP_RATE_LIMIT_PER_HOUR) {
       return res.status(429).json({ message: 'تم تجاوز عدد محاولات الدخول. حاول بعد ساعة.' });
     }
 
-    // Look up client by email (case-insensitive). Always send back the same message
-    // whether or not the email matches, to prevent enumeration.
+    // Look up client by email. Always send back the same message whether or not
+    // the email matches; combined with constantTimeDelay below this defeats
+    // both content- and timing-based enumeration.
     const client = await prisma.client.findFirst({
-      where: { email: { equals: email }, isActive: true },
+      where: { email: { equals: rawEmail }, isActive: true },
     });
+
     if (!client) {
-      // Don't tell the requester their email is unknown — pretend success.
+      // Audit suspicious login attempts on unknown emails (helpful when probed)
+      await audit({ type: 'portal_otp_unknown_email', description: `طلب كود لبريد غير مسجل: ${rawEmail}` });
+      // Match the success-path workload before responding
+      await constantTimeDelay();
       return res.json({ message: GENERIC_OTP_MSG });
     }
 
@@ -61,20 +112,23 @@ const requestOtp = async (req, res) => {
 
     // Invalidate any prior unused codes for this email
     await prisma.clientOtpCode.updateMany({
-      where: { email, used: false },
+      where: { email: rawEmail, used: false },
       data: { used: true },
     });
-    await prisma.clientOtpCode.create({ data: { email, codeHash, expiresAt } });
+    await prisma.clientOtpCode.create({ data: { email: rawEmail, codeHash, expiresAt } });
 
-    // Always log to console in dev so testing works even without SMTP. This is a
-    // dev-only convenience — never enable PORTAL_OTP_DEBUG in production.
+    // Dev-only: log code to console for testing without SMTP. The production
+    // build sets NODE_ENV=production and never trips this branch unless
+    // PORTAL_OTP_DEBUG is explicitly set — which should never be set in prod.
     if (process.env.NODE_ENV !== 'production' || process.env.PORTAL_OTP_DEBUG === '1') {
-      console.log(`[Portal OTP] email=${email} code=${code} (expires ${expiresAt.toISOString()})`);
+      console.log(`[Portal OTP] email=${rawEmail} code=${code} (expires ${expiresAt.toISOString()})`);
     }
+
+    await audit({ clientId: client.id, salesRepId: client.salesRepId, type: 'portal_otp_requested', description: `تم إرسال كود دخول إلى ${rawEmail}` });
 
     try {
       await sendSystemEmail({
-        to: email,
+        to: rawEmail,
         subject: 'كود التحقق - بوابة عملاء Ewaa Hotels',
         html: otpEmailHtml(client.companyName, code),
       });
@@ -93,30 +147,35 @@ const requestOtp = async (req, res) => {
   }
 };
 
-// Demo accounts that can bypass OTP with a fixed code, ONLY in non-production environments.
-// This is a development/QA convenience so testers can skip the email round-trip.
-// Three guards: (a) hardcoded email allowlist, (b) hardcoded fixed code, (c) NODE_ENV !== 'production'.
+// Demo bypass — only the demo email + fixed code, ONLY when explicitly enabled
+// via env, ONLY outside production. Three independent guards so a single
+// misconfiguration in any one of them isn't enough to enable the bypass:
+//   1) PORTAL_DEMO_BYPASS=1                   (must be explicitly set per env)
+//   2) NODE_ENV !== 'production'              (kills it in production builds)
+//   3) hardcoded email + fixed code allowlist (only one specific demo account)
 const DEMO_BYPASS = {
   emails: ['demo@portal.test'],
   fixedCode: '000000',
 };
+const isDemoBypassEnabled = () =>
+  process.env.PORTAL_DEMO_BYPASS === '1' &&
+  process.env.NODE_ENV !== 'production';
 
 // POST /portal/auth/verify-otp { email, code }
 const verifyOtp = async (req, res) => {
   try {
-    const email = (req.body?.email || '').trim().toLowerCase();
-    const code = (req.body?.code || '').trim();
-    if (!email || !code) return res.status(400).json({ message: 'البريد والكود مطلوبان' });
+    const rawEmail = String(req.body?.email || '').trim().toLowerCase();
+    const rawCode = String(req.body?.code || '').trim();
 
-    // Dev-only bypass for demo accounts
-    const isBypass =
-      process.env.NODE_ENV !== 'production' &&
-      DEMO_BYPASS.emails.includes(email) &&
-      code === DEMO_BYPASS.fixedCode;
+    if (!isValidEmail(rawEmail) || !/^\d{6}$/.test(rawCode)) {
+      return res.status(400).json({ message: 'البريد والكود مطلوبان' });
+    }
 
-    if (isBypass) {
-      const client = await prisma.client.findFirst({ where: { email: { equals: email }, isActive: true } });
+    // Dev-only bypass
+    if (isDemoBypassEnabled() && DEMO_BYPASS.emails.includes(rawEmail) && rawCode === DEMO_BYPASS.fixedCode) {
+      const client = await prisma.client.findFirst({ where: { email: { equals: rawEmail }, isActive: true } });
       if (!client) return res.status(400).json({ message: 'العميل غير موجود' });
+      console.warn(`[Portal] DEMO BYPASS used for ${rawEmail} from IP ${req.ip}`);
       const token = jwt.sign({ clientId: client.id, type: 'portal' }, process.env.JWT_SECRET, { expiresIn: PORTAL_TOKEN_TTL });
       return res.json({
         token,
@@ -125,17 +184,21 @@ const verifyOtp = async (req, res) => {
     }
 
     const record = await prisma.clientOtpCode.findFirst({
-      where: { email, used: false, expiresAt: { gt: new Date() } },
+      where: { email: rawEmail, used: false, expiresAt: { gt: new Date() } },
       orderBy: { createdAt: 'desc' },
     });
-    if (!record) return res.status(400).json({ message: 'الكود غير صالح أو انتهت صلاحيته' });
+    if (!record) {
+      await audit({ type: 'portal_otp_invalid', description: `محاولة دخول بكود منتهي / غير صالح من ${rawEmail} (IP ${req.ip})` });
+      return res.status(400).json({ message: 'الكود غير صالح أو انتهت صلاحيته' });
+    }
 
     if (record.attempts >= OTP_MAX_ATTEMPTS) {
       await prisma.clientOtpCode.update({ where: { id: record.id }, data: { used: true } });
+      await audit({ type: 'portal_otp_locked', description: `تم قفل الكود بعد ${OTP_MAX_ATTEMPTS} محاولات فاشلة - ${rawEmail} (IP ${req.ip})` });
       return res.status(400).json({ message: 'تم تجاوز عدد المحاولات، اطلب كود جديد.' });
     }
 
-    const ok = await bcrypt.compare(code, record.codeHash);
+    const ok = await bcrypt.compare(rawCode, record.codeHash);
     if (!ok) {
       await prisma.clientOtpCode.update({
         where: { id: record.id },
@@ -144,11 +207,11 @@ const verifyOtp = async (req, res) => {
       return res.status(400).json({ message: 'الكود غير صحيح' });
     }
 
-    // Mark used
+    // Mark used (single-use OTP)
     await prisma.clientOtpCode.update({ where: { id: record.id }, data: { used: true } });
 
     const client = await prisma.client.findFirst({
-      where: { email: { equals: email }, isActive: true },
+      where: { email: { equals: rawEmail }, isActive: true },
     });
     if (!client) return res.status(400).json({ message: 'العميل غير موجود' });
 
@@ -157,6 +220,8 @@ const verifyOtp = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: PORTAL_TOKEN_TTL }
     );
+
+    await audit({ clientId: client.id, salesRepId: client.salesRepId, type: 'portal_login', description: `دخول البورتال - IP ${req.ip}` });
 
     res.json({
       token,
@@ -282,6 +347,21 @@ const getMyBooking = async (req, res) => {
 // POST /portal/bookings — submit a booking REQUEST (status = pending_reservations)
 const requestBooking = async (req, res) => {
   try {
+    // Per-client rate limiting (anti-spam — supplements the per-IP limit on the route).
+    // A single legitimate token still shouldn't be able to spam bookings.
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [hourCount, dayCount] = await Promise.all([
+      prisma.booking.count({ where: { clientId: req.client.id, createdAt: { gte: oneHourAgo } } }),
+      prisma.booking.count({ where: { clientId: req.client.id, createdAt: { gte: oneDayAgo } } }),
+    ]);
+    if (hourCount >= BOOKING_RATE_PER_HOUR_PER_CLIENT) {
+      return res.status(429).json({ message: 'تم تجاوز حد طلبات الحجز لهذه الساعة. حاول لاحقًا.' });
+    }
+    if (dayCount >= BOOKING_RATE_PER_DAY_PER_CLIENT) {
+      return res.status(429).json({ message: 'تم تجاوز حد طلبات الحجز اليومي. حاول غدًا.' });
+    }
+
     const {
       hotelId, contractId,
       guestName, guests, arrivalDate, departureDate,
@@ -289,21 +369,47 @@ const requestBooking = async (req, res) => {
       ratePackage, paymentMethod, notes,
     } = req.body;
 
-    // Normalize guests array. Accept either:
-    //   - guests: [{ name, nationality }]    (preferred new shape)
-    //   - guestName: "..." (legacy single-guest fallback)
+    // ── Input validation: types, lengths, ranges ──
+    const hotelIdInt = parseInt(hotelId);
+    if (!Number.isInteger(hotelIdInt) || hotelIdInt <= 0) {
+      return res.status(400).json({ message: 'معرّف الفندق غير صالح' });
+    }
+
+    // Normalize + validate guests array.
     let normalizedGuests = Array.isArray(guests)
-      ? guests.filter(g => g && g.name && String(g.name).trim()).map(g => ({
-          name: String(g.name).trim(),
-          nationality: g.nationality ? String(g.nationality).trim() : null,
-        }))
+      ? guests
+          .filter(g => g && typeof g.name === 'string' && g.name.trim())
+          .map(g => ({
+            name: String(g.name).trim().slice(0, MAX_NAME_LEN),
+            nationality: g.nationality ? String(g.nationality).trim().slice(0, MAX_NATIONALITY_LEN) : null,
+          }))
       : [];
-    if (normalizedGuests.length === 0 && guestName && String(guestName).trim()) {
-      normalizedGuests = [{ name: String(guestName).trim(), nationality: null }];
+    if (normalizedGuests.length === 0 && typeof guestName === 'string' && guestName.trim()) {
+      normalizedGuests = [{ name: String(guestName).trim().slice(0, MAX_NAME_LEN), nationality: null }];
+    }
+    if (normalizedGuests.length > MAX_GUESTS_PER_BOOKING) {
+      return res.status(400).json({ message: `عدد الضيوف لا يجب أن يتجاوز ${MAX_GUESTS_PER_BOOKING}` });
     }
 
     if (!hotelId || normalizedGuests.length === 0 || !arrivalDate || !departureDate) {
       return res.status(400).json({ message: 'بيانات ناقصة: الفندق وضيف واحد على الأقل والتواريخ مطلوبة' });
+    }
+
+    // Numeric counts: clamp to reasonable ranges (hotel rooms aren't ever in the thousands)
+    const roomsInt = parseInt(roomsCount);
+    const adultsInt = parseInt(adultsCount);
+    const childrenInt = parseInt(childrenCount);
+    if ((roomsCount !== undefined && (!Number.isFinite(roomsInt) || roomsInt < 1 || roomsInt > 100)) ||
+        (adultsCount !== undefined && (!Number.isFinite(adultsInt) || adultsInt < 0 || adultsInt > 200)) ||
+        (childrenCount !== undefined && (!Number.isFinite(childrenInt) || childrenInt < 0 || childrenInt > 200))) {
+      return res.status(400).json({ message: 'أعداد الغرف / الكبار / الأطفال غير صالحة' });
+    }
+
+    if (typeof notes === 'string' && notes.length > MAX_NOTES_LEN) {
+      return res.status(400).json({ message: 'الملاحظات طويلة جدًا' });
+    }
+    if (typeof roomType === 'string' && roomType.length > 80) {
+      return res.status(400).json({ message: 'نوع الغرفة غير صالح' });
     }
     const arr = new Date(arrivalDate);
     const dep = new Date(departureDate);
