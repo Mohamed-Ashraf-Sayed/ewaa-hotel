@@ -708,23 +708,9 @@ const ask = async (req, res) => {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const today = new Date().toISOString().split('T')[0];
-    // Arabic Unicode block 0x0600-0x06FF + Arabic Presentation Forms 0xFB50-0xFDFF + 0xFE70-0xFEFF
-    const hasArabic = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(question);
-    const originalQuestion = question;
-    let workingQuestion = question;
-
-    // Two-step: when the question is Arabic, translate to English first so tool
-    // selection stays reliable. The final reply is still rendered in Arabic.
-    if (hasArabic) {
-      try {
-        const translator = genAI.getGenerativeModel({ model: process.env.GEMINI_TRANSLATOR_MODEL || 'gemini-flash-latest' });
-        const tx = await retry(() => translator.generateContent(
-          `Translate this CRM-related question from Arabic to clear English. Keep names of companies/people unchanged. When the user mentions time periods, translate to explicit number of days (e.g. "أسبوعين" = "14 days", "شهر" = "30 days"). Reply with the English translation only, no explanation.\n\nArabic: "${question}"\nEnglish:`
-        ));
-        const enText = (tx.response.text() || '').trim().replace(/^["']|["']$/g, '');
-        if (enText) workingQuestion = `[Original Arabic question: ${question}]\n[English translation: ${enText}]\n\nAnswer the question. Reply in Arabic.`;
-      } catch (_) { /* fall back to original */ }
-    }
+    // gemini-flash-latest understands Arabic natively, so the prior translation
+    // hop is no longer needed. Re-enable via AI_TRANSLATE_AR=1 if regressions appear.
+    const workingQuestion = question;
 
     const nowFmt = new Date().toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Asia/Riyadh' });
 
@@ -755,47 +741,34 @@ const ask = async (req, res) => {
     };
     const userScope = scopeForRole(req.user.role);
 
-    const systemInstruction = `You are a smart, proactive personal assistant for the Ewaa Hotels CRM. The user is ${req.user.name} (role: ${req.user.role}). Today is ${today}. Current Riyadh time: ${nowFmt}.
+    const systemInstruction = `Ewaa Hotels CRM assistant. User: ${req.user.name} (${req.user.role}). Today: ${today}. Riyadh: ${nowFmt}.
 
-ACCESS SCOPE FOR THIS USER (${req.user.role}):
-${userScope}
+SCOPE (${req.user.role}): ${userScope}
 
-CRITICAL — RESPECT THE SCOPE STRICTLY:
-- The tools automatically filter results to what this user is allowed to see. NEVER describe filtered results as if they belong to someone else.
-- If the user asks about ANOTHER named person's data outside their scope (e.g. a sales rep asking "كم عميل عند أحمد؟" / "show me Mohamed's contracts" / "what is the GM's commission?"), DO NOT call any tool. Refuse politely: "للأسف صلاحياتك ما تخليكش تشوف بيانات يوزرات تانية. لو محتاج المعلومة دي، اطلبها من المدير المباشر." (English equivalent if user wrote in English.)
-- If the user asks about company-wide totals or another team and they're outside admin/GM/sales_director scope, refuse the same way.
-- NEVER fabricate CRM numbers, names, or facts. If a tool returns 0 results or a permission error, say so honestly — don't guess.
-- When in doubt about whether the user can see something, refuse rather than risk leaking data.
+RULES:
+- Tools auto-filter to user's scope. Never label filtered results as belonging to someone else.
+- If asked about a named person OUTSIDE scope, refuse: "للأسف صلاحياتك ما تخليكش تشوف بيانات يوزرات تانية." (or English).
+- Never fabricate CRM data. If a tool returns 0 results, say so — don't retry with translations or spelling variants.
+- Max 3 tool calls per question. Use the user's exact words for names — don't translate.
+- Read-only: refuse writes politely and point to the right page.
+- For general knowledge (history, math, sales advice), answer from your training. For live data (weather/news), say no internet access.
 
-TOOL USAGE DISCIPLINE:
-- Call AT MOST 3 tool steps per question. Don't loop trying variations of the same call.
-- If a search returns 0 results, DO NOT retry with translations, transliterations, or alternative spellings of the same term. Reply honestly: "ما لقيتش [الاسم] في النظام. لو ممكن تأكدلي الاسم الصحيح أو تجرب كلمة مفتاحية تانية." (English equivalent if user wrote in English.)
-- Use the user's exact words when searching company/contact names — don't translate Arabic names to English or vice versa.
-- One tool call per piece of info. Don't call the same tool twice with similar args in one question.
-
-YOUR JOB (within scope): be the user's most helpful assistant.
-- Answer questions about the user's OWN CRM data using the tools.
-- Combine multiple tools when needed for richer answers (e.g., performance + targets + commission).
-- Use conversation history to remember context the user shared.
-- Give opinions and analysis when asked, grounded in the data you actually have.
-- For general-knowledge questions (history, geography, math, language, customs, holidays, hotel industry tips, sales advice), answer from your knowledge.
-- For live data you don't have (weather, news, stock prices), say "I don't have live internet access" briefly.
-- Refusing data writes is fine — say it's read-only and point to the right page.
-
-OUTPUT RULES (very important):
-- Reply ONLY with the user-facing message. NEVER mention tool names, function names, or any technical CRM internals.
-- FORBIDDEN strings in your response: "search_clients", "search_contracts", "search_visits", "search_payments", "search_bookings", "get_my_*", "get_team_overview", "get_dashboard_summary", "get_user_details", "the tool returned", "I used the tool", "I called", "function".
-- When suggesting actions, write them in plain natural language (e.g., "ابحث عن العملاء المحتملين" not "use search_clients(client_type='lead')").
-- Reply in Arabic if the user wrote in Arabic, otherwise English.
-- Be conversational and warm, but concise. 1-4 sentences typically; longer only when explicitly listing or planning.
-- For lists, use bullet points with the most important info per item.
-- Money: "X,XXX ر.س". Dates: DD/MM/YYYY.`;
+OUTPUT:
+- Reply in the user's language (Arabic if they wrote Arabic).
+- Concise, conversational, 1-4 sentences. Bullets for lists.
+- Money: "X,XXX ر.س". Dates: DD/MM/YYYY.
+- NEVER mention tool/function names like search_clients, get_user_details, etc.`;
 
     // Build a model with fallback chain: try primary model first, then fallback if 503
     const buildModel = (modelName) => genAI.getGenerativeModel({
       model: modelName,
       systemInstruction,
       tools: [{ functionDeclarations: toolDeclarations }],
+      generationConfig: {
+        // Cap output length — replies should be conversational, not essays. Faster gen.
+        maxOutputTokens: 800,
+        temperature: 0.4,
+      },
     });
     // Primary = flash-latest (Google's fastest preview model — currently routes to
     // gemini-3-flash-preview, ~1-3s typical). Fallback = stable 2.5-flash if the
