@@ -41,6 +41,7 @@ model User {
   smtpPort       Int?     @default(587)
   smtpEmail      String?
   smtpPassword   String?
+  mustChangePassword Boolean @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -433,6 +434,20 @@ model PasswordResetCode {
   @@index([expiresAt])
 }
 
+// === CLIENT PORTAL OTP (login codes for client self-service portal) ===
+model ClientOtpCode {
+  id         Int      @id @default(autoincrement())
+  email      String
+  codeHash   String
+  expiresAt  DateTime
+  used       Boolean  @default(false)
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([email, used])
+  @@index([expiresAt])
+}
+
 // === LOCAL EVENTS / HOLIDAYS ===
 model LocalEvent {
   id          Int       @id @default(autoincrement())
@@ -463,9 +478,10 @@ model Booking {
   hotelId               Int
   contractId            Int?
   assignedRepId         Int
-  bookedById            Int
+  bookedById            Int?      // null when submitted via client self-service portal
+  submittedByClient     Boolean   @default(false)
 
-  operaConfirmationNo   String
+  operaConfirmationNo   String?   // null until reservations team confirms in Opera (for portal-submitted bookings)
   guestName             String
   reservationMadeBy     String?
 
@@ -488,7 +504,7 @@ model Booking {
   paymentMethod         String?
   source                String    @default("outlook")
 
-  status                String    @default("confirmed")
+  status                String    @default("confirmed")  // pending_reservations | confirmed | checked_in | checked_out | cancelled | no_show
   cancelledAt           DateTime?
   cancelledById         Int?
   cancellationReason    String?
@@ -505,7 +521,7 @@ model Booking {
   hotel        Hotel     @relation(fields: [hotelId], references: [id])
   contract     Contract? @relation(fields: [contractId], references: [id])
   assignedRep  User      @relation("BookingAssignedRep", fields: [assignedRepId], references: [id])
-  bookedBy     User      @relation("BookingBookedBy", fields: [bookedById], references: [id])
+  bookedBy     User?     @relation("BookingBookedBy", fields: [bookedById], references: [id])
   cancelledBy  User?     @relation("BookingCancelledBy", fields: [cancelledById], references: [id])
   changeLogs   BookingChangeLog[]
 

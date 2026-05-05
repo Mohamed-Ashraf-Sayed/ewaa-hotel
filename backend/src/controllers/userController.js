@@ -116,7 +116,11 @@ const resetPassword = async (req, res) => {
     const { id } = req.params;
     const { newPassword } = req.body;
     const hashed = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({ where: { id: parseInt(id) }, data: { password: hashed } });
+    // Force the user to set their own password on next login.
+    await prisma.user.update({
+      where: { id: parseInt(id) },
+      data: { password: hashed, mustChangePassword: true },
+    });
     res.json({ message: 'Password reset successfully' });
   } catch (err) {
     res.status(500).json({ message: 'Server error' });

@@ -7,6 +7,7 @@ interface AuthContextType {
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
   isLoading: boolean;
   hasRole: (...roles: string[]) => boolean;
   canSeeAll: () => boolean;
@@ -56,12 +57,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    const res = await authApi.getMe();
+    setUser(res.data);
+    localStorage.setItem('user', JSON.stringify(res.data));
+  };
+
   const hasRole = (...roles: string[]) => !!user && roles.includes(user.role);
   const canSeeAll = () => hasRole('general_manager', 'vice_gm');
   const isManager = () => hasRole('general_manager', 'vice_gm', 'sales_director');
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isLoading, hasRole, canSeeAll, isManager }}>
+    <AuthContext.Provider value={{ user, token, login, logout, refreshUser, isLoading, hasRole, canSeeAll, isManager }}>
       {children}
     </AuthContext.Provider>
   );

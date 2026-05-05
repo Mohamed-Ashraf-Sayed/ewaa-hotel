@@ -9,6 +9,7 @@ export interface User {
   managerId?: number;
   isActive: boolean;
   commissionRate?: number;
+  mustChangePassword?: boolean;
   createdAt: string;
   manager?: { id: number; name: string; role: Role };
   hotels?: { hotel: { id: number; name: string } }[];

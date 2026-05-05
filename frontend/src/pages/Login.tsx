@@ -18,6 +18,8 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email, password);
+      // Routing in App.tsx redirects to /change-password automatically when the
+      // flag is set. Navigate to root and let it route us correctly.
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.message || 'فشل تسجيل الدخول. يرجى التحقق من بيانات الدخول.');

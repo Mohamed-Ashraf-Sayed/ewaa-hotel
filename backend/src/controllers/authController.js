@@ -77,12 +77,24 @@ const getMe = async (req, res) => {
 const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'كلمة المرور الحالية والجديدة مطلوبتان' });
+    }
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({ message: 'كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل' });
+    }
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });
     const isMatch = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatch) return res.status(400).json({ message: 'Current password is incorrect' });
+    if (!isMatch) return res.status(400).json({ message: 'كلمة المرور الحالية غير صحيحة' });
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ message: 'كلمة المرور الجديدة لا يمكن أن تكون نفس القديمة' });
+    }
     const hashed = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({ where: { id: req.user.id }, data: { password: hashed } });
-    res.json({ message: 'Password updated successfully' });
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { password: hashed, mustChangePassword: false },
+    });
+    res.json({ message: 'تم تحديث كلمة المرور بنجاح' });
   } catch (err) {
     res.status(500).json({ message: 'Server error' });
   }
@@ -195,7 +207,10 @@ const resetPassword = async (req, res) => {
 
     const hashed = await bcrypt.hash(newPassword, 10);
     await prisma.$transaction([
-      prisma.user.update({ where: { id: user.id }, data: { password: hashed } }),
+      prisma.user.update({
+        where: { id: user.id },
+        data: { password: hashed, mustChangePassword: false },
+      }),
       prisma.passwordResetCode.update({ where: { id: record.id }, data: { used: true } }),
     ]);
 
