@@ -48,10 +48,59 @@ const buildClientScope = async (user) => {
 // ---- Tool implementations ---------------------------------------------------
 const trim = (str, max = 250) => (typeof str === 'string' && str.length > max ? str.slice(0, max) + '…' : str);
 
+// Normalize Arabic letters so "احمد" matches "أحمد" / "إحمد" / "آحمد".
+const normalizeArabic = (s) => String(s || '')
+  .replace(/[ً-ْ]/g, '')      // strip diacritics (fathatan, kasra, sukun, etc.)
+  .replace(/[أإآٱ]/g, 'ا')  // أ إ آ ٱ → ا
+  .replace(/ى/g, 'ي')         // ى → ي
+  .replace(/ة/g, 'ه')         // ة → ه
+  .toLowerCase()
+  .trim();
+
+// Resolves a sales-rep filter (name or id) and checks the caller has permission
+// to see that rep's data. Returns { repId } when allowed, or { error } to refuse.
+const resolveSalesRepFilter = async (args, user) => {
+  if (!args.sales_rep_name && !args.sales_rep_id) return { repId: null };
+  let target = null;
+  if (args.sales_rep_id) {
+    target = await prisma.user.findUnique({ where: { id: Number(args.sales_rep_id) } });
+  } else {
+    // Pull all active users and normalize-match — handles Arabic alef/ya variants.
+    const candidates = await prisma.user.findMany({ where: { isActive: true } });
+    const needle = normalizeArabic(args.sales_rep_name);
+    target = candidates.find(c => normalizeArabic(c.name).includes(needle))
+          || candidates.find(c => normalizeArabic(c.email || '').includes(needle));
+  }
+  if (!target) return { error: `Sales rep "${args.sales_rep_name || args.sales_rep_id}" not found in the system.` };
+
+  if (ADMIN_ROLES.includes(user.role)) return { repId: target.id, repName: target.name };
+  if (user.role === 'sales_director') {
+    const subs = await getSubordinateIds(user.id);
+    if (target.id !== user.id && !subs.includes(target.id)) {
+      return { error: 'You can only filter by sales reps in your own team.' };
+    }
+    return { repId: target.id, repName: target.name };
+  }
+  if (user.role === 'assistant_sales' && user.managerId) {
+    const teamIds = [user.managerId, ...(await getSubordinateIds(user.managerId))];
+    if (!teamIds.includes(target.id)) {
+      return { error: 'You can only filter by sales reps in your own team.' };
+    }
+    return { repId: target.id, repName: target.name };
+  }
+  if (target.id !== user.id) {
+    return { error: 'You do not have permission to filter by another sales rep.' };
+  }
+  return { repId: target.id, repName: target.name };
+};
+
 const tools = {
   search_clients: async (args, user) => {
     const scope = await buildClientScope(user);
     const where = { ...scope, isActive: true };
+    const rep = await resolveSalesRepFilter(args, user);
+    if (rep.error) return { count: 0, message: rep.error };
+    if (rep.repId) where.salesRepId = rep.repId;
 
     if (args.client_type) where.clientType = args.client_type;
     if (args.brand) where.brands = { contains: args.brand };
@@ -92,6 +141,9 @@ const tools = {
       const scope = await buildClientScope(user);
       Object.assign(where, scope);
     }
+    const rep = await resolveSalesRepFilter(args, user);
+    if (rep.error) return { count: 0, message: rep.error };
+    if (rep.repId) where.salesRepId = rep.repId;
     if (args.status) where.status = args.status;
     if (args.expiring_in_days) {
       const cutoff = new Date(Date.now() + Number(args.expiring_in_days) * 86400000);
@@ -130,6 +182,9 @@ const tools = {
         { contract: { salesRepId: { in: ids } } },
       ];
     }
+    const rep = await resolveSalesRepFilter(args, user);
+    if (rep.error) return { count: 0, message: rep.error };
+    if (rep.repId) where.contract = { ...(where.contract || {}), salesRepId: rep.repId };
     if (args.status) where.status = args.status;
     if (args.payment_type) where.paymentType = args.payment_type;
     if (args.min_amount != null) where.amount = { gte: Number(args.min_amount) };
@@ -153,6 +208,9 @@ const tools = {
   search_visits: async (args, user) => {
     const scope = await buildClientScope(user);
     const where = scope.salesRepId ? { salesRepId: scope.salesRepId } : {};
+    const rep = await resolveSalesRepFilter(args, user);
+    if (rep.error) return { count: 0, message: rep.error };
+    if (rep.repId) where.salesRepId = rep.repId;
     if (args.visit_type) where.visitType = args.visit_type;
     if (args.from_date) where.visitDate = { ...(where.visitDate || {}), gte: new Date(args.from_date) };
     if (args.to_date) where.visitDate = { ...(where.visitDate || {}), lte: new Date(`${args.to_date}T23:59:59`) };
@@ -183,6 +241,9 @@ const tools = {
           : [user.id];
       where.assignedRepId = { in: ids };
     }
+    const rep = await resolveSalesRepFilter(args, user);
+    if (rep.error) return { count: 0, message: rep.error };
+    if (rep.repId) where.assignedRepId = rep.repId;
     if (args.status) where.status = args.status;
     if (args.hotel_name) where.hotel = { name: { contains: args.hotel_name } };
     if (args.client_name) where.client = { companyName: { contains: args.client_name } };
@@ -393,15 +454,11 @@ const tools = {
     if (args.user_id) {
       target = await prisma.user.findUnique({ where: { id: Number(args.user_id) } });
     } else if (args.name) {
-      target = await prisma.user.findFirst({
-        where: {
-          isActive: true,
-          OR: [
-            { name: { contains: args.name } },
-            { email: { contains: args.name } },
-          ],
-        },
-      });
+      // Normalize-match to handle Arabic alef/ya/hamza variants
+      const candidates = await prisma.user.findMany({ where: { isActive: true } });
+      const needle = normalizeArabic(args.name);
+      target = candidates.find(c => normalizeArabic(c.name).includes(needle))
+            || candidates.find(c => normalizeArabic(c.email || '').includes(needle));
     }
     if (!target) return { message: 'User not found. Please confirm the exact name.' };
 
@@ -542,6 +599,7 @@ const toolDeclarations = [
         city: { type: SchemaType.STRING, description: 'Filter by city or address keyword' },
         not_contacted_days: { type: SchemaType.NUMBER, description: 'Find clients not contacted (no activity) in the last N days' },
         search: { type: SchemaType.STRING, description: 'Free-text search on company name, contact person, phone, email' },
+        sales_rep_name: { type: SchemaType.STRING, description: 'Filter to clients assigned to this sales rep (full or partial name). Permission-checked: only allowed reps in caller\'s scope.' },
         limit: { type: SchemaType.NUMBER, description: 'Max rows to return (default 25, max 100)' },
       },
     },
@@ -557,6 +615,7 @@ const toolDeclarations = [
         min_total_value: { type: SchemaType.NUMBER, description: 'Minimum total value in SAR' },
         client_name: { type: SchemaType.STRING, description: 'Partial match on client company name' },
         hotel_name: { type: SchemaType.STRING, description: 'Partial match on hotel name' },
+        sales_rep_name: { type: SchemaType.STRING, description: 'Filter to contracts owned by this sales rep (full or partial name). Permission-checked.' },
         limit: { type: SchemaType.NUMBER, description: 'Max rows (default 25)' },
       },
     },
@@ -572,13 +631,14 @@ const toolDeclarations = [
         min_amount: { type: SchemaType.NUMBER },
         from_date: { type: SchemaType.STRING, description: 'YYYY-MM-DD' },
         to_date: { type: SchemaType.STRING, description: 'YYYY-MM-DD' },
+        sales_rep_name: { type: SchemaType.STRING, description: 'Filter to payments on contracts owned by this sales rep. Permission-checked.' },
         limit: { type: SchemaType.NUMBER },
       },
     },
   },
   {
     name: 'search_visits',
-    description: 'List or search VISITS / SALES MEETINGS / CALLS logged by sales reps when they meet with clients. Returns visit log entries. Use ONLY for visits, meetings, calls, زيارات, اجتماعات, مكالمات, متابعات. For "today\'s visits / النهاردة" pass from_date and to_date both = today (YYYY-MM-DD). DO NOT use for clients, contracts, payments, or bookings.',
+    description: 'List or search VISITS / SALES MEETINGS / CALLS logged by sales reps when they meet with clients. Returns visit log entries with the visited client/company. Use for "اخر زيارة فلان", "احمد راح فين", "today\'s visits". For a specific rep\'s last visit, pass sales_rep_name and limit=1. DO NOT use for clients, contracts, payments, or bookings.',
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
@@ -586,6 +646,7 @@ const toolDeclarations = [
         from_date: { type: SchemaType.STRING },
         to_date: { type: SchemaType.STRING },
         client_name: { type: SchemaType.STRING },
+        sales_rep_name: { type: SchemaType.STRING, description: 'Filter to visits made by this sales rep (full or partial name). Permission-checked.' },
         has_followup_due: { type: SchemaType.BOOLEAN, description: 'true to find visits with overdue follow-ups' },
         limit: { type: SchemaType.NUMBER },
       },
@@ -602,6 +663,7 @@ const toolDeclarations = [
         client_name: { type: SchemaType.STRING },
         from_date: { type: SchemaType.STRING, description: 'Arrival from YYYY-MM-DD' },
         to_date: { type: SchemaType.STRING, description: 'Arrival to YYYY-MM-DD' },
+        sales_rep_name: { type: SchemaType.STRING, description: 'Filter to bookings assigned to this sales rep. Permission-checked.' },
         limit: { type: SchemaType.NUMBER },
       },
     },
@@ -852,12 +914,10 @@ OUTPUT:
       // The model's natural-language summary will arrive token-by-token.
       const stream = await retry(() => chat.sendMessageStream(toolResults));
       let assembled = '';
-      let sawCalls = false;
+      // Consume the entire stream — DON'T break early. Breaking before the stream
+      // ends leaves `stream.response` in an unresolved state and the next loop
+      // iteration sees `functionCalls() === undefined`, surfacing as the empty fallback.
       for await (const chunk of stream.stream) {
-        try {
-          const calls2 = chunk.functionCalls && chunk.functionCalls();
-          if (calls2 && calls2.length > 0) { sawCalls = true; break; }
-        } catch (_) {}
         const t = chunk.text ? chunk.text() : '';
         if (t) {
           assembled += t;
@@ -868,15 +928,14 @@ OUTPUT:
           sendEvent('chunk', { text: safe });
         }
       }
-      // Keep `response` shape consistent with sendMessage() result so the next
-      // iteration can call `response.response.functionCalls()` safely.
-      response = { response: await stream.response };
-      if (sawCalls) {
-        // Continue the loop to handle the new tool calls
-      } else {
+      const fullResp = await stream.response;
+      response = { response: fullResp };
+      const followupCalls = (typeof fullResp.functionCalls === 'function' ? fullResp.functionCalls() : null) || [];
+      if (followupCalls.length === 0) {
         finalText = assembled;
         toolLoopDone = true;
       }
+      // else: another tool call came back — loop again
     }
 
     if (!finalText) {
