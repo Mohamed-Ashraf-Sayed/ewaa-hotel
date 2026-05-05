@@ -606,6 +606,7 @@ export default function ClientDetail() {
           )}
           {bookings.map(b => {
             const statusMap: Record<BookingStatus, { ar: string; en: string; cls: string }> = {
+              pending_reservations: { ar: 'بانتظار الحجوزات', en: 'Pending', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
               confirmed: { ar: 'مؤكد', en: 'Confirmed', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
               checked_in: { ar: 'داخل الفندق', en: 'Checked-in', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
               checked_out: { ar: 'خرج', en: 'Checked-out', cls: 'bg-brand-100 text-brand-600 border-brand-200' },

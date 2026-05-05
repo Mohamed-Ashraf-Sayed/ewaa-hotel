@@ -102,7 +102,7 @@ export default function BookingFormModal({ open, onClose, onSaved, clientId, edi
         clientId: String(editing.clientId),
         hotelId: String(editing.hotelId),
         contractId: editing.contractId ? String(editing.contractId) : '',
-        operaConfirmationNo: editing.operaConfirmationNo,
+        operaConfirmationNo: editing.operaConfirmationNo || '',
         guestName: editing.guestName,
         reservationMadeBy: editing.reservationMadeBy || '',
         arrivalDate: editing.arrivalDate.slice(0, 10),
