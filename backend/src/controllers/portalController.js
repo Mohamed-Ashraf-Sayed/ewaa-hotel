@@ -147,19 +147,17 @@ const requestOtp = async (req, res) => {
   }
 };
 
-// Demo bypass — only the demo email + fixed code, ONLY when explicitly enabled
-// via env, ONLY outside production. Three independent guards so a single
-// misconfiguration in any one of them isn't enough to enable the bypass:
-//   1) PORTAL_DEMO_BYPASS=1                   (must be explicitly set per env)
-//   2) NODE_ENV !== 'production'              (kills it in production builds)
-//   3) hardcoded email + fixed code allowlist (only one specific demo account)
+// Demo bypass — opt-in via env flag, restricted to a hardcoded email/code pair.
+// Two independent guards:
+//   1) PORTAL_DEMO_BYPASS=1                   (must be explicitly set per env;
+//      MUST NOT be set on real production servers — see DEPLOYMENT.md)
+//   2) hardcoded email + fixed code allowlist (only one specific demo account)
+// Each successful bypass is logged with the source IP so unexpected use is auditable.
 const DEMO_BYPASS = {
   emails: ['demo@portal.test'],
   fixedCode: '000000',
 };
-const isDemoBypassEnabled = () =>
-  process.env.PORTAL_DEMO_BYPASS === '1' &&
-  process.env.NODE_ENV !== 'production';
+const isDemoBypassEnabled = () => process.env.PORTAL_DEMO_BYPASS === '1';
 
 // POST /portal/auth/verify-otp { email, code }
 const verifyOtp = async (req, res) => {
