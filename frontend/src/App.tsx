@@ -1,10 +1,17 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { PortalAuthProvider, usePortalAuth } from './contexts/PortalAuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import Layout from './components/Layout';
+import PortalLayout from './components/PortalLayout';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ChangePassword from './pages/ChangePassword';
+import PortalLogin from './pages/portal/Login';
+import PortalDashboard from './pages/portal/Dashboard';
+import PortalMyBookings from './pages/portal/MyBookings';
+import PortalBookingRequest from './pages/portal/BookingRequest';
+import PortalBookingDetail from './pages/portal/BookingDetail';
 import Dashboard from './pages/Dashboard';
 import Clients from './pages/Clients';
 import ClientDetail from './pages/ClientDetail';
@@ -38,10 +45,28 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function PortalProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { client, isLoading } = usePortalAuth();
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-brand-50/50">
+      <div className="w-8 h-8 border-3 border-brand-700 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+  if (!client) return <Navigate to="/portal/login" replace />;
+  return <>{children}</>;
+}
+
+function PortalLoginGuard() {
+  const { client } = usePortalAuth();
+  if (client) return <Navigate to="/portal" replace />;
+  return <PortalLogin />;
+}
+
 function AppRoutes() {
   const { user } = useAuth();
   return (
     <Routes>
+      {/* === Internal CRM === */}
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/forgot-password" element={user ? <Navigate to="/" replace /> : <ForgotPassword />} />
       <Route path="/change-password" element={
@@ -49,6 +74,16 @@ function AppRoutes() {
           : !user.mustChangePassword ? <Navigate to="/" replace />
           : <ChangePassword />
       } />
+
+      {/* === Client Portal (separate auth) === */}
+      <Route path="/portal/login" element={<PortalLoginGuard />} />
+      <Route path="/portal" element={<PortalProtectedRoute><PortalLayout /></PortalProtectedRoute>}>
+        <Route index element={<PortalDashboard />} />
+        <Route path="bookings" element={<PortalMyBookings />} />
+        <Route path="book" element={<PortalBookingRequest />} />
+        <Route path="booking/:id" element={<PortalBookingDetail />} />
+      </Route>
+
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="clients" element={<Clients />} />
@@ -80,7 +115,9 @@ export default function App() {
     <BrowserRouter>
       <LanguageProvider>
         <AuthProvider>
-          <AppRoutes />
+          <PortalAuthProvider>
+            <AppRoutes />
+          </PortalAuthProvider>
         </AuthProvider>
       </LanguageProvider>
     </BrowserRouter>

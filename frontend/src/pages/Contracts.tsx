@@ -25,6 +25,7 @@ export default function Contracts() {
   const [timelineData, setTimelineData] = useState<any[]>([]);
   const [previewModal, setPreviewModal] = useState<Contract | null>(null);
   const [approvalNote, setApprovalNote] = useState('');
+  const [creditLimitInput, setCreditLimitInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [searchParams] = useSearchParams();
   const { hasRole, user } = useAuth();
@@ -65,10 +66,24 @@ export default function Contracts() {
 
   const handleApprove = async (status: 'approved' | 'rejected') => {
     if (!approvalModal) return;
+    // Credit manager must set a credit limit when approving (it's the whole point of their step)
+    const isCreditApprovalStep =
+      user?.role === 'credit_manager' &&
+      status === 'approved' &&
+      approvalModal.status === 'sales_approved';
+    let creditLimitValue: number | undefined;
+    if (isCreditApprovalStep) {
+      const v = parseFloat(creditLimitInput);
+      if (creditLimitInput === '' || isNaN(v) || v < 0) {
+        alert(isAr ? 'حدّد الحد الائتماني المعتمد قبل الموافقة' : 'Set the approved credit limit before approving');
+        return;
+      }
+      creditLimitValue = v;
+    }
     setSaving(true);
     try {
-      await contractsApi.approve(approvalModal.id, status, approvalNote);
-      setApprovalModal(null); setApprovalNote(''); load();
+      await contractsApi.approve(approvalModal.id, status, approvalNote, creditLimitValue);
+      setApprovalModal(null); setApprovalNote(''); setCreditLimitInput(''); load();
     } catch { alert(t('error_occurred')); } finally { setSaving(false); }
   };
 
@@ -264,28 +279,28 @@ export default function Contracts() {
                         </button>
                         {/* Sales director reviews pending */}
                         {(isSalesDirector || hasRole('general_manager')) && c.status === 'pending' && (
-                          <button onClick={() => { setApprovalModal(c); setApprovalNote(''); }}
+                          <button onClick={() => { setApprovalModal(c); setApprovalNote(''); setCreditLimitInput(c.client?.creditLimit != null ? String(c.client.creditLimit) : ''); }}
                             className="px-3 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100">
                             {lang === 'ar' ? 'موافقة المبيعات' : 'Sales Approval'}
                           </button>
                         )}
                         {/* Credit manager reviews sales_approved */}
                         {(isCreditManager || hasRole('general_manager')) && c.status === 'sales_approved' && (
-                          <button onClick={() => { setApprovalModal(c); setApprovalNote(''); }}
+                          <button onClick={() => { setApprovalModal(c); setApprovalNote(''); setCreditLimitInput(c.client?.creditLimit != null ? String(c.client.creditLimit) : ''); }}
                             className="px-3 py-1 rounded-lg bg-violet-50 text-violet-700 text-xs font-medium hover:bg-violet-100">
                             {lang === 'ar' ? 'موافقة الائتمان' : 'Credit Approval'}
                           </button>
                         )}
                         {/* Contract officer reviews credit_approved */}
                         {(isContractOfficer || hasRole('general_manager')) && c.status === 'credit_approved' && (
-                          <button onClick={() => { setApprovalModal(c); setApprovalNote(''); }}
+                          <button onClick={() => { setApprovalModal(c); setApprovalNote(''); setCreditLimitInput(c.client?.creditLimit != null ? String(c.client.creditLimit) : ''); }}
                             className="px-3 py-1 rounded-lg bg-sky-50 text-sky-700 text-xs font-medium hover:bg-sky-100">
                             {lang === 'ar' ? 'مراجعة العقود' : 'Contract Review'}
                           </button>
                         )}
                         {/* Vice GM reviews contract_approved (final approval) */}
                         {(isViceGM || hasRole('general_manager')) && c.status === 'contract_approved' && (
-                          <button onClick={() => { setApprovalModal(c); setApprovalNote(''); }}
+                          <button onClick={() => { setApprovalModal(c); setApprovalNote(''); setCreditLimitInput(c.client?.creditLimit != null ? String(c.client.creditLimit) : ''); }}
                             className="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100">
                             {lang === 'ar' ? 'الاعتماد النهائي' : 'Final Approval'}
                           </button>
@@ -395,6 +410,37 @@ export default function Contracts() {
                 <FileText className="w-4 h-4" /> {lang === 'ar' ? 'عرض ملف العقد' : 'View Contract File'}
               </a>
             )}
+            {/* Credit limit — only when credit_manager is approving a sales_approved contract */}
+            {user?.role === 'credit_manager' && approvalModal.status === 'sales_approved' && (
+              <div className="rounded-xl border-2 border-amber-200 bg-amber-50/60 p-4">
+                <label className="block text-sm font-bold text-amber-900 mb-1.5">
+                  {lang === 'ar' ? 'الحد الائتماني المعتمد للعميل' : 'Approved Credit Limit'} <span className="text-red-500">*</span>
+                </label>
+                <p className="text-[11px] text-amber-700 mb-2">
+                  {lang === 'ar'
+                    ? `هيتم حفظ هذا المبلغ كسقف ائتماني لشركة "${approvalModal.client?.companyName}" — يحدد قيمة الفواتير الآجلة المسموح بها.`
+                    : `This amount will be saved as the credit ceiling for "${approvalModal.client?.companyName}".`}
+                </p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="input bg-white pe-14"
+                    value={creditLimitInput}
+                    onChange={e => setCreditLimitInput(e.target.value)}
+                    placeholder={lang === 'ar' ? 'مثلاً: 250000' : 'e.g. 250000'}
+                  />
+                  <span className={`absolute top-1/2 -translate-y-1/2 ${isAr ? 'left-3' : 'right-3'} text-xs text-brand-500 font-semibold`}>ر.س</span>
+                </div>
+                {approvalModal.client?.creditLimit != null && (
+                  <p className="text-[11px] text-amber-800 mt-2">
+                    {lang === 'ar' ? 'الحد الحالي:' : 'Current limit:'} <b>{approvalModal.client.creditLimit.toLocaleString()} {lang === 'ar' ? 'ر.س' : 'SAR'}</b>
+                  </p>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="label">{t('contract_notes')}</label>
               <textarea className="input resize-none" rows={3} value={approvalNote}

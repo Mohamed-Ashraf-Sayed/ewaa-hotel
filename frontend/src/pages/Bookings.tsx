@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, FileText, Pencil, XCircle, LogIn, LogOut, Calendar, Building2, BedDouble, History } from 'lucide-react';
+import { Plus, Search, FileText, Pencil, XCircle, LogIn, LogOut, Calendar, Building2, BedDouble, History, CheckCircle, Hourglass } from 'lucide-react';
 import { bookingsApi, hotelsApi } from '../services/api';
 import { Booking, Hotel, BookingStatus } from '../types';
 import BookingFormModal from '../components/BookingFormModal';
 import CancelBookingModal from '../components/CancelBookingModal';
 import BookingHistoryModal from '../components/BookingHistoryModal';
+import ConfirmRequestModal from '../components/ConfirmRequestModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { format, parseISO } from 'date-fns';
 import { arSA, enUS } from 'date-fns/locale';
 
-type Tab = 'all' | 'upcoming' | 'today' | 'in_house' | 'cancelled';
+type Tab = 'pending' | 'all' | 'upcoming' | 'today' | 'in_house' | 'cancelled';
 
 export default function Bookings() {
   const { lang } = useLanguage();
@@ -32,6 +33,7 @@ export default function Bookings() {
   const [busy, setBusy] = useState<number | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
   const [historyTarget, setHistoryTarget] = useState<Booking | null>(null);
+  const [confirmRequestTarget, setConfirmRequestTarget] = useState<Booking | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -57,16 +59,18 @@ export default function Bookings() {
 
   const counts = useMemo(() => {
     const all = bookings.length;
+    const pending = bookings.filter(b => b.status === 'pending_reservations').length;
     const upcoming = bookings.filter(b => b.status === 'confirmed' && new Date(b.arrivalDate) >= tomorrow).length;
     const todayCount = bookings.filter(b => b.status !== 'cancelled' && b.status !== 'checked_out' && new Date(b.arrivalDate).toDateString() === today.toDateString()).length;
     const inHouse = bookings.filter(b => b.status === 'checked_in').length;
     const cancelled = bookings.filter(b => b.status === 'cancelled').length;
-    return { all, upcoming, today: todayCount, in_house: inHouse, cancelled };
+    return { all, pending, upcoming, today: todayCount, in_house: inHouse, cancelled };
   }, [bookings]);
 
   const visible = useMemo(() => {
     let list = bookings;
-    if (tab === 'upcoming') list = list.filter(b => b.status === 'confirmed' && new Date(b.arrivalDate) >= tomorrow);
+    if (tab === 'pending') list = list.filter(b => b.status === 'pending_reservations');
+    else if (tab === 'upcoming') list = list.filter(b => b.status === 'confirmed' && new Date(b.arrivalDate) >= tomorrow);
     else if (tab === 'today') list = list.filter(b => b.status !== 'cancelled' && b.status !== 'checked_out' && new Date(b.arrivalDate).toDateString() === today.toDateString());
     else if (tab === 'in_house') list = list.filter(b => b.status === 'checked_in');
     else if (tab === 'cancelled') list = list.filter(b => b.status === 'cancelled');
@@ -75,6 +79,7 @@ export default function Bookings() {
 
   const StatusBadge = ({ status }: { status: BookingStatus }) => {
     const map: Record<BookingStatus, { ar: string; en: string; cls: string }> = {
+      pending_reservations: { ar: 'قيد المراجعة', en: 'Pending Review', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
       confirmed: { ar: 'مؤكد', en: 'Confirmed', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
       checked_in: { ar: 'داخل الفندق', en: 'Checked-in', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
       checked_out: { ar: 'خرج', en: 'Checked-out', cls: 'bg-brand-100 text-brand-600 border-brand-200' },
@@ -157,6 +162,7 @@ export default function Bookings() {
 
       {/* Tabs */}
       <div className="border-b border-brand-200 flex gap-2 overflow-x-auto">
+        <TabBtn id="pending" label={isAr ? 'قيد المراجعة' : 'Pending Review'} count={counts.pending} />
         <TabBtn id="all" label={isAr ? 'الكل' : 'All'} count={counts.all} />
         <TabBtn id="upcoming" label={isAr ? 'القادمة' : 'Upcoming'} count={counts.upcoming} />
         <TabBtn id="today" label={isAr ? 'وصول اليوم' : 'Arriving Today'} count={counts.today} />
@@ -178,7 +184,14 @@ export default function Bookings() {
                 <div className="flex-1 min-w-[280px]">
                   <div className={`flex items-center gap-2 mb-2 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
                     <StatusBadge status={b.status} />
-                    <span className="text-xs text-brand-400 font-mono">#{b.operaConfirmationNo}</span>
+                    {b.operaConfirmationNo
+                      ? <span className="text-xs text-brand-400 font-mono">#{b.operaConfirmationNo}</span>
+                      : <span className="text-[11px] text-amber-600 italic">{isAr ? '(لم يتم التأكيد على اوبرا بعد)' : '(not yet in Opera)'}</span>}
+                    {b.submittedByClient && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+                        {isAr ? 'من البورتال' : 'PORTAL'}
+                      </span>
+                    )}
                     {b.contract?.contractRef && (
                       <Link to={`/contracts`} className="text-[11px] text-brand-500 underline">{b.contract.contractRef}</Link>
                     )}
@@ -231,6 +244,15 @@ export default function Bookings() {
                         <FileText className="w-3.5 h-3.5" />
                       </a>
                     )}
+                    {b.status === 'pending_reservations' && (
+                      <button
+                        className="px-2.5 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1"
+                        onClick={() => setConfirmRequestTarget(b)}
+                        title={isAr ? 'تأكيد الحجز' : 'Confirm'}
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" /> {isAr ? 'تأكيد' : 'Confirm'}
+                      </button>
+                    )}
                     {b.status === 'confirmed' && (
                       <button className="btn-secondary text-xs py-1.5" disabled={busy === b.id} onClick={() => updateStatus(b, 'checked_in')} title={isAr ? 'تسجيل وصول' : 'Check-in'}>
                         <LogIn className="w-3.5 h-3.5" />
@@ -241,15 +263,15 @@ export default function Bookings() {
                         <LogOut className="w-3.5 h-3.5" />
                       </button>
                     )}
+                    {b.status !== 'cancelled' && b.status !== 'checked_out' && b.status !== 'pending_reservations' && (
+                      <button className="btn-secondary text-xs py-1.5" onClick={() => { setEditing(b); setShowForm(true); }} title={isAr ? 'تعديل' : 'Edit'}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     {b.status !== 'cancelled' && b.status !== 'checked_out' && (
-                      <>
-                        <button className="btn-secondary text-xs py-1.5" onClick={() => { setEditing(b); setShowForm(true); }} title={isAr ? 'تعديل' : 'Edit'}>
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button className="btn-secondary text-xs py-1.5 text-red-600 hover:bg-red-50" disabled={busy === b.id} onClick={() => updateStatus(b, 'cancelled')} title={isAr ? 'إلغاء' : 'Cancel'}>
-                          <XCircle className="w-3.5 h-3.5" />
-                        </button>
-                      </>
+                      <button className="btn-secondary text-xs py-1.5 text-red-600 hover:bg-red-50" disabled={busy === b.id} onClick={() => updateStatus(b, 'cancelled')} title={isAr ? 'إلغاء' : 'Cancel'}>
+                        <XCircle className="w-3.5 h-3.5" />
+                      </button>
                     )}
                   </div>
                 )}
@@ -277,6 +299,13 @@ export default function Bookings() {
         open={!!historyTarget}
         booking={historyTarget}
         onClose={() => setHistoryTarget(null)}
+      />
+
+      <ConfirmRequestModal
+        open={!!confirmRequestTarget}
+        booking={confirmRequestTarget}
+        onClose={() => setConfirmRequestTarget(null)}
+        onConfirmed={() => load()}
       />
     </div>
   );

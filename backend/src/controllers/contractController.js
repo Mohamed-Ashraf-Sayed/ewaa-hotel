@@ -91,7 +91,7 @@ const getContracts = async (req, res) => {
     const contracts = await prisma.contract.findMany({
       where,
       include: {
-        client: { select: { id: true, companyName: true, contactPerson: true } },
+        client: { select: { id: true, companyName: true, contactPerson: true, creditLimit: true } },
         hotel: { select: { id: true, name: true } },
         salesRep: { select: { id: true, name: true, commissionRate: true } },
         approvals: {
@@ -114,7 +114,7 @@ const getContract = async (req, res) => {
     const contract = await prisma.contract.findUnique({
       where: { id: parseInt(id) },
       include: {
-        client: { select: { id: true, companyName: true, contactPerson: true, phone: true } },
+        client: { select: { id: true, companyName: true, contactPerson: true, phone: true, creditLimit: true } },
         hotel: { select: { id: true, name: true } },
         salesRep: { select: { id: true, name: true } },
         approvals: {
@@ -207,7 +207,7 @@ const uploadContract = async (req, res) => {
 const approveContract = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, notes } = req.body;
+    const { status, notes, creditLimit } = req.body;
 
     if (!['approved', 'rejected'].includes(status)) {
       return res.status(400).json({ message: 'Status must be approved or rejected' });
@@ -254,15 +254,34 @@ const approveContract = async (req, res) => {
     const contract = await prisma.contract.update({
       where: { id: parseInt(id) },
       data: { status: newStatus },
-      include: { client: { select: { id: true, companyName: true } } }
+      include: { client: { select: { id: true, companyName: true, creditLimit: true } } }
     });
+
+    // Credit manager can set/update the client's credit limit at the credit-approval step.
+    // We only apply it when (a) the role is credit_manager, (b) we're approving (not rejecting),
+    // and (c) a non-empty value was provided. Stored on the Client, not the Contract, since
+    // a credit limit is account-level not contract-level.
+    let creditLimitUpdated = null;
+    if (status === 'approved' && role === 'credit_manager' && creditLimit !== undefined && creditLimit !== '' && creditLimit !== null) {
+      const cl = parseFloat(creditLimit);
+      if (!isNaN(cl) && cl >= 0) {
+        const updated = await prisma.client.update({
+          where: { id: contract.client.id },
+          data: { creditLimit: cl },
+          select: { creditLimit: true },
+        });
+        creditLimitUpdated = updated.creditLimit;
+      }
+    }
 
     await prisma.contractApproval.create({
       data: {
         contractId: parseInt(id),
         approvedBy: req.user.id,
         status: newStatus,
-        notes
+        notes: creditLimitUpdated != null
+          ? `${notes || ''}${notes ? ' — ' : ''}الحد الائتماني المعتمد: ${creditLimitUpdated.toLocaleString()} ر.س`.trim()
+          : notes,
       }
     });
 
@@ -371,7 +390,7 @@ const getExpiringContracts = async (req, res) => {
         endDate: { lte: future, gte: new Date() }
       },
       include: {
-        client: { select: { id: true, companyName: true, contactPerson: true, phone: true } },
+        client: { select: { id: true, companyName: true, contactPerson: true, phone: true, creditLimit: true } },
         hotel: { select: { name: true } },
         salesRep: { select: { name: true } }
       },

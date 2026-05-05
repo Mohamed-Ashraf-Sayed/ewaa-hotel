@@ -118,6 +118,7 @@ model Client {
   brands         String?  // comma-separated: muhaidib_serviced,awa_hotels,grand_plaza
   estimatedRooms Int?
   annualBudget   Float?
+  creditLimit    Float?   // Maximum approved credit (City Ledger ceiling) for this corporate account
   website        String?
   commercialRegNo String?
   taxCardNo      String?
@@ -524,6 +525,7 @@ model Booking {
   bookedBy     User?     @relation("BookingBookedBy", fields: [bookedById], references: [id])
   cancelledBy  User?     @relation("BookingCancelledBy", fields: [cancelledById], references: [id])
   changeLogs   BookingChangeLog[]
+  guests       BookingGuest[]
 
   @@index([clientId])
   @@index([hotelId])
@@ -531,6 +533,23 @@ model Booking {
   @@index([status])
   @@index([arrivalDate])
   @@index([operaConfirmationNo])
+}
+
+// === BOOKING GUESTS (multi-guest support) ===
+// One row per guest on a booking. The first/primary guest's name is also
+// mirrored to Booking.guestName for backward compatibility with code that
+// shows a single guest name.
+model BookingGuest {
+  id          Int      @id @default(autoincrement())
+  bookingId   Int
+  name        String
+  nationality String?
+  isPrimary   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  booking     Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
 }
 
 // === BOOKING CHANGE LOG (audit trail for edits/cancellations) ===

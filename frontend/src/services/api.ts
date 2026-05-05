@@ -74,8 +74,8 @@ export const contractsApi = {
   getOne: (id: number) => api.get(`/contracts/${id}`),
   getExpiring: (days?: number) => api.get('/contracts/expiring', { params: { days } }),
   upload: (formData: FormData) => api.post('/contracts', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  approve: (id: number, status: 'approved' | 'rejected', notes?: string) =>
-    api.put(`/contracts/${id}/approve`, { status, notes }),
+  approve: (id: number, status: 'approved' | 'rejected', notes?: string, creditLimit?: number) =>
+    api.put(`/contracts/${id}/approve`, { status, notes, creditLimit }),
   confirmBooking: (id: number, bookingNotes?: string, file?: File) => {
     const fd = new FormData();
     if (bookingNotes) fd.append('bookingNotes', bookingNotes);
@@ -286,4 +286,13 @@ export const bookingsApi = {
     return api.post('/bookings/extract', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   history: (id: number) => api.get(`/bookings/${id}/history`),
+  confirmRequest: (id: number, data: any, file?: File) => {
+    const fd = new FormData();
+    Object.keys(data).forEach(k => {
+      const v = data[k];
+      if (v !== undefined && v !== null && v !== '') fd.append(k, String(v));
+    });
+    if (file) fd.append('confirmationLetter', file);
+    return api.post(`/bookings/${id}/confirm-request`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
 };

@@ -97,6 +97,7 @@ export interface Client {
   brands?: string;
   estimatedRooms?: number;
   annualBudget?: number;
+  creditLimit?: number;
   website?: string;
   commercialRegNo?: string;
   taxCardNo?: string;
@@ -133,7 +134,7 @@ export interface Contract {
   bookingConfirmedAt?: string;
   createdAt: string;
   daysUntilExpiry?: number;
-  client?: { id: number; companyName: string; contactPerson: string; phone?: string };
+  client?: { id: number; companyName: string; contactPerson: string; phone?: string; creditLimit?: number | null };
   hotel?: { id: number; name: string };
   salesRep?: { id: number; name: string };
   approvals?: ContractApproval[];
@@ -176,8 +177,8 @@ export interface Activity {
   user?: { id: number; name: string; role: Role };
 }
 
-export type BookingStatus = 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled' | 'no_show';
-export type BookingSource = 'outlook' | 'phone' | 'walk_in' | 'other';
+export type BookingStatus = 'pending_reservations' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled' | 'no_show';
+export type BookingSource = 'outlook' | 'phone' | 'walk_in' | 'portal' | 'other';
 
 export interface Booking {
   id: number;
@@ -185,8 +186,9 @@ export interface Booking {
   hotelId: number;
   contractId?: number | null;
   assignedRepId: number;
-  bookedById: number;
-  operaConfirmationNo: string;
+  bookedById: number | null;
+  submittedByClient?: boolean;
+  operaConfirmationNo: string | null;
   guestName: string;
   reservationMadeBy?: string | null;
   arrivalDate: string;

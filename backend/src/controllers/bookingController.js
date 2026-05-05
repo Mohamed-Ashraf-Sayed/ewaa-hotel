@@ -34,6 +34,7 @@ const bookingInclude = {
   assignedRep: { select: { id: true, name: true, email: true } },
   bookedBy: { select: { id: true, name: true } },
   cancelledBy: { select: { id: true, name: true } },
+  guests: { select: { id: true, name: true, nationality: true, isPrimary: true }, orderBy: { isPrimary: 'desc' } },
 };
 
 // GET /bookings
@@ -441,6 +442,115 @@ const updateStatus = async (req, res) => {
   }
 };
 
+// POST /bookings/:id/confirm-request — reservations team approves a portal-submitted booking
+// Adds the Opera confirmation number and flips status from pending_reservations -> confirmed.
+const confirmPendingRequest = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const existing = await prisma.booking.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ message: 'Booking not found' });
+    if (existing.status !== 'pending_reservations') {
+      return res.status(400).json({ message: 'هذا الحجز ليس في انتظار التأكيد' });
+    }
+
+    const {
+      operaConfirmationNo, reservationMadeBy,
+      ratePerNight, ratePackage, totalAmount,
+      vatPercent, municipalityFeePercent, paymentMethod, notes,
+      // Some letters arrive with corrections; allow date/room edits while confirming.
+      arrivalDate, departureDate, roomsCount, adultsCount, childrenCount, roomType,
+      hotelId,
+    } = req.body;
+
+    if (!operaConfirmationNo || !String(operaConfirmationNo).trim()) {
+      return res.status(400).json({ message: 'رقم تأكيد اوبرا مطلوب' });
+    }
+
+    const arr = arrivalDate ? new Date(arrivalDate) : existing.arrivalDate;
+    const dep = departureDate ? new Date(departureDate) : existing.departureDate;
+    if (dep <= arr) return res.status(400).json({ message: 'تاريخ المغادرة لازم يكون بعد الوصول' });
+
+    const nights = calcNights(arr, dep);
+    const rooms = roomsCount !== undefined ? parseInt(roomsCount) : existing.roomsCount;
+    const rate = ratePerNight !== undefined ? (ratePerNight === '' ? null : parseFloat(ratePerNight)) : existing.ratePerNight;
+
+    const data = {
+      status: 'confirmed',
+      bookedById: req.user.id,
+      operaConfirmationNo: String(operaConfirmationNo).trim(),
+      ...(reservationMadeBy !== undefined && { reservationMadeBy: reservationMadeBy || null }),
+      arrivalDate: arr,
+      departureDate: dep,
+      nights,
+      roomsCount: rooms,
+      ...(adultsCount !== undefined && { adultsCount: parseInt(adultsCount) || 1 }),
+      ...(childrenCount !== undefined && { childrenCount: parseInt(childrenCount) || 0 }),
+      ...(roomType !== undefined && { roomType: roomType || null }),
+      ratePerNight: rate,
+      ...(ratePackage !== undefined && { ratePackage: ratePackage || null }),
+      ...(totalAmount !== undefined ? { totalAmount: totalAmount === '' ? null : parseFloat(totalAmount) } : (rate ? { totalAmount: rate * nights * rooms } : {})),
+      ...(vatPercent !== undefined && { vatPercent: parseFloat(vatPercent) }),
+      ...(municipalityFeePercent !== undefined && { municipalityFeePercent: parseFloat(municipalityFeePercent) }),
+      ...(paymentMethod !== undefined && { paymentMethod: paymentMethod || null }),
+      ...(hotelId !== undefined && { hotelId: parseInt(hotelId) }),
+      ...(notes !== undefined && { notes: notes || null }),
+    };
+
+    if (req.file) {
+      data.confirmationLetterUrl = `/uploads/${req.file.filename}`;
+      data.confirmationLetterName = req.file.originalname;
+    }
+
+    const booking = await prisma.booking.update({
+      where: { id },
+      data,
+      include: bookingInclude,
+    });
+
+    // Log the approval
+    await prisma.bookingChangeLog.create({
+      data: {
+        bookingId: booking.id,
+        changedById: req.user.id,
+        action: 'approve_request',
+        reason: `تأكيد طلب البورتال - رقم اوبرا: ${booking.operaConfirmationNo}`,
+        changesJson: JSON.stringify({
+          status: { from: 'pending_reservations', to: 'confirmed' },
+          operaConfirmationNo: { from: null, to: booking.operaConfirmationNo },
+        }),
+        fieldsList: 'status,operaConfirmationNo',
+      },
+    });
+
+    // Notify the assigned rep
+    if (booking.assignedRepId !== req.user.id) {
+      await prisma.notification.create({
+        data: {
+          userId: booking.assignedRepId,
+          type: 'booking_confirmed',
+          title: 'تأكيد طلب حجز من البورتال',
+          message: `تم تأكيد طلب حجز ${booking.client.companyName} - ${booking.guestName} برقم اوبرا ${booking.operaConfirmationNo}`,
+          link: `/bookings/${booking.id}`,
+        },
+      });
+    }
+
+    await prisma.activity.create({
+      data: {
+        clientId: booking.clientId,
+        userId: req.user.id,
+        type: 'booking_request_confirmed',
+        description: `تأكيد طلب حجز من البورتال برقم اوبرا ${booking.operaConfirmationNo}`,
+      },
+    });
+
+    res.json(booking);
+  } catch (err) {
+    console.error('confirmPendingRequest error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // GET /bookings/:id/history
 const getBookingHistory = async (req, res) => {
   try {
@@ -530,4 +640,5 @@ module.exports = {
   deleteBooking,
   extractFromLetter,
   getBookingHistory,
+  confirmPendingRequest,
 };
