@@ -36,7 +36,7 @@ export default function ForgotPassword() {
   const submitEmail = async (e: FormEvent) => {
     e.preventDefault(); setError(''); setInfo(''); setLoading(true);
     try {
-      const { data } = await authApi.forgotPassword(email);
+      const { data } = await authApi.forgotPassword(email.trim().toLowerCase());
       setInfo(data.message || 'تم إرسال كود التحقق');
       setStep('code');
       startResendTimer();
@@ -48,7 +48,7 @@ export default function ForgotPassword() {
   const submitCode = async (e: FormEvent) => {
     e.preventDefault(); setError(''); setLoading(true);
     try {
-      const { data } = await authApi.verifyResetCode(email, code);
+      const { data } = await authApi.verifyResetCode(email.trim().toLowerCase(), code);
       setResetToken(data.resetToken);
       setStep('password');
     } catch (err: any) {
@@ -73,7 +73,7 @@ export default function ForgotPassword() {
     if (resendIn > 0) return;
     setError(''); setInfo(''); setLoading(true);
     try {
-      await authApi.forgotPassword(email);
+      await authApi.forgotPassword(email.trim().toLowerCase());
       setInfo('تم إرسال كود جديد');
       startResendTimer();
     } catch (err: any) {

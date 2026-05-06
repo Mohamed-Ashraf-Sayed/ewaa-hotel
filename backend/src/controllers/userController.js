@@ -39,12 +39,14 @@ const getUsers = async (req, res) => {
 const createUser = async (req, res) => {
   try {
     const { name, email, password, role, managerId, phone, hotelIds } = req.body;
-    const exists = await prisma.user.findUnique({ where: { email } });
+    // Normalize email to lowercase so login is case-insensitive (stored emails are always lowercase)
+    const emailNormalized = String(email || '').trim().toLowerCase();
+    const exists = await prisma.user.findUnique({ where: { email: emailNormalized } });
     if (exists) return res.status(400).json({ message: 'Email already in use' });
     const hashed = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
-        name, email, password: hashed, role,
+        name, email: emailNormalized, password: hashed, role,
         managerId: managerId ? parseInt(managerId) : null,
         phone,
         hotels: hotelIds?.length
@@ -89,10 +91,14 @@ const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, email, role, managerId, phone, isActive, hotelIds } = req.body;
+    // Normalize email if changing it (stored emails are always lowercase for case-insensitive login)
+    const emailNormalized = email !== undefined ? String(email).trim().toLowerCase() : undefined;
     const updated = await prisma.user.update({
       where: { id: parseInt(id) },
       data: {
-        name, email, role, phone, isActive,
+        name,
+        ...(emailNormalized !== undefined && { email: emailNormalized }),
+        role, phone, isActive,
         managerId: managerId ? parseInt(managerId) : null,
         hotels: hotelIds !== undefined ? {
           deleteMany: {},

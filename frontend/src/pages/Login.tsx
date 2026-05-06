@@ -17,7 +17,9 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
+      // Lowercase the email so users typing "Sales.X@..." or "sales.x@..." both work.
+      // Backend also lowercases as a safety net.
+      await login(email.trim().toLowerCase(), password);
       // Routing in App.tsx redirects to /change-password automatically when the
       // flag is set. Navigate to root and let it route us correctly.
       navigate('/');

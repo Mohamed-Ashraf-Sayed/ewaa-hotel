@@ -34,8 +34,12 @@ const login = async (req, res) => {
     if (!email || !password)
       return res.status(400).json({ message: 'Email and password are required' });
 
+    // Email is case-insensitive for login. Stored emails are normalized to
+    // lowercase on user creation/update; we lowercase the input here so the
+    // user can type "Sales.X@..." or "sales.x@..." and either match.
+    const normalized = String(email).trim().toLowerCase();
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: normalized },
       include: {
         manager: { select: { id: true, name: true, role: true } },
         hotels: { include: { hotel: { select: { id: true, name: true } } } }
@@ -102,8 +106,10 @@ const changePassword = async (req, res) => {
 
 const forgotPassword = async (req, res) => {
   try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ message: 'البريد الإلكتروني مطلوب' });
+    const rawEmail = req.body?.email;
+    if (!rawEmail) return res.status(400).json({ message: 'البريد الإلكتروني مطلوب' });
+    // Lowercase to match the case-insensitive convention used at login
+    const email = String(rawEmail).trim().toLowerCase();
 
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     const recent = await prisma.passwordResetCode.count({
@@ -147,8 +153,9 @@ const forgotPassword = async (req, res) => {
 
 const verifyResetCode = async (req, res) => {
   try {
-    const { email, code } = req.body;
-    if (!email || !code) return res.status(400).json({ message: 'البريد والكود مطلوبان' });
+    const { email: rawEmail, code } = req.body;
+    if (!rawEmail || !code) return res.status(400).json({ message: 'البريد والكود مطلوبان' });
+    const email = String(rawEmail).trim().toLowerCase();
 
     const record = await prisma.passwordResetCode.findFirst({
       where: { email, used: false, expiresAt: { gt: new Date() } },
