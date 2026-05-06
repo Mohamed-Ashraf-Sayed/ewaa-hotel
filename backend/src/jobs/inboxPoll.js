@@ -27,6 +27,13 @@ const pollAccount = async (account) => {
       auth: { user: account.username, pass: account.password },
       logger: false,
     });
+    // CRITICAL: imapflow emits 'error' on socket failures (ECONNRESET, TLS resets).
+    // Without a listener, EventEmitter promotes that to an Uncaught exception
+    // that kills the whole Node process — exactly how the app crashed at 14:27.
+    // We just log and let pollAccount's catch handle the cleanup.
+    client.on('error', (err) => {
+      console.error(`[InboxPoll:${account.label || account.username}] socket error: ${err.code || err.message}`);
+    });
     await client.connect();
 
     const lock = await client.getMailboxLock(account.mailbox || 'INBOX');
