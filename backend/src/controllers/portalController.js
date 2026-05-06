@@ -126,17 +126,23 @@ const requestOtp = async (req, res) => {
 
     await audit({ clientId: client.id, salesRepId: client.salesRepId, type: 'portal_otp_requested', description: `تم إرسال كود دخول إلى ${rawEmail}` });
 
-    try {
-      await sendSystemEmail({
-        to: rawEmail,
-        subject: 'كود التحقق - بوابة عملاء Ewaa Hotels',
-        html: otpEmailHtml(client.companyName, code),
-      });
-    } catch (err) {
-      console.error('Portal OTP email failed:', err.message);
-      // In dev, swallow the mail error so the tester can still grab the code from the console log above.
-      if (process.env.NODE_ENV === 'production') {
-        return res.status(500).json({ message: 'فشل إرسال البريد، تواصل مع المسؤول.' });
+    // Skip the SMTP send for demo accounts when the bypass is on — the
+    // demo email may be a non-routable domain (e.g. .test) and there's no
+    // mailbox to receive the code anyway. The fixed code 000000 still works.
+    const skipSmtp = isDemoBypassEnabled() && DEMO_BYPASS.emails.includes(rawEmail);
+    if (!skipSmtp) {
+      try {
+        await sendSystemEmail({
+          to: rawEmail,
+          subject: 'كود التحقق - بوابة عملاء Ewaa Hotels',
+          html: otpEmailHtml(client.companyName, code),
+        });
+      } catch (err) {
+        console.error('Portal OTP email failed:', err.message);
+        // In dev, swallow the mail error so the tester can still grab the code from the console log above.
+        if (process.env.NODE_ENV === 'production') {
+          return res.status(500).json({ message: 'فشل إرسال البريد، تواصل مع المسؤول.' });
+        }
       }
     }
 
