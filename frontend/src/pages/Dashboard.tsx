@@ -122,8 +122,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
-      {/* Marketing promotion banner — shows active campaigns at the top of the home dashboard */}
-      <PromotionBanner />
       {/* === Premium hero header === */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700 p-6 lg:p-7 text-white">
         <div className="absolute -right-12 -top-12 w-72 h-72 rounded-full bg-white/[0.04]" />
@@ -159,6 +157,9 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Marketing promotion banner — sits below the hero so the greeting/quick actions stay above the fold */}
+      <PromotionBanner />
 
       {/* === Action Items / Insights === */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
