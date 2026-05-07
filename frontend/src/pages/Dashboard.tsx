@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Building2, FileText, MapPin, Clock, AlertTriangle, TrendingUp, Users, ArrowLeft, Eye, Download, Plus, Receipt, Sparkles, Flame, Target as TargetIcon, ArrowUpRight } from 'lucide-react';
-import { dashboardApi, contractsApi } from '../services/api';
+import { dashboardApi, contractsApi, promotionsApi } from '../services/api';
 import Modal from '../components/Modal';
 import PromotionBanner from '../components/PromotionBanner';
 import { DashboardData } from '../types';
@@ -49,9 +49,18 @@ export default function Dashboard() {
   const locale = isAr ? arSA : enUS;
   const ROLE_LABELS = isAr ? ROLE_LABELS_AR : ROLE_LABELS_EN;
 
+  // Roles that have their own dedicated dashboard skip the shared dashboard fetch
+  // entirely — marketing/reservations don't need client-aggregate stats.
+  const usesCustomDashboard = user?.role === 'marketing_manager' || user?.role === 'reservations';
+
   useEffect(() => {
+    if (usesCustomDashboard) { setLoading(false); return; }
     dashboardApi.get().then(r => setData(r.data)).finally(() => setLoading(false));
-  }, []);
+  }, [usesCustomDashboard]);
+
+  // Custom dashboards short-circuit before the shared loading + data checks
+  if (user?.role === 'marketing_manager') return <MarketingDashboard />;
+  if (user?.role === 'reservations') return <ReservationsDashboard />;
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -61,11 +70,6 @@ export default function Dashboard() {
 
   if (!data) return null;
   const { stats } = data;
-
-  // Reservations dedicated dashboard
-  if (user?.role === 'reservations') {
-    return <ReservationsDashboard />;
-  }
 
   // Chart labels
   const L = {
@@ -485,6 +489,172 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ==================== MARKETING DASHBOARD ====================
+// Dedicated home screen for marketing_manager — no client/contract data is
+// rendered or fetched. Just promotion stats and quick actions.
+function MarketingDashboard() {
+  const { user } = useAuth();
+  const { lang } = useLanguage();
+  const isAr = lang === 'ar';
+  const locale = isAr ? arSA : enUS;
+  const [promos, setPromos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    promotionsApi.getAll().then(r => setPromos(r.data)).catch(() => setPromos([])).finally(() => setLoading(false));
+  }, []);
+
+  const counts = {
+    active: promos.filter((p: any) => p.status === 'active').length,
+    upcoming: promos.filter((p: any) => p.status === 'upcoming').length,
+    expired: promos.filter((p: any) => p.status === 'expired').length,
+    total: promos.length,
+  };
+  const activePromos = promos.filter((p: any) => p.status === 'active');
+  const upcomingPromos = promos.filter((p: any) => p.status === 'upcoming');
+
+  const hour = new Date().getHours();
+  const greeting = isAr
+    ? (hour < 12 ? 'صباح الخير' : hour < 17 ? 'مساء الخير' : 'مساء الخير')
+    : (hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening');
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-8 h-8 border-3 border-brand-700 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div dir={isAr ? 'rtl' : 'ltr'} className="space-y-5">
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-900 via-brand-800 to-purple-900 p-6 lg:p-7 text-white shadow-elevated">
+        <div className="absolute -right-16 -top-16 w-72 h-72 rounded-full bg-amber-400/[0.08] blur-3xl" />
+        <div className="absolute -left-12 -bottom-20 w-64 h-64 rounded-full bg-rose-400/[0.08] blur-3xl" />
+        <div className={`relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 ${isAr ? 'lg:flex-row-reverse' : ''}`}>
+          <div className={isAr ? 'text-right' : 'text-left'}>
+            <p className="text-white/60 text-xs uppercase tracking-[0.2em] font-semibold mb-1.5">
+              {new Date().toLocaleDateString(isAr ? 'ar-EG' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+            <h1 className="text-3xl lg:text-4xl font-bold leading-tight">
+              {greeting}، <span className="bg-gradient-to-l from-amber-300 to-amber-100 bg-clip-text text-transparent">{user?.name}</span>
+            </h1>
+            <p className="text-white/70 text-sm mt-2 flex items-center gap-1.5 flex-wrap">
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              {isAr ? 'انشر عروضك التسويقية لتصل لكل فريق المبيعات على شاشتهم الرئيسية' : 'Publish promotions to reach the entire sales team on their home screen'}
+            </p>
+          </div>
+          <Link to="/marketing" className="inline-flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-brand-900 px-5 py-2.5 rounded-xl text-sm font-bold transition-all hover:shadow-lg hover:shadow-amber-500/30 self-start lg:self-auto">
+            <Plus className="w-4 h-4" />
+            {isAr ? 'عرض جديد' : 'New Promotion'}
+          </Link>
+        </div>
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <MarketingStat icon={Sparkles}    label={isAr ? 'نشط الآن' : 'Active Now'} value={counts.active}   accent="from-emerald-500 to-emerald-600" bgAccent="bg-emerald-50/80" />
+        <MarketingStat icon={Clock}       label={isAr ? 'قادم قريبًا' : 'Upcoming'} value={counts.upcoming} accent="from-blue-500 to-blue-600"       bgAccent="bg-blue-50/80" />
+        <MarketingStat icon={AlertTriangle} label={isAr ? 'منتهي' : 'Expired'}      value={counts.expired}  accent="from-slate-500 to-slate-600"     bgAccent="bg-slate-50/80" />
+        <MarketingStat icon={TargetIcon}  label={isAr ? 'الإجمالي' : 'Total'}       value={counts.total}    accent="from-amber-500 to-rose-600"       bgAccent="bg-amber-50/80" />
+      </div>
+
+      {/* Active promotions list */}
+      <div className="rounded-3xl bg-white border border-slate-100 shadow-sm p-6">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div className={`flex items-center gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-md shadow-emerald-500/20">
+              <Sparkles className="w-4.5 h-4.5 text-white" />
+            </div>
+            <div className={isAr ? 'text-right' : ''}>
+              <h3 className="text-base font-bold text-slate-900">{isAr ? 'العروض النشطة حاليًا' : 'Currently Active'}</h3>
+              <p className="text-xs text-slate-500">{isAr ? 'بتظهر دلوقتي على شاشة فريق المبيعات' : 'Showing on the sales team home now'}</p>
+            </div>
+          </div>
+          <Link to="/marketing" className="text-xs text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1">
+            {isAr ? 'إدارة كل العروض' : 'Manage all'} <ArrowLeft className="w-3 h-3" />
+          </Link>
+        </div>
+        {activePromos.length === 0 ? (
+          <div className="text-center py-10">
+            <Sparkles className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+            <p className="text-sm text-slate-500 mb-3">{isAr ? 'مفيش عرض نشط دلوقتي' : 'No active promotion right now'}</p>
+            <Link to="/marketing" className="btn-primary text-sm inline-flex">
+              <Plus className="w-4 h-4" /> {isAr ? 'انشر أول عرض' : 'Create one'}
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {activePromos.map((p: any) => {
+              const daysLeft = Math.max(0, Math.ceil((new Date(p.endsAt).getTime() - Date.now()) / 86400000));
+              return (
+                <Link key={p.id} to="/marketing" className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors">
+                  <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gradient-to-br from-amber-300 to-rose-400">
+                    {p.imageUrl ? <img src={p.imageUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full" />}
+                  </div>
+                  <div className={`flex-1 min-w-0 ${isAr ? 'text-right' : ''}`}>
+                    <div className="font-semibold text-slate-900 text-sm truncate">{p.title}</div>
+                    <div className="text-[11px] text-slate-500">
+                      {format(parseISO(p.startsAt), 'dd MMM', { locale })} → {format(parseISO(p.endsAt), 'dd MMM yyyy', { locale })}
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">
+                    {isAr ? `متبقي ${daysLeft} يوم` : `${daysLeft}d left`}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Upcoming preview */}
+      {upcomingPromos.length > 0 && (
+        <div className="rounded-3xl bg-white border border-slate-100 shadow-sm p-6">
+          <div className={`flex items-center gap-2 mb-4 ${isAr ? 'flex-row-reverse' : ''}`}>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-md shadow-blue-500/20">
+              <Clock className="w-4.5 h-4.5 text-white" />
+            </div>
+            <div className={isAr ? 'text-right' : ''}>
+              <h3 className="text-base font-bold text-slate-900">{isAr ? 'مجدولة للنشر' : 'Scheduled'}</h3>
+              <p className="text-xs text-slate-500">{isAr ? 'هتبدأ تلقائيًا في تاريخها' : 'Will go live automatically on their start date'}</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {upcomingPromos.map((p: any) => (
+              <div key={p.id} className={`flex items-center gap-3 p-3 rounded-xl border border-slate-100 ${isAr ? 'flex-row-reverse text-right' : ''}`}>
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-200 to-blue-300 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-slate-900 text-sm truncate">{p.title}</div>
+                  <div className="text-[11px] text-slate-500">
+                    {isAr ? 'يبدأ في ' : 'Starts on '}{format(parseISO(p.startsAt), 'dd MMM yyyy', { locale })}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MarketingStat({ icon: Icon, label, value, accent, bgAccent }: { icon: any; label: string; value: number; accent: string; bgAccent: string }) {
+  return (
+    <div className={`relative rounded-2xl p-4 border border-slate-100 shadow-sm overflow-hidden ${bgAccent}`}>
+      <div className={`absolute -right-6 -top-6 w-20 h-20 rounded-full bg-gradient-to-br ${accent} opacity-10 blur-2xl`} />
+      <div className="relative z-10 flex items-center justify-between">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br ${accent} text-white shadow-md`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold text-slate-900">{value}</div>
+          <div className="text-[11px] text-slate-600 font-medium">{label}</div>
+        </div>
+      </div>
     </div>
   );
 }
