@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowRight, FileText, Plus, Clock, MapPin, CreditCard, Receipt, Mail, ExternalLink, BedDouble, Building2, Calendar, Pencil, XCircle, LogIn, LogOut, History } from 'lucide-react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
-import { clientsApi, visitsApi, activitiesApi, contractsApi, hotelsApi, paymentsApi, pdfApi, emailApi, attachmentsApi, bookingsApi } from '../services/api';
+import { clientsApi, visitsApi, activitiesApi, contractsApi, hotelsApi, paymentsApi, pdfApi, emailApi, attachmentsApi, bookingsApi, usersApi } from '../services/api';
 import { Client, Visit, Activity, Contract, Hotel, Payment, Booking, BookingStatus } from '../types';
 import Modal from '../components/Modal';
 import BookingFormModal from '../components/BookingFormModal';
@@ -39,7 +39,15 @@ export default function ClientDetail() {
   const [cancelBookingTarget, setCancelBookingTarget] = useState<Booking | null>(null);
   const [historyBookingTarget, setHistoryBookingTarget] = useState<Booking | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ contactPerson: '', countryCode: '+966', phoneNumber: '', email: '', address: '', commercialRegNo: '', taxCardNo: '', notes: '' });
+  const [editForm, setEditForm] = useState({
+    contactPerson: '', countryCode: '+966', phoneNumber: '', email: '', address: '',
+    commercialRegNo: '', taxCardNo: '', notes: '',
+    // Admin-only fields (only sent when user is admin/GM/VGM)
+    companyName: '', companyNameEn: '', industry: '', clientType: 'lead',
+    hotelId: '', brands: [] as string[], estimatedRooms: '', annualBudget: '',
+    website: '', creditLimit: '', salesRepId: '',
+  });
+  const [salesReps, setSalesReps] = useState<{ id: number; name: string; role: string }[]>([]);
   const [locUpdating, setLocUpdating] = useState(false);
 
   const updateLocation = () => {
@@ -195,6 +203,8 @@ export default function ClientDetail() {
     return { countryCode: '+966', number: cleaned };
   };
 
+  const isAdminLevel = hasRole('admin', 'general_manager', 'vice_gm');
+
   const openEditClient = () => {
     if (!client) return;
     const { countryCode, number } = parsePhone(client.phone);
@@ -207,7 +217,24 @@ export default function ClientDetail() {
       commercialRegNo: client.commercialRegNo || '',
       taxCardNo: client.taxCardNo || '',
       notes: client.notes || '',
+      companyName: client.companyName || '',
+      companyNameEn: (client as any).companyNameEn || '',
+      industry: client.industry || '',
+      clientType: client.clientType || 'lead',
+      hotelId: client.hotelId != null ? String(client.hotelId) : '',
+      brands: client.brands ? client.brands.split(',').filter(Boolean) : [],
+      estimatedRooms: client.estimatedRooms != null ? String(client.estimatedRooms) : '',
+      annualBudget: client.annualBudget != null ? String(client.annualBudget) : '',
+      website: client.website || '',
+      creditLimit: client.creditLimit != null ? String(client.creditLimit) : '',
+      salesRepId: client.salesRepId != null ? String(client.salesRepId) : '',
     });
+    // Admin needs the rep dropdown — fetch the list lazily on first open
+    if (isAdminLevel && salesReps.length === 0) {
+      usersApi.getAll().then(r => {
+        setSalesReps((r.data as any[]).filter(u => u.isActive && ['sales_rep', 'sales_director', 'assistant_sales'].includes(u.role)));
+      }).catch(() => {});
+    }
     setShowEditModal(true);
   };
 
@@ -215,7 +242,7 @@ export default function ClientDetail() {
     e.preventDefault();
     setSavingEdit(true);
     try {
-      await clientsApi.update(parseInt(id!), {
+      const payload: any = {
         contactPerson: editForm.contactPerson,
         phone: `${editForm.countryCode}${editForm.phoneNumber}`,
         email: editForm.email,
@@ -223,7 +250,25 @@ export default function ClientDetail() {
         commercialRegNo: editForm.commercialRegNo,
         taxCardNo: editForm.taxCardNo,
         notes: editForm.notes,
-      });
+      };
+      // Admin-only fields — only send when admin/GM/VGM is editing so reps
+      // don't accidentally clobber companyName/brands/etc.
+      if (isAdminLevel) {
+        Object.assign(payload, {
+          companyName: editForm.companyName,
+          companyNameEn: editForm.companyNameEn || null,
+          industry: editForm.industry || null,
+          clientType: editForm.clientType,
+          hotelId: editForm.hotelId ? parseInt(editForm.hotelId) : null,
+          brands: editForm.brands.join(','),
+          estimatedRooms: editForm.estimatedRooms ? parseInt(editForm.estimatedRooms) : null,
+          annualBudget: editForm.annualBudget ? parseFloat(editForm.annualBudget) : null,
+          website: editForm.website || null,
+          creditLimit: editForm.creditLimit ? parseFloat(editForm.creditLimit) : null,
+          salesRepId: editForm.salesRepId ? parseInt(editForm.salesRepId) : undefined,
+        });
+      }
+      await clientsApi.update(parseInt(id!), payload);
       setShowEditModal(false);
       load();
     } catch (err: any) {
@@ -1317,11 +1362,118 @@ export default function ClientDetail() {
       </Modal>
 
       {/* Edit Client Modal */}
-      <Modal open={showEditModal} onClose={() => setShowEditModal(false)} title={isAr ? 'تعديل بيانات العميل' : 'Edit Client Info'}>
+      <Modal open={showEditModal} onClose={() => setShowEditModal(false)} title={isAr ? 'تعديل بيانات العميل' : 'Edit Client Info'} size={isAdminLevel ? 'xl' : 'md'}>
         <form onSubmit={handleSaveEdit} className="space-y-4">
-          <div className={`p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs ${isAr ? 'text-right' : ''}`}>
-            ℹ️ {isAr ? 'يمكن تعديل بيانات التواصل والسجل التجاري والبطاقة الضريبية' : 'You can update contact info, commercial reg no, and tax card no'}
+          <div className={`p-3 rounded-lg ${isAdminLevel ? 'bg-purple-50 border border-purple-200' : 'bg-amber-50 border border-amber-200'} text-xs ${isAr ? 'text-right' : ''}`}>
+            {isAdminLevel
+              ? (isAr ? '👑 وضع الإدارة: تقدر تعدّل في كل بيانات العميل بما فيها الاسم والمندوب والبراندات' : '👑 Admin mode: full edit access to every client field')
+              : (isAr ? 'ℹ️ يمكن تعديل بيانات التواصل والسجل التجاري والبطاقة الضريبية' : 'ℹ️ You can update contact info, commercial reg no, and tax card no')}
           </div>
+
+          {/* === Admin-only: identity, brand, ownership === */}
+          {isAdminLevel && (
+            <div className="rounded-xl border-2 border-purple-200 bg-purple-50/40 p-4 space-y-3">
+              <div className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">
+                {isAr ? '· الإدارة فقط ·' : '· Admin only ·'}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">{isAr ? 'اسم الشركة' : 'Company Name'} *</label>
+                  <input className="input bg-white" required value={editForm.companyName}
+                    onChange={e => setEditForm(p => ({ ...p, companyName: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">{isAr ? 'الاسم بالإنجليزي' : 'Company Name (EN)'}</label>
+                  <input className="input bg-white" value={editForm.companyNameEn}
+                    onChange={e => setEditForm(p => ({ ...p, companyNameEn: e.target.value }))} dir="ltr" />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="label">{isAr ? 'القطاع' : 'Industry'}</label>
+                  <input className="input bg-white" value={editForm.industry}
+                    onChange={e => setEditForm(p => ({ ...p, industry: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">{isAr ? 'النوع' : 'Type'}</label>
+                  <select className="input bg-white" value={editForm.clientType}
+                    onChange={e => setEditForm(p => ({ ...p, clientType: e.target.value }))}>
+                    <option value="lead">{isAr ? 'محتمل' : 'Lead'}</option>
+                    <option value="active">{isAr ? 'نشط' : 'Active'}</option>
+                    <option value="inactive">{isAr ? 'غير نشط' : 'Inactive'}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">{isAr ? 'الفندق المقترح' : 'Suggested Hotel'}</label>
+                  <select className="input bg-white" value={editForm.hotelId}
+                    onChange={e => setEditForm(p => ({ ...p, hotelId: e.target.value }))}>
+                    <option value="">—</option>
+                    {hotels.filter(h => h.isActive).map(h => (
+                      <option key={h.id} value={h.id}>{isAr ? h.name : (h.nameEn || h.name)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="label">{isAr ? 'البراندات (يمكن اختيار أكتر من واحد)' : 'Brands'}</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { v: 'muhaidib_serviced', l: 'المهيدب' },
+                    { v: 'awa_hotels', l: 'إيواء' },
+                    { v: 'grand_plaza', l: 'جراند بلازا' },
+                  ].map(b => {
+                    const checked = editForm.brands.includes(b.v);
+                    return (
+                      <label key={b.v} className={`cursor-pointer flex items-center gap-2 px-3 py-2 rounded-lg border-2 ${checked ? 'bg-purple-50 border-purple-500 text-purple-900' : 'bg-white border-brand-100 text-brand-500 hover:border-brand-300'}`}>
+                        <input type="checkbox" className="hidden" checked={checked}
+                          onChange={() => setEditForm(p => ({
+                            ...p,
+                            brands: checked ? p.brands.filter(x => x !== b.v) : [...p.brands, b.v],
+                          }))} />
+                        <span className={`w-4 h-4 rounded border-2 flex items-center justify-center ${checked ? 'bg-purple-500 border-purple-500' : 'border-brand-300'}`}>
+                          {checked && <span className="text-white text-xs">✓</span>}
+                        </span>
+                        <span className="text-xs">{b.l}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="label">{isAr ? 'غرف متوقعة / سنة' : 'Estimated rooms / yr'}</label>
+                  <input className="input bg-white" type="number" min="0" value={editForm.estimatedRooms}
+                    onChange={e => setEditForm(p => ({ ...p, estimatedRooms: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">{isAr ? 'الميزانية السنوية' : 'Annual budget'}</label>
+                  <input className="input bg-white" type="number" min="0" value={editForm.annualBudget}
+                    onChange={e => setEditForm(p => ({ ...p, annualBudget: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">{isAr ? 'الحد الائتماني' : 'Credit limit'}</label>
+                  <input className="input bg-white" type="number" min="0" value={editForm.creditLimit}
+                    onChange={e => setEditForm(p => ({ ...p, creditLimit: e.target.value }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">{isAr ? 'الموقع الإلكتروني' : 'Website'}</label>
+                  <input className="input bg-white" value={editForm.website} dir="ltr"
+                    onChange={e => setEditForm(p => ({ ...p, website: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">{isAr ? 'المندوب المسؤول' : 'Sales Rep'}</label>
+                  <select className="input bg-white" value={editForm.salesRepId}
+                    onChange={e => setEditForm(p => ({ ...p, salesRepId: e.target.value }))}>
+                    <option value="">{isAr ? '— اختر —' : '— select —'}</option>
+                    {salesReps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="label">{isAr ? 'جهة الاتصال' : 'Contact Person'} *</label>
             <input className="input" required minLength={2} maxLength={100} pattern="[^<>{}\[\]\\]+"

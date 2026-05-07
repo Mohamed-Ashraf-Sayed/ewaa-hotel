@@ -237,10 +237,21 @@ const updateClient = async (req, res) => {
     if (data.hotelId) data.hotelId = parseInt(data.hotelId);
     if (data.estimatedRooms) data.estimatedRooms = parseInt(data.estimatedRooms);
     if (data.annualBudget) data.annualBudget = parseFloat(data.annualBudget);
+    if (data.creditLimit !== undefined) data.creditLimit = data.creditLimit === '' || data.creditLimit == null ? null : parseFloat(data.creditLimit);
     if (Array.isArray(data.brands)) data.brands = data.brands.join(',');
     if (data.latitude !== undefined) data.latitude = data.latitude === '' || data.latitude == null ? null : parseFloat(data.latitude);
     if (data.longitude !== undefined) data.longitude = data.longitude === '' || data.longitude == null ? null : parseFloat(data.longitude);
-    delete data.salesRepId;
+
+    // Reassigning a client to a different sales rep is restricted to admin /
+    // GM / VGM. For everyone else we silently strip the field so the rep
+    // assignment can't be tampered with.
+    const REASSIGN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+    if (data.salesRepId !== undefined && !REASSIGN_ROLES.includes(req.user.role)) {
+      delete data.salesRepId;
+    }
+    if (data.salesRepId !== undefined) {
+      data.salesRepId = parseInt(data.salesRepId);
+    }
 
     // Once a sales rep has saved a geo location, they cannot change or clear it.
     // Only admins / general managers / vice GMs can override.
@@ -260,8 +271,11 @@ const updateClient = async (req, res) => {
       }
     }
 
-    // Brand-aware conflict check: allow same reg/tax across clients only if brands don't overlap
-    if (data.commercialRegNo !== undefined || data.taxCardNo !== undefined || data.brands !== undefined) {
+    // Brand-aware conflict check: allow same reg/tax across clients only if brands don't overlap.
+    // Admin / GM / VGM can override (skip the check) — they're trusted to fix data manually.
+    const SKIP_DEDUP_ROLES = ['admin', 'general_manager', 'vice_gm'];
+    const skipDedup = SKIP_DEDUP_ROLES.includes(req.user.role);
+    if (!skipDedup && (data.commercialRegNo !== undefined || data.taxCardNo !== undefined || data.brands !== undefined)) {
       const current = await prisma.client.findUnique({ where: { id: clientId } });
       const effectiveCommercial = data.commercialRegNo !== undefined ? data.commercialRegNo : current?.commercialRegNo;
       const effectiveTax = data.taxCardNo !== undefined ? data.taxCardNo : current?.taxCardNo;
