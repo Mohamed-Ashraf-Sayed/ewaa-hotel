@@ -102,7 +102,7 @@ export default function ClientDetail() {
   const [hotelSearch, setHotelSearch] = useState('');
   const [showHotelDropdown, setShowHotelDropdown] = useState(false);
   const [saving, setSaving] = useState(false);
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
 
   const ACTIVITY_TYPES = [
     { value: 'note', label: lang === 'ar' ? 'ملاحظة' : 'Note' },
@@ -317,12 +317,15 @@ export default function ClientDetail() {
             <div className={isAr ? 'text-right' : 'text-left'}>
               <div className={`flex items-center gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
                 <h1 className="text-2xl font-bold text-brand-900">{client.companyName}</h1>
-                {hasRole('sales_rep', 'sales_director', 'assistant_sales', 'general_manager', 'vice_gm', 'admin') && (
+                {/* Assistant sales can only edit clients assigned to them personally;
+                    they can still SEE the whole team's clients per access filter. */}
+                {hasRole('sales_rep', 'sales_director', 'general_manager', 'vice_gm', 'admin') ||
+                 (hasRole('assistant_sales') && client.salesRepId === user?.id) ? (
                   <button onClick={openEditClient}
                     className="text-xs px-2 py-1 rounded-md bg-brand-50 text-brand-600 hover:bg-brand-100 font-semibold">
                     ✎ {isAr ? 'تعديل' : 'Edit'}
                   </button>
-                )}
+                ) : null}
               </div>
               {(client as any).companyNameEn && isAr && (
                 <p className="text-sm text-brand-400 mt-0.5">{(client as any).companyNameEn}</p>

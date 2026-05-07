@@ -216,6 +216,23 @@ const updateClient = async (req, res) => {
   try {
     const { id } = req.params;
     const clientId = parseInt(id);
+
+    // Assistant sales: read-only on team-mates' clients. They can SEE the
+    // whole team's clients (handled in buildAccessFilter) but can only EDIT
+    // clients that are assigned to them personally.
+    if (req.user.role === 'assistant_sales') {
+      const owner = await prisma.client.findUnique({
+        where: { id: clientId },
+        select: { salesRepId: true },
+      });
+      if (!owner) return res.status(404).json({ message: 'Client not found' });
+      if (owner.salesRepId !== req.user.id) {
+        return res.status(403).json({
+          message: 'لا يمكنك تعديل هذا العميل — يمكنك تعديل عملاءك الشخصيين فقط.',
+        });
+      }
+    }
+
     const data = req.body;
     if (data.hotelId) data.hotelId = parseInt(data.hotelId);
     if (data.estimatedRooms) data.estimatedRooms = parseInt(data.estimatedRooms);
@@ -339,7 +356,21 @@ const lookupClient = async (req, res) => {
 const deleteClient = async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.client.update({ where: { id: parseInt(id) }, data: { isActive: false } });
+    const clientId = parseInt(id);
+    // Same guard as updateClient — assistants can't archive team-mates' clients.
+    if (req.user.role === 'assistant_sales') {
+      const owner = await prisma.client.findUnique({
+        where: { id: clientId },
+        select: { salesRepId: true },
+      });
+      if (!owner) return res.status(404).json({ message: 'Client not found' });
+      if (owner.salesRepId !== req.user.id) {
+        return res.status(403).json({
+          message: 'لا يمكنك حذف هذا العميل — يمكنك حذف عملاءك الشخصيين فقط.',
+        });
+      }
+    }
+    await prisma.client.update({ where: { id: clientId }, data: { isActive: false } });
     res.json({ message: 'Client archived successfully' });
   } catch (err) {
     res.status(500).json({ message: 'Server error' });
