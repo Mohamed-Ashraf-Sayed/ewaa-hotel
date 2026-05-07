@@ -359,8 +359,7 @@ export default function Clients() {
                   {form.isInternational && <span className="text-white text-xs leading-none">✓</span>}
                 </span>
                 <span className="text-sm font-medium">
-                  {isAr ? 'العميل خارج المملكة العربية السعودية (سجل تجاري / بطاقة ضريبية غير مطلوبين)'
-                        : 'International client (CR / Tax card not required)'}
+                  {isAr ? 'العميل خارج المملكة العربية السعودية' : 'International client'}
                 </span>
               </label>
             </div>
