@@ -97,7 +97,7 @@ export default function ClientDetail() {
   const [emailFiles, setEmailFiles] = useState<File[]>([]);
   const [emailSending, setEmailSending] = useState(false);
   const [quoteItems, setQuoteItems] = useState([{ description: '', roomType: '', nights: '', rooms: '', ratePerNight: '' }]);
-  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '' });
+  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en' });
   const [quoteHotelId, setQuoteHotelId] = useState<number | null>(null);
   const [hotelSearch, setHotelSearch] = useState('');
   const [showHotelDropdown, setShowHotelDropdown] = useState(false);
@@ -1164,6 +1164,7 @@ export default function ClientDetail() {
               items: quoteItems.filter(i => i.description),
               validDays: quoteForm.validDays, notes: quoteForm.notes,
               municipalityTaxPercent: quoteForm.municipalityTaxPercent,
+              lang: quoteForm.lang,
             });
             const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
             const a = document.createElement('a'); a.href = url;
@@ -1256,6 +1257,36 @@ export default function ClientDetail() {
               ))}
             </div>
           </div>
+          {/* Language picker — chooses what language the generated PDF is rendered in */}
+          <div>
+            <label className="label">{isAr ? 'لغة عرض السعر' : 'Quote Language'}</label>
+            <div className="grid grid-cols-2 gap-3">
+              {([
+                { v: 'ar', label: isAr ? 'عربي 🇸🇦' : 'Arabic 🇸🇦' },
+                { v: 'en', label: isAr ? 'إنجليزي 🇬🇧' : 'English 🇬🇧' },
+              ] as const).map(opt => (
+                <label
+                  key={opt.v}
+                  className={`cursor-pointer rounded-xl border-2 p-3 text-center font-semibold ${
+                    quoteForm.lang === opt.v
+                      ? 'border-brand-500 bg-brand-50 text-brand-900'
+                      : 'border-brand-200 hover:border-brand-300 text-brand-500'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="quoteLang"
+                    className="sr-only"
+                    value={opt.v}
+                    checked={quoteForm.lang === opt.v}
+                    onChange={() => setQuoteForm(p => ({ ...p, lang: opt.v }))}
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">{isAr ? 'صلاحية العرض (أيام)' : 'Valid for (days)'}</label>
