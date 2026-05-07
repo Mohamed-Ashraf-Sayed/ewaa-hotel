@@ -65,6 +65,9 @@ export default function Clients() {
     industry: '', clientType: 'lead', source: '', hotelId: '', brands: [] as string[],
     estimatedRooms: '', annualBudget: '', website: '',
     commercialRegNo: '', taxCardNo: '',
+    // International clients (outside KSA) don't have a Saudi CR / tax card —
+    // when this is checked, the two fields become optional and unvalidated.
+    isInternational: false,
     notes: ''
   };
   const [form, setForm] = useState(emptyForm);
@@ -105,8 +108,14 @@ export default function Clients() {
     }
     setSaving(true);
     try {
-      const { countryCode, phoneNumber, ...rest } = form;
-      const payload = { ...rest, phone: `${countryCode}${phoneNumber.replace(/[^\d]/g, '')}` };
+      const { countryCode, phoneNumber, isInternational, ...rest } = form;
+      // International clients don't need a Saudi CR / tax card — strip those
+      // values so they aren't stored or used in dedup checks.
+      const payload = {
+        ...rest,
+        phone: `${countryCode}${phoneNumber.replace(/[^\d]/g, '')}`,
+        ...(isInternational ? { commercialRegNo: null, taxCardNo: null } : {}),
+      };
       await clientsApi.create(payload);
       setShowModal(false);
       setForm(emptyForm);
@@ -331,19 +340,63 @@ export default function Clients() {
               <input className="input" type="number" required min="1"
                 value={form.annualBudget} onChange={e => setForm(p => ({ ...p, annualBudget: e.target.value }))} />
             </div>
-            <div>
-              <label className="label">{isAr ? 'رقم السجل التجاري' : 'Commercial Registration No.'} *</label>
-              <input className="input" required minLength={4} maxLength={30} pattern="[A-Za-z0-9\-\/\s]+"
-                title={isAr ? 'أرقام وحروف فقط' : 'Letters and numbers only'}
-                value={form.commercialRegNo}
-                onChange={e => setForm(p => ({ ...p, commercialRegNo: e.target.value }))} dir="ltr" />
+            {/* International toggle — when on, CR + tax card are optional */}
+            <div className="col-span-2">
+              <label className={`cursor-pointer flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 transition ${
+                form.isInternational ? 'bg-amber-50 border-amber-400' : 'bg-white border-brand-100 hover:border-brand-300'
+              } ${isAr ? 'flex-row-reverse' : ''}`}>
+                <input type="checkbox" className="hidden"
+                  checked={form.isInternational}
+                  onChange={e => setForm(p => ({
+                    ...p,
+                    isInternational: e.target.checked,
+                    // Clear CR/tax when toggling on so the user doesn't accidentally submit stale values
+                    ...(e.target.checked ? { commercialRegNo: '', taxCardNo: '' } : {}),
+                  }))} />
+                <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                  form.isInternational ? 'bg-amber-400 border-amber-400' : 'border-brand-300'
+                }`}>
+                  {form.isInternational && <span className="text-white text-xs leading-none">✓</span>}
+                </span>
+                <span className="text-sm font-medium">
+                  {isAr ? 'العميل خارج المملكة العربية السعودية (سجل تجاري / بطاقة ضريبية غير مطلوبين)'
+                        : 'International client (CR / Tax card not required)'}
+                </span>
+              </label>
             </div>
             <div>
-              <label className="label">{isAr ? 'رقم البطاقة الضريبية' : 'Tax Card No.'} *</label>
-              <input className="input" required minLength={4} maxLength={30} pattern="[A-Za-z0-9\-\/\s]+"
-                title={isAr ? 'أرقام وحروف فقط' : 'Letters and numbers only'}
+              <label className="label">
+                {isAr ? 'رقم السجل التجاري' : 'Commercial Registration No.'}
+                {!form.isInternational && ' *'}
+                <span className="text-[11px] text-brand-400 font-normal ms-1">
+                  {isAr ? '(حد أقصى 10 أرقام)' : '(max 10 digits)'}
+                </span>
+              </label>
+              <input className={`input ${form.isInternational ? 'bg-brand-50/40' : ''}`}
+                required={!form.isInternational}
+                disabled={form.isInternational}
+                inputMode="numeric"
+                maxLength={10} pattern="[0-9]{1,10}"
+                title={isAr ? 'أرقام فقط، حتى 10 أرقام' : 'Digits only, up to 10'}
+                value={form.commercialRegNo}
+                onChange={e => setForm(p => ({ ...p, commercialRegNo: e.target.value.replace(/\D/g, '').slice(0, 10) }))} dir="ltr" />
+            </div>
+            <div>
+              <label className="label">
+                {isAr ? 'رقم البطاقة الضريبية' : 'Tax Card No.'}
+                {!form.isInternational && ' *'}
+                <span className="text-[11px] text-brand-400 font-normal ms-1">
+                  {isAr ? '(حد أقصى 15 رقم)' : '(max 15 digits)'}
+                </span>
+              </label>
+              <input className={`input ${form.isInternational ? 'bg-brand-50/40' : ''}`}
+                required={!form.isInternational}
+                disabled={form.isInternational}
+                inputMode="numeric"
+                maxLength={15} pattern="[0-9]{1,15}"
+                title={isAr ? 'أرقام فقط، حتى 15 رقم' : 'Digits only, up to 15'}
                 value={form.taxCardNo}
-                onChange={e => setForm(p => ({ ...p, taxCardNo: e.target.value }))} dir="ltr" />
+                onChange={e => setForm(p => ({ ...p, taxCardNo: e.target.value.replace(/\D/g, '').slice(0, 15) }))} dir="ltr" />
             </div>
             <div className="col-span-2">
               <label className="label">{isAr ? 'البراندات (يمكن اختيار أكثر من واحد)' : 'Brands (multi-select)'} *</label>
