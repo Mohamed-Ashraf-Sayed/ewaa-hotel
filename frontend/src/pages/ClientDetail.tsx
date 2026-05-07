@@ -487,8 +487,9 @@ export default function ClientDetail() {
         )}
       </div>
 
-      {/* Action buttons */}
-      {hasRole('sales_rep', 'sales_director', 'assistant_sales') && (
+      {/* Action buttons — sales activities. Admin and senior management get
+          the same toolbox so they can act on a client when no rep is around. */}
+      {hasRole('sales_rep', 'sales_director', 'assistant_sales', 'admin', 'general_manager', 'vice_gm') && (
         <div className={`flex gap-3 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
           <button className="btn-primary text-sm" onClick={() => setShowContractModal(true)}>
             <FileText className="w-4 h-4" /> {t('upload_contract')}
