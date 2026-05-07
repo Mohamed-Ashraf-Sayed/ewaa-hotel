@@ -5,19 +5,13 @@ const prisma = new PrismaClient();
 
 const MANAGE_ROLES = ['admin', 'general_manager', 'vice_gm', 'marketing_manager'];
 
-const VIEW_BANNER_ROLES = [
-  'sales_rep', 'assistant_sales', 'sales_director',
-  'general_manager', 'vice_gm', 'marketing_manager', 'admin',
-];
-
 const includeAuthor = { createdBy: { select: { id: true, name: true } } };
 
 // GET /promotions/active — promos that should currently render on the user's dashboard.
-// Filters by date window + role visibility + (when set) hotel/brand assignment.
+// Open to every authenticated role; the only filters are the date window and
+// the optional per-promo hotel/brand targeting.
 const getActivePromotions = async (req, res) => {
   try {
-    if (!VIEW_BANNER_ROLES.includes(req.user.role)) return res.json([]);
-
     const now = new Date();
     const promos = await prisma.promotion.findMany({
       where: {

@@ -555,6 +555,9 @@ function MarketingDashboard() {
         </div>
       </div>
 
+      {/* Live preview of what sales sees on their dashboard */}
+      <PromotionBanner />
+
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <MarketingStat icon={Sparkles}    label={isAr ? 'نشط الآن' : 'Active Now'} value={counts.active}   accent="from-emerald-500 to-emerald-600" bgAccent="bg-emerald-50/80" />
@@ -808,6 +811,9 @@ function ReservationsDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Marketing promotion banner — same banner shown to every other role */}
+      <PromotionBanner />
 
       {/* Search & Filters */}
       <div className="card p-4 flex flex-wrap gap-3">
