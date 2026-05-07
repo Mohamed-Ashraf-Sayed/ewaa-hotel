@@ -44,6 +44,7 @@ export default function Users() {
     { value: 'reservations', label: t('role_reservations') },
     { value: 'credit_manager', label: t('role_credit_manager') },
     { value: 'credit_officer', label: t('role_credit_officer') },
+    { value: 'marketing_manager', label: t('role_marketing_manager') },
   ];
 
   const emptyForm = { name: '', email: '', password: '', role: 'sales_rep', managerId: '', phone: '', hotelIds: [] as string[] };

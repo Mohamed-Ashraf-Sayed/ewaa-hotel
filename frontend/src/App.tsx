@@ -31,6 +31,7 @@ import OrgChart from './pages/OrgChart';
 import Chat from './pages/Chat';
 import Inbox from './pages/Inbox';
 import Bookings from './pages/Bookings';
+import Marketing from './pages/Marketing';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -104,6 +105,7 @@ function AppRoutes() {
         <Route path="chat" element={<Chat />} />
         <Route path="inbox" element={<Inbox />} />
         <Route path="bookings" element={<Bookings />} />
+        <Route path="marketing" element={<Marketing />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

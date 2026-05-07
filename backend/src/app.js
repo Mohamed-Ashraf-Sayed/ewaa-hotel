@@ -60,6 +60,7 @@ app.use('/api/imap-accounts', require('./routes/imapAccounts'));
 app.use('/api/ai', require('./routes/aiQuery'));
 app.use('/api/bookings', require('./routes/bookings'));
 app.use('/api/portal', require('./routes/portal'));
+app.use('/api/promotions', require('./routes/promotions'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
 

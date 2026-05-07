@@ -253,6 +253,32 @@ export const dashboardApi = {
   get: () => api.get('/dashboard'),
 };
 
+// Marketing Promotions
+export const promotionsApi = {
+  active: () => api.get('/promotions/active'),
+  getAll: () => api.get('/promotions'),
+  getOne: (id: number) => api.get(`/promotions/${id}`),
+  create: (data: any, image?: File) => {
+    const fd = new FormData();
+    Object.keys(data).forEach(k => {
+      const v = data[k];
+      if (v !== undefined && v !== null && v !== '') fd.append(k, String(v));
+    });
+    if (image) fd.append('image', image);
+    return api.post('/promotions', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  update: (id: number, data: any, image?: File) => {
+    const fd = new FormData();
+    Object.keys(data).forEach(k => {
+      const v = data[k];
+      if (v !== undefined && v !== null && v !== '') fd.append(k, String(v));
+    });
+    if (image) fd.append('image', image);
+    return api.put(`/promotions/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  delete: (id: number) => api.delete(`/promotions/${id}`),
+};
+
 // Bookings
 export const bookingsApi = {
   getAll: (params?: { status?: string; hotelId?: number; clientId?: number; assignedRepId?: number; search?: string; fromDate?: string; toDate?: string }) =>

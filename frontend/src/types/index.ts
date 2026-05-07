@@ -1,4 +1,22 @@
-export type Role = 'admin' | 'general_manager' | 'vice_gm' | 'sales_director' | 'assistant_sales' | 'sales_rep' | 'contract_officer' | 'reservations' | 'credit_manager' | 'credit_officer';
+export type Role = 'admin' | 'general_manager' | 'vice_gm' | 'sales_director' | 'assistant_sales' | 'sales_rep' | 'contract_officer' | 'reservations' | 'credit_manager' | 'credit_officer' | 'marketing_manager';
+
+export interface Promotion {
+  id: number;
+  title: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  ctaLabel?: string | null;
+  ctaUrl?: string | null;
+  startsAt: string;
+  endsAt: string;
+  hotelIds?: string | null;
+  brands?: string | null;
+  isActive: boolean;
+  createdById: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: { id: number; name: string };
+}
 
 export interface User {
   id: number;

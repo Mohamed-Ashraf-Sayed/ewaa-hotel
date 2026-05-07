@@ -18,6 +18,7 @@ const translations = {
   nav_org_chart: { ar: 'الهيكل التنظيمي', en: 'Org Chart' },
   nav_chat: { ar: 'المحادثات', en: 'Chat' },
   nav_bookings: { ar: 'الحجوزات', en: 'Bookings' },
+  nav_marketing: { ar: 'العروض التسويقية', en: 'Marketing' },
   nav_inbox: { ar: 'الوارد', en: 'Inbox' },
 
   // === Auth ===
@@ -188,6 +189,7 @@ const translations = {
   role_reservations: { ar: 'قسم الحجوزات', en: 'Reservations' },
   role_credit_manager: { ar: 'مدير الائتمان', en: 'Credit Manager' },
   role_credit_officer: { ar: 'موظف ائتمان', en: 'Credit Officer' },
+  role_marketing_manager: { ar: 'مدير التسويق', en: 'Marketing Manager' },
 
   // === Common ===
   save: { ar: 'حفظ', en: 'Save' },

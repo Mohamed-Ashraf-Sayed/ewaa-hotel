@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Building2, FileText, MapPin, Clock, AlertTriangle, TrendingUp, Users, ArrowLeft, Eye, Download, Plus, Receipt, Sparkles, Flame, Target as TargetIcon, ArrowUpRight } from 'lucide-react';
 import { dashboardApi, contractsApi } from '../services/api';
 import Modal from '../components/Modal';
+import PromotionBanner from '../components/PromotionBanner';
 import { DashboardData } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -117,6 +118,8 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
+      {/* Marketing promotion banner — shows active campaigns at the top of the home dashboard */}
+      <PromotionBanner />
       {/* === Premium hero header === */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700 p-6 lg:p-7 text-white">
         <div className="absolute -right-12 -top-12 w-72 h-72 rounded-full bg-white/[0.04]" />

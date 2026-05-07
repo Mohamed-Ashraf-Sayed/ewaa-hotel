@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, FileText, MapPin,
-  Hotel, CreditCard, Target, CheckSquare, Trophy, CalendarDays, X, BarChart3, Network, MessageCircle, Wallet, Inbox as InboxIcon, BedDouble
+  Hotel, CreditCard, Target, CheckSquare, Trophy, CalendarDays, X, BarChart3, Network, MessageCircle, Wallet, Inbox as InboxIcon, BedDouble, Megaphone
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -29,6 +29,7 @@ const navItems: NavItem[] = [
   { to: '/users', icon: Users, labelKey: 'nav_users', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales'] },
   { to: '/org-chart', icon: Network, labelKey: 'nav_org_chart', roles: ['admin', 'general_manager', 'vice_gm'] },
   { to: '/hotels', icon: Hotel, labelKey: 'nav_hotels', roles: ['admin', 'general_manager', 'vice_gm'] },
+  { to: '/marketing', icon: Megaphone, labelKey: 'nav_marketing', roles: ['admin', 'general_manager', 'vice_gm', 'marketing_manager'] },
 ];
 
 interface SidebarProps { open: boolean; isMobile?: boolean; onClose?: () => void }

@@ -73,6 +73,7 @@ model User {
   bookingsBooked    Booking[]    @relation("BookingBookedBy")
   bookingsCancelled Booking[]    @relation("BookingCancelledBy")
   bookingChangesByMe BookingChangeLog[] @relation("BookingChangedBy")
+  promotionsCreated Promotion[]  @relation("PromotionCreator")
 }
 
 model Message {
@@ -533,6 +534,32 @@ model Booking {
   @@index([status])
   @@index([arrivalDate])
   @@index([operaConfirmationNo])
+}
+
+// === MARKETING PROMOTIONS (banner ads on dashboard) ===
+// A campaign auto-shows on the user's home dashboard between startsAt and
+// endsAt. hotelIds / brands are optional CSV filters; both null means show
+// to everyone.
+model Promotion {
+  id           Int      @id @default(autoincrement())
+  title        String
+  description  String?
+  imageUrl     String?
+  ctaLabel     String?
+  ctaUrl       String?
+  startsAt     DateTime
+  endsAt       DateTime
+  hotelIds     String?  // comma-separated; null = all hotels
+  brands       String?  // comma-separated brand groups; null = all brands
+  isActive     Boolean  @default(true)
+  createdById  Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdBy    User     @relation("PromotionCreator", fields: [createdById], references: [id])
+
+  @@index([startsAt, endsAt])
+  @@index([isActive])
 }
 
 // === BOOKING GUESTS (multi-guest support) ===
