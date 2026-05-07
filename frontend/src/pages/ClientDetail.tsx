@@ -1067,8 +1067,8 @@ export default function ClientDetail() {
                 <option value="credit">{lang === 'ar' ? 'كريدت' : 'Credit'}</option>
               </select>
             </div>
-            <div><label className="label">{t('contract_rooms')} *</label>
-              <input className="input" type="number" required min="1" max="100000"
+            <div><label className="label">{t('contract_rooms')}</label>
+              <input className="input" type="number" min="1" max="100000"
                 value={contractForm.roomsCount} onChange={e => setContractForm(p => ({ ...p, roomsCount: e.target.value }))} />
             </div>
             <div><label className="label">{t('contract_rate')} ({t('sar')}) *</label>
