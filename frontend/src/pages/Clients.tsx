@@ -108,14 +108,10 @@ export default function Clients() {
     }
     setSaving(true);
     try {
-      const { countryCode, phoneNumber, isInternational, ...rest } = form;
-      // International clients don't need a Saudi CR / tax card — strip those
-      // values so they aren't stored or used in dedup checks.
-      const payload = {
-        ...rest,
-        phone: `${countryCode}${phoneNumber.replace(/[^\d]/g, '')}`,
-        ...(isInternational ? { commercialRegNo: null, taxCardNo: null } : {}),
-      };
+      const { countryCode, phoneNumber, isInternational: _, ...rest } = form;
+      // isInternational is just a UI flag for the required-toggle — the values
+      // entered (or left blank) flow through to the backend as-is.
+      const payload = { ...rest, phone: `${countryCode}${phoneNumber.replace(/[^\d]/g, '')}` };
       await clientsApi.create(payload);
       setShowModal(false);
       setForm(emptyForm);
@@ -340,19 +336,15 @@ export default function Clients() {
               <input className="input" type="number" required min="1"
                 value={form.annualBudget} onChange={e => setForm(p => ({ ...p, annualBudget: e.target.value }))} />
             </div>
-            {/* International toggle — when on, CR + tax card are optional */}
+            {/* International toggle — purely loosens the "required" rule on CR + tax card.
+                Fields remain enterable in case an international client does have them. */}
             <div className="col-span-2">
               <label className={`cursor-pointer flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 transition ${
                 form.isInternational ? 'bg-amber-50 border-amber-400' : 'bg-white border-brand-100 hover:border-brand-300'
               } ${isAr ? 'flex-row-reverse' : ''}`}>
                 <input type="checkbox" className="hidden"
                   checked={form.isInternational}
-                  onChange={e => setForm(p => ({
-                    ...p,
-                    isInternational: e.target.checked,
-                    // Clear CR/tax when toggling on so the user doesn't accidentally submit stale values
-                    ...(e.target.checked ? { commercialRegNo: '', taxCardNo: '' } : {}),
-                  }))} />
+                  onChange={e => setForm(p => ({ ...p, isInternational: e.target.checked }))} />
                 <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
                   form.isInternational ? 'bg-amber-400 border-amber-400' : 'border-brand-300'
                 }`}>
@@ -371,9 +363,8 @@ export default function Clients() {
                   {isAr ? '(حد أقصى 10 أرقام)' : '(max 10 digits)'}
                 </span>
               </label>
-              <input className={`input ${form.isInternational ? 'bg-brand-50/40' : ''}`}
+              <input className="input"
                 required={!form.isInternational}
-                disabled={form.isInternational}
                 inputMode="numeric"
                 maxLength={10} pattern="[0-9]{1,10}"
                 title={isAr ? 'أرقام فقط، حتى 10 أرقام' : 'Digits only, up to 10'}
@@ -388,9 +379,8 @@ export default function Clients() {
                   {isAr ? '(حد أقصى 15 رقم)' : '(max 15 digits)'}
                 </span>
               </label>
-              <input className={`input ${form.isInternational ? 'bg-brand-50/40' : ''}`}
+              <input className="input"
                 required={!form.isInternational}
-                disabled={form.isInternational}
                 inputMode="numeric"
                 maxLength={15} pattern="[0-9]{1,15}"
                 title={isAr ? 'أرقام فقط، حتى 15 رقم' : 'Digits only, up to 15'}
