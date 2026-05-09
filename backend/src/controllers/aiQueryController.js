@@ -894,9 +894,14 @@ REFERENCE DATA: Hotels (الفنادق) are public reference data visible to eve
       systemInstruction,
       tools: [{ functionDeclarations: toolDeclarations }],
       generationConfig: {
-        // Cap output length — replies should be conversational, not essays. Faster gen.
-        maxOutputTokens: 800,
-        temperature: 0.4,
+        // Tighter cap — keeps replies short AND cuts generation time. Most CRM
+        // answers fit in well under 400 tokens.
+        maxOutputTokens: 400,
+        temperature: 0.3,
+        // Disable Gemini 2.5+ "thinking" — it adds 1-3s of latency we don't
+        // need for short tool-driven answers. (Ignored on flash-latest if not
+        // a thinking-capable model.)
+        thinkingConfig: { thinkingBudget: 0 },
       },
     });
     // Primary = flash-latest (Google's fastest preview model — currently routes to
@@ -909,7 +914,7 @@ REFERENCE DATA: Hotels (الفنادق) are public reference data visible to eve
     // Filter out empty/error turns from history — they confuse the model
     const cleanHistory = Array.isArray(history)
       ? history.filter(h => h && h.content && !/AI query failed|⚠️/.test(h.content))
-        .slice(-12) // keep last 12 turns max
+        .slice(-8) // keep last 8 turns max — fewer tokens to process per call = faster reply
         .map(h => ({
           role: h.role === 'assistant' ? 'model' : 'user',
           parts: [{ text: String(h.content) }],
