@@ -105,7 +105,7 @@ export default function ClientDetail() {
   const [emailFiles, setEmailFiles] = useState<File[]>([]);
   const [emailSending, setEmailSending] = useState(false);
   const [quoteItems, setQuoteItems] = useState([{ description: '', roomType: '', nights: '', rooms: '', ratePerNight: '' }]);
-  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en' });
+  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en', meals: 'breakfast' as 'none' | 'breakfast' | 'lunch' | 'dinner' | 'full_board' });
   const [quoteHotelId, setQuoteHotelId] = useState<number | null>(null);
   const [hotelSearch, setHotelSearch] = useState('');
   const [showHotelDropdown, setShowHotelDropdown] = useState(false);
@@ -1211,6 +1211,7 @@ export default function ClientDetail() {
               validDays: quoteForm.validDays, notes: quoteForm.notes,
               municipalityTaxPercent: quoteForm.municipalityTaxPercent,
               lang: quoteForm.lang,
+              meals: quoteForm.meals,
             });
             const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
             const a = document.createElement('a'); a.href = url;
@@ -1358,6 +1359,39 @@ export default function ClientDetail() {
             </div>
           </div>
           {/* Language picker — chooses what language the generated PDF is rendered in */}
+          {/* Meals — adds a "prices include …" line in the PDF benefits section */}
+          <div>
+            <label className="label">{isAr ? 'الوجبات' : 'Meals'}</label>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {([
+                { v: 'none',       ar: 'بدون',   en: 'None' },
+                { v: 'breakfast',  ar: 'فطار',   en: 'Breakfast' },
+                { v: 'lunch',      ar: 'غداء',   en: 'Lunch' },
+                { v: 'dinner',     ar: 'عشاء',   en: 'Dinner' },
+                { v: 'full_board', ar: 'الثلاث وجبات', en: 'Full Board' },
+              ] as const).map(opt => (
+                <label
+                  key={opt.v}
+                  className={`cursor-pointer rounded-lg border-2 px-2 py-2 text-center text-sm font-semibold ${
+                    quoteForm.meals === opt.v
+                      ? 'border-brand-500 bg-brand-50 text-brand-900'
+                      : 'border-brand-200 hover:border-brand-300 text-brand-500'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="quoteMeals"
+                    className="sr-only"
+                    value={opt.v}
+                    checked={quoteForm.meals === opt.v}
+                    onChange={() => setQuoteForm(p => ({ ...p, meals: opt.v }))}
+                  />
+                  {isAr ? opt.ar : opt.en}
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className="label">{isAr ? 'لغة عرض السعر' : 'Quote Language'}</label>
             <div className="grid grid-cols-2 gap-3">

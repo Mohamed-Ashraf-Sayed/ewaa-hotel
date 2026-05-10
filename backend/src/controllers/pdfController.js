@@ -195,7 +195,16 @@ const QUOTE_T = {
     benefit1: (tax) => `Above room rates are excluding 15% VAT${tax > 0 ? `, ${tax}% municipality tax` : ''} at Ewaa Express Hotels.`,
     benefit2: 'The above rates are NET, Non-Commissionable, and quoted in Saudi Riyals.',
     benefit3: 'The above quoted rates are inclusive of WI – Fi internet.',
-    benefit4: 'Above rates are on BB.',
+    benefit4: (meals) => {
+      switch (meals) {
+        case 'lunch':      return 'Above rates include lunch.';
+        case 'dinner':     return 'Above rates include dinner.';
+        case 'full_board': return 'Above rates include breakfast, lunch, and dinner.';
+        case 'none':       return null;
+        case 'breakfast':
+        default:           return 'Above rates are on BB (breakfast included).';
+      }
+    },
     termsTitle: 'Terms & Conditions:',
     terms1: 'Check in time is 15:00PM and check out time is at 12:00PM. Any late check-out after 16:00 hours will be subject to a 50% of the contracted rate and any check out after 18:00 hours will be subject to an additional full night rate. Early check in and extended check out facilities is subject to availability.',
     terms2: 'Should the group wish to stay longer than 12.00 noon then luggage can be picked up and stored until departure time while all guests can avail of the use of all hotel service.',
@@ -247,7 +256,16 @@ const QUOTE_T = {
     benefit1: (tax) => `الأسعار أعلاه لا تشمل ضريبة القيمة المضافة 15%${tax > 0 ? ` ورسوم البلدية ${tax}%` : ''} في فنادق إيواء اكسبريس.`,
     benefit2: 'الأسعار أعلاه صافية وغير قابلة للعمولة وبالريال السعودي.',
     benefit3: 'الأسعار المعروضة شاملة الإنترنت اللاسلكي WI-Fi.',
-    benefit4: 'الأسعار شاملة الإفطار.',
+    benefit4: (meals) => {
+      switch (meals) {
+        case 'lunch':      return 'الأسعار شاملة الغداء.';
+        case 'dinner':     return 'الأسعار شاملة العشاء.';
+        case 'full_board': return 'الأسعار شاملة الإفطار والغداء والعشاء.';
+        case 'none':       return null;
+        case 'breakfast':
+        default:           return 'الأسعار شاملة الإفطار.';
+      }
+    },
     termsTitle: 'الشروط والأحكام:',
     terms1: 'موعد تسجيل الدخول الساعة 15:00 ومغادرة الغرفة الساعة 12:00 ظهرًا. أي تأخير في المغادرة بعد الساعة 16:00 يخضع لرسوم 50% من السعر المتفق عليه، وأي تأخير بعد الساعة 18:00 يخضع لرسوم ليلة كاملة إضافية. تسجيل الدخول المبكر أو تمديد المغادرة متاحان حسب التوفر.',
     terms2: 'في حال رغبة المجموعة في البقاء بعد الساعة 12:00 ظهرًا، يمكن استلام الأمتعة وتخزينها حتى وقت المغادرة، مع إمكانية استخدام كافة خدمات الفندق.',
@@ -290,7 +308,8 @@ const QUOTE_T = {
 const generateQuote = async (req, res) => {
   try {
     const { clientId, hotelId, items, validDays, notes, companyName, contactPerson,
-      municipalityTaxPercent, lang } = req.body;
+      municipalityTaxPercent, lang, meals: mealsRaw } = req.body;
+    const meals = ['none','breakfast','lunch','dinner','full_board'].includes(mealsRaw) ? mealsRaw : 'breakfast';
     // Pick language: 'ar' uses Cairo font + RTL alignment; everything else stays English.
     const isAr = lang === 'ar';
     const t = isAr ? QUOTE_T.ar : QUOTE_T.en;
@@ -479,7 +498,8 @@ const generateQuote = async (req, res) => {
     y = bullet(y, t.benefit1(munTaxRate));
     y = bullet(y, t.benefit2);
     y = bullet(y, t.benefit3);
-    y = bullet(y, t.benefit4);
+    const mealsLine = t.benefit4(meals);
+    if (mealsLine) y = bullet(y, mealsLine);
 
     y += 6;
     y = section(y, t.termsTitle);
