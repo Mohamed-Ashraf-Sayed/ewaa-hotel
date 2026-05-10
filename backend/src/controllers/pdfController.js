@@ -331,10 +331,13 @@ const generateQuote = async (req, res) => {
     }));
     parsedItems.forEach(i => { i.total = i.nights * i.rooms * i.rate; });
     const subtotal = parsedItems.reduce((s, i) => s + i.total, 0);
-    const vat = Math.round(subtotal * 0.15);
+    // ZATCA-style compound calculation: municipality fee applies to the
+    // subtotal, then VAT applies on (subtotal + municipality). So a 100,000
+    // subtotal with 2.5% muni and 15% VAT settles at 117,875 (not 117,500).
     const munTaxRate = Math.max(0, parseFloat(municipalityTaxPercent) || 0);
     const munTax = Math.round(subtotal * munTaxRate / 100);
-    const grandTotal = subtotal + vat + munTax;
+    const vat = Math.round((subtotal + munTax) * 0.15);
+    const grandTotal = subtotal + munTax + vat;
 
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
     res.setHeader('Content-Type', 'application/pdf');
@@ -444,10 +447,10 @@ const generateQuote = async (req, res) => {
         doc.fillColor(bold ? NAVY : DARK).text(value, tx + 130, y, { align: 'right', width: 95, lineBreak: false, features: ARABIC_FEATURES });
       };
       drawTotal(`${t.subtotal}:`, `${formatNum(subtotal)} ${t.sar}`); y += 15;
-      drawTotal(`${t.vat}:`, `${formatNum(vat)} ${t.sar}`); y += 15;
       if (munTaxRate > 0) {
         drawTotal(`${t.municipalityTax} (${munTaxRate}%):`, `${formatNum(munTax)} ${t.sar}`); y += 15;
       }
+      drawTotal(`${t.vat}:`, `${formatNum(vat)} ${t.sar}`); y += 15;
       doc.moveTo(tx, y - 2).lineTo(555, y - 2).strokeColor(NAVY).lineWidth(1).stroke(); y += 5;
       drawTotal(`${t.grandTotal}:`, `${formatNum(grandTotal)} ${t.sar}`, true);
       y += 30;
