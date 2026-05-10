@@ -212,10 +212,12 @@ const QUOTE_T = {
     pay1: '50% of total group amount to be received after signing this offer.',
     pay2: 'Rest of payment with rooming list to be received 03 days before arrival.',
     bankAccount: 'Bank Account Details:',
-    bankName: 'Bank name: Bank Al-Rajhi',
-    accountName: 'Account name: Grand Plaza Hotel – Gulf',
-    accountNumber: 'Account number: 504 6080 10080399',
-    iban: 'IBAN: SA 48 8000 0504 6080 1008 0399',
+    bankNameLabel: 'Bank name:',
+    beneficiaryLabel: 'Beneficiary name:',
+    nationalIdLabel: 'Unified National ID:',
+    accountNumberLabel: 'Account number:',
+    ibanLabel: 'IBAN:',
+    bankMissing: 'Bank account details will be provided separately.',
     rateDisclosure: 'Rate & Rate Disclosure:',
     rateDisclosureText: 'The rates specified herein are applicable to this agreement only and are strictly confidential. The Client shall refrain from directly or indirectly disclosing the rates to a third party using any medium. In case of an indirect resale, the Client shall bind the contracting party to the same obligations.',
     forceMajeure: 'Force Majeure:',
@@ -262,10 +264,12 @@ const QUOTE_T = {
     pay1: 'يتم سداد 50% من إجمالي مبلغ المجموعة بعد توقيع هذا العرض.',
     pay2: 'يتم سداد المبلغ المتبقي مع كشف الإقامة (Rooming List) قبل الوصول بـ 3 أيام.',
     bankAccount: 'بيانات الحساب البنكي:',
-    bankName: 'اسم البنك: مصرف الراجحي',
-    accountName: 'اسم الحساب: Grand Plaza Hotel – Gulf',
-    accountNumber: 'رقم الحساب: 504 6080 10080399',
-    iban: 'الآيبان: SA 48 8000 0504 6080 1008 0399',
+    bankNameLabel: 'اسم البنك:',
+    beneficiaryLabel: 'اسم المستفيد:',
+    nationalIdLabel: 'رقم الهوية الوطنية:',
+    accountNumberLabel: 'رقم الحساب:',
+    ibanLabel: 'الآيبان:',
+    bankMissing: 'سيتم تزويدكم ببيانات الحساب البنكي بشكل منفصل.',
     rateDisclosure: 'سرية الأسعار:',
     rateDisclosureText: 'الأسعار الواردة في هذا العرض تخص هذه الاتفاقية فقط وهي سرية تمامًا. يلتزم العميل بعدم الإفصاح عن الأسعار لأي طرف ثالث بشكل مباشر أو غير مباشر بأي وسيلة. في حال إعادة البيع غير المباشر، يلتزم العميل بإلزام الطرف المتعاقد بنفس الالتزامات.',
     forceMajeure: 'القوة القاهرة:',
@@ -504,10 +508,18 @@ const generateQuote = async (req, res) => {
 
     y += 4;
     y = section(y, t.bankAccount);
-    y = bullet(y, t.bankName);
-    y = bullet(y, t.accountName);
-    y = bullet(y, t.accountNumber);
-    y = bullet(y, t.iban);
+    const bankRows = [
+      { label: t.bankNameLabel,        value: hotel?.bankName },
+      { label: t.beneficiaryLabel,     value: hotel?.beneficiaryName },
+      { label: t.nationalIdLabel,      value: hotel?.nationalId },
+      { label: t.accountNumberLabel,   value: hotel?.accountNumber },
+      { label: t.ibanLabel,            value: hotel?.iban },
+    ].filter(r => r.value);
+    if (bankRows.length === 0) {
+      y = para(y, t.bankMissing);
+    } else {
+      bankRows.forEach(r => { y = bullet(y, `${r.label} ${r.value}`); });
+    }
 
     y += 4;
     y = section(y, t.rateDisclosure);

@@ -1267,6 +1267,60 @@ export default function ClientDetail() {
             })()}
           </div>
 
+          {/* Payment / bank details — auto-populated from selected hotel */}
+          {quoteHotelId && (() => {
+            const h = hotels.find(x => x.id === quoteHotelId);
+            if (!h) return null;
+            const hasBank = h.bankName || h.beneficiaryName || h.accountNumber || h.iban;
+            return (
+              <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3">
+                <div className={`text-xs font-bold text-brand-700 mb-2 ${isAr ? 'text-right' : 'text-left'}`}>
+                  {isAr ? 'بيانات الدفع (تظهر في عرض السعر)' : 'Payment Details (shown on quote)'}
+                </div>
+                {!hasBank ? (
+                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                    {isAr
+                      ? 'لا توجد بيانات بنكية محفوظة لهذا الفندق. أضفها من صفحة الفنادق ← تعديل.'
+                      : 'No bank details on file for this hotel. Add them from Hotels → Edit.'}
+                  </div>
+                ) : (
+                  <dl className={`grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-xs ${isAr ? 'text-right' : 'text-left'}`}>
+                    {h.bankName && (
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-brand-500">{isAr ? 'البنك:' : 'Bank:'}</dt>
+                        <dd className="font-semibold text-brand-900">{h.bankName}</dd>
+                      </div>
+                    )}
+                    {h.beneficiaryName && (
+                      <div className="flex justify-between gap-2 sm:col-span-2">
+                        <dt className="text-brand-500">{isAr ? 'المستفيد:' : 'Beneficiary:'}</dt>
+                        <dd className="font-semibold text-brand-900">{h.beneficiaryName}</dd>
+                      </div>
+                    )}
+                    {h.nationalId && (
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-brand-500">{isAr ? 'الهوية الوطنية:' : 'National ID:'}</dt>
+                        <dd className="font-mono text-brand-900" dir="ltr">{h.nationalId}</dd>
+                      </div>
+                    )}
+                    {h.accountNumber && (
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-brand-500">{isAr ? 'رقم الحساب:' : 'Account No.:'}</dt>
+                        <dd className="font-mono text-brand-900" dir="ltr">{h.accountNumber}</dd>
+                      </div>
+                    )}
+                    {h.iban && (
+                      <div className="flex justify-between gap-2 sm:col-span-2">
+                        <dt className="text-brand-500">{isAr ? 'الآيبان:' : 'IBAN:'}</dt>
+                        <dd className="font-mono text-brand-900" dir="ltr">{h.iban}</dd>
+                      </div>
+                    )}
+                  </dl>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Items */}
           <div>
             <div className={`flex items-center justify-between mb-2 ${isAr ? 'flex-row-reverse' : ''}`}>

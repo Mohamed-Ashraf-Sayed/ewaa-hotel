@@ -21,6 +21,13 @@ model Hotel {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
+  // Bank account details — used in quote/offer "بيانات الدفع" section
+  bankName        String?
+  beneficiaryName String?
+  nationalId      String?
+  accountNumber   String?
+  iban            String?
+
   clients    Client[]
   contracts  Contract[]
   bookings   Booking[]

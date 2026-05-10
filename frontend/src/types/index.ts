@@ -45,6 +45,11 @@ export interface Hotel {
   stars?: number;
   type?: string;
   isActive: boolean;
+  bankName?: string | null;
+  beneficiaryName?: string | null;
+  nationalId?: string | null;
+  accountNumber?: string | null;
+  iban?: string | null;
 }
 
 export interface Payment {

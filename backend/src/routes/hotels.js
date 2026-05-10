@@ -18,7 +18,8 @@ router.get('/', authenticate, async (req, res) => {
 
 router.post('/', authenticate, authorize('general_manager', 'vice_gm'), async (req, res) => {
   try {
-    const { name, nameEn, location, city, country, stars, type, group } = req.body;
+    const { name, nameEn, location, city, country, stars, type, group,
+            bankName, beneficiaryName, nationalId, accountNumber, iban } = req.body;
     const hotel = await prisma.hotel.create({
       data: {
         name, nameEn, location,
@@ -26,7 +27,12 @@ router.post('/', authenticate, authorize('general_manager', 'vice_gm'), async (r
         country: country || 'Saudi Arabia',
         stars: stars ? parseInt(stars) : null,
         type: type || null,
-        group: group || null
+        group: group || null,
+        bankName: bankName?.trim() || null,
+        beneficiaryName: beneficiaryName?.trim() || null,
+        nationalId: nationalId?.trim() || null,
+        accountNumber: accountNumber?.trim() || null,
+        iban: iban?.trim().replace(/\s+/g, '') || null,
       }
     });
     res.status(201).json(hotel);

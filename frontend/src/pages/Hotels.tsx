@@ -34,20 +34,39 @@ export default function Hotels() {
   const [saving, setSaving] = useState(false);
   const [filterGroup, setFilterGroup] = useState<string>('all');
   const [form, setForm] = useState({
-    name: '', nameEn: '', location: '', city: '', stars: '5', type: '', group: ''
+    name: '', nameEn: '', location: '', city: '', stars: '5', type: '', group: '',
+    bankName: '', beneficiaryName: '', nationalId: '', accountNumber: '', iban: '',
   });
 
   const load = () => hotelsApi.getAll().then(r => setHotels(r.data)).finally(() => setLoading(false));
   useEffect(() => { load(); }, []);
 
+  const blankForm = {
+    name: '', nameEn: '', location: '', city: '', stars: '5', type: '', group: '',
+    bankName: '', beneficiaryName: '', nationalId: '', accountNumber: '', iban: '',
+  };
+
   const openCreate = () => {
     setEditHotel(null);
-    setForm({ name: '', nameEn: '', location: '', city: '', stars: '5', type: '', group: '' });
+    setForm(blankForm);
     setShowModal(true);
   };
   const openEdit = (h: HotelType) => {
     setEditHotel(h);
-    setForm({ name: h.name, nameEn: h.nameEn || '', location: h.location, city: h.city || '', stars: h.stars?.toString() || '5', type: h.type || '', group: h.group || '' });
+    setForm({
+      name: h.name,
+      nameEn: h.nameEn || '',
+      location: h.location,
+      city: h.city || '',
+      stars: h.stars?.toString() || '5',
+      type: h.type || '',
+      group: h.group || '',
+      bankName: h.bankName || '',
+      beneficiaryName: h.beneficiaryName || '',
+      nationalId: h.nationalId || '',
+      accountNumber: h.accountNumber || '',
+      iban: h.iban || '',
+    });
     setShowModal(true);
   };
 
@@ -231,6 +250,46 @@ export default function Hotels() {
               </select>
             </div>
           </div>
+
+          <div className="pt-2 mt-2 border-t border-brand-100">
+            <h3 className={`text-sm font-bold text-brand-900 mb-2 ${isAr ? 'text-right' : 'text-left'}`}>
+              {isAr ? 'بيانات الحساب البنكي (تظهر في عرض السعر)' : 'Bank Account Details (shown on quotes)'}
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className="label">{isAr ? 'اسم البنك' : 'Bank Name'}</label>
+                <input className="input" value={form.bankName}
+                  onChange={e => setForm(p => ({ ...p, bankName: e.target.value }))}
+                  placeholder={isAr ? 'مثال: مصرف الراجحي' : 'e.g. Bank Al-Rajhi'} />
+              </div>
+              <div>
+                <label className="label">{isAr ? 'اسم المستفيد (المكرم/المكرمة)' : 'Beneficiary Name'}</label>
+                <input className="input" value={form.beneficiaryName}
+                  onChange={e => setForm(p => ({ ...p, beneficiaryName: e.target.value }))}
+                  placeholder={isAr ? 'مثال: المهيدب ريزدنس للوحدات السكنية المفروشة' : 'Beneficiary'} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">{isAr ? 'رقم الهوية الوطنية' : 'Unified National ID'}</label>
+                  <input className="input" value={form.nationalId} dir="ltr"
+                    onChange={e => setForm(p => ({ ...p, nationalId: e.target.value.replace(/\D/g, '') }))} />
+                </div>
+                <div>
+                  <label className="label">{isAr ? 'رقم الحساب' : 'Account Number'}</label>
+                  <input className="input" value={form.accountNumber} dir="ltr"
+                    onChange={e => setForm(p => ({ ...p, accountNumber: e.target.value.replace(/\D/g, '') }))} />
+                </div>
+              </div>
+              <div>
+                <label className="label">{isAr ? 'الآيبان (IBAN)' : 'IBAN'}</label>
+                <input className="input" value={form.iban} dir="ltr"
+                  maxLength={34}
+                  onChange={e => setForm(p => ({ ...p, iban: e.target.value.replace(/\s+/g, '').toUpperCase() }))}
+                  placeholder="SA0000000000000000000000" />
+              </div>
+            </div>
+          </div>
+
           <div className="flex gap-3">
             <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>{t('cancel')}</button>
             <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving}>
