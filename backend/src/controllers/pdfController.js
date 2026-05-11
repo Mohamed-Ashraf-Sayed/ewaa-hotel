@@ -317,10 +317,13 @@ const generateQuote = async (req, res) => {
     const hotel = hotelId ? await prisma.hotel.findUnique({ where: { id: parseInt(hotelId) } }) : null;
     const client = clientId ? await prisma.client.findUnique({ where: { id: parseInt(clientId) } }) : null;
 
-    const ref = `QT-${Date.now().toString().slice(-8)}`;
-    const today = new Date();
-    const validUntil = new Date(today);
-    validUntil.setDate(validUntil.getDate() + (parseInt(validDays) || 30));
+    // ref/today/validUntil can be overridden by the re-download path so a
+    // saved quote re-renders with its original reference and dates.
+    const ref = req._overrideRef || `QT-${Date.now().toString().slice(-8)}`;
+    const today = req._overrideDate ? new Date(req._overrideDate) : new Date();
+    const validUntil = req._overrideValidUntil
+      ? new Date(req._overrideValidUntil)
+      : (() => { const d = new Date(today); d.setDate(d.getDate() + (parseInt(validDays) || 30)); return d; })();
 
     const parsedItems = (items || []).map(item => ({
       description: item.description || '',
@@ -338,6 +341,43 @@ const generateQuote = async (req, res) => {
     const munTax = Math.round(subtotal * munTaxRate / 100);
     const vat = Math.round((subtotal + munTax) * 0.15);
     const grandTotal = subtotal + munTax + vat;
+
+    // Persist the quote so the rep can re-open it later from the client's
+    // profile, and log an Activity entry so it shows up in the activities
+    // tab. Skipped on the re-download path (req._skipSave = true) so the
+    // same record isn't duplicated each time the PDF is re-fetched.
+    if (!req._skipSave && clientId && req.user?.id) {
+      try {
+        await prisma.quote.create({
+          data: {
+            reference: ref,
+            clientId: parseInt(clientId),
+            hotelId: hotelId ? parseInt(hotelId) : null,
+            salesRepId: req.user.id,
+            items: JSON.stringify(parsedItems),
+            subtotal, munTaxRate, munTax, vat, grandTotal,
+            validDays: parseInt(validDays) || 30,
+            validUntil,
+            notes: notes || null,
+            lang: isAr ? 'ar' : 'en',
+            meals,
+          },
+        });
+        await prisma.activity.create({
+          data: {
+            clientId: parseInt(clientId),
+            userId: req.user.id,
+            type: 'quote_generated',
+            description: hotel
+              ? `أنشأ عرض سعر ${ref} على ${hotel.name} بإجمالي ${grandTotal.toLocaleString('en-US')} ر.س`
+              : `أنشأ عرض سعر ${ref} بإجمالي ${grandTotal.toLocaleString('en-US')} ر.س`,
+          },
+        }).catch(() => null);
+      } catch (e) {
+        // Don't fail the PDF response if persist fails — log and continue.
+        console.error('[generateQuote] persist failed:', e.message);
+      }
+    }
 
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
     res.setHeader('Content-Type', 'application/pdf');

@@ -32,6 +32,7 @@ model Hotel {
   contracts  Contract[]
   bookings   Booking[]
   userHotels UserHotel[]
+  quotes     Quote[]
 }
 
 model User {
@@ -81,6 +82,7 @@ model User {
   bookingsCancelled Booking[]    @relation("BookingCancelledBy")
   bookingChangesByMe BookingChangeLog[] @relation("BookingChangedBy")
   promotionsCreated Promotion[]  @relation("PromotionCreator")
+  quotes            Quote[]
 }
 
 model Message {
@@ -150,6 +152,7 @@ model Client {
   attachments ClientAttachment[]
   bookings    Booking[]
   inboxEmails InboxEmail[]
+  quotes      Quote[]
 }
 
 model ClientAttachment {
@@ -242,6 +245,40 @@ model Activity {
 
   client Client @relation(fields: [clientId], references: [id])
   user   User   @relation(fields: [userId], references: [id])
+}
+
+// === PRICE QUOTES (saved per client so the rep can re-open / re-download) ===
+model Quote {
+  id           Int      @id @default(autoincrement())
+  reference    String   @unique  // e.g. QT-12345678
+  clientId     Int
+  hotelId      Int?
+  salesRepId   Int
+
+  // The line items + computed totals are stored as JSON strings so the PDF
+  // can be regenerated identically months later without depending on rates
+  // or hotel data that may have changed since.
+  items        String   // JSON array of {description,roomType,nights,rooms,rate,total}
+  subtotal     Float
+  munTaxRate   Float    @default(0)
+  munTax       Float    @default(0)
+  vat          Float
+  grandTotal   Float
+
+  validDays    Int      @default(30)
+  validUntil   DateTime
+  notes        String?
+  lang         String   @default("ar")  // 'ar' | 'en'
+  meals        String   @default("breakfast")  // none | breakfast | lunch | dinner | full_board
+
+  createdAt    DateTime @default(now())
+
+  client   Client @relation(fields: [clientId], references: [id])
+  hotel    Hotel? @relation(fields: [hotelId], references: [id])
+  salesRep User   @relation(fields: [salesRepId], references: [id])
+
+  @@index([clientId])
+  @@index([salesRepId])
 }
 
 // === PAYMENT / COLLECTION TRACKING ===

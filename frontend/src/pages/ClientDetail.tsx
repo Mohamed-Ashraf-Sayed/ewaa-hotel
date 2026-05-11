@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowRight, FileText, Plus, Clock, MapPin, CreditCard, Receipt, Mail, ExternalLink, BedDouble, Building2, Calendar, Pencil, XCircle, LogIn, LogOut, History } from 'lucide-react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
-import { clientsApi, visitsApi, activitiesApi, contractsApi, hotelsApi, paymentsApi, pdfApi, emailApi, attachmentsApi, bookingsApi, usersApi } from '../services/api';
+import { clientsApi, visitsApi, activitiesApi, contractsApi, hotelsApi, paymentsApi, pdfApi, emailApi, attachmentsApi, bookingsApi, usersApi, quotesApi } from '../services/api';
 import { Client, Visit, Activity, Contract, Hotel, Payment, Booking, BookingStatus } from '../types';
 import Modal from '../components/Modal';
 import BookingFormModal from '../components/BookingFormModal';
@@ -29,7 +29,8 @@ export default function ClientDetail() {
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'visits' | 'contracts' | 'bookings' | 'activities' | 'payments' | 'receipts' | 'emails' | 'attachments'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'visits' | 'contracts' | 'bookings' | 'activities' | 'payments' | 'receipts' | 'emails' | 'attachments' | 'quotes'>('overview');
+  const [quotes, setQuotes] = useState<any[]>([]);
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -148,18 +149,20 @@ export default function ClientDetail() {
   const [paymentReceipt, setPaymentReceipt] = useState<File | null>(null);
 
   const load = async () => {
-    const [clientRes, paymentsRes, emailRes, attRes, bookRes] = await Promise.all([
+    const [clientRes, paymentsRes, emailRes, attRes, bookRes, quotesRes] = await Promise.all([
       clientsApi.getOne(parseInt(id!)),
       paymentsApi.getAll({ clientId: parseInt(id!) }),
       emailApi.getLogs({ clientId: id }),
       attachmentsApi.list(parseInt(id!)).catch(() => ({ data: [] })),
       bookingsApi.getByClient(parseInt(id!)).catch(() => ({ data: [] })),
+      quotesApi.listByClient(parseInt(id!)).catch(() => ({ data: [] })),
     ]);
     setClient(clientRes.data);
     setPayments(paymentsRes.data);
     setEmailLogs(emailRes.data);
     setAttachments(attRes.data);
     setBookings(bookRes.data);
+    setQuotes(quotesRes.data);
     setLoading(false);
   };
 
@@ -347,6 +350,7 @@ export default function ClientDetail() {
     { key: 'activities', label: `${t('tab_activities')} (${clientData.activities?.length || 0})` },
     { key: 'payments', label: `${t('tab_payments')} (${payments.length})` },
     { key: 'receipts', label: `${isAr ? 'إيصالات السداد' : 'Receipts'} (${paymentsWithReceipt.length})` },
+    { key: 'quotes', label: `${isAr ? 'عروض الأسعار' : 'Quotes'} (${quotes.length})` },
     { key: 'emails', label: `${isAr ? 'الإيميلات' : 'Emails'} (${emailLogs.length})` },
     { key: 'attachments', label: `${isAr ? 'المرفقات' : 'Attachments'} (${attachments.length})` },
   ];
@@ -886,6 +890,80 @@ export default function ClientDetail() {
         </div>
       )}
 
+      {/* Quotes Tab */}
+      {activeTab === 'quotes' && (
+        <div>
+          {quotes.length === 0 ? (
+            <div className="card py-16 text-center">
+              <Receipt className="w-12 h-12 text-brand-200 mx-auto mb-3" />
+              <p className="text-brand-400 font-semibold">
+                {isAr ? 'لا توجد عروض أسعار محفوظة' : 'No saved price quotes'}
+              </p>
+              <p className="text-xs text-brand-300 mt-1">
+                {isAr ? 'كل عرض سعر بتنشئه هنا بيتحفظ تلقائياً وتقدر ترجعله بعدين' : 'Every quote you create is saved here for later'}
+              </p>
+            </div>
+          ) : (
+            <div className="card overflow-hidden">
+              <table className={`w-full text-sm ${isAr ? 'text-right' : 'text-left'}`}>
+                <thead className="bg-brand-50 text-brand-600">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">{isAr ? 'المرجع' : 'Reference'}</th>
+                    <th className="px-3 py-2 font-semibold">{isAr ? 'الفندق' : 'Hotel'}</th>
+                    <th className="px-3 py-2 font-semibold">{isAr ? 'المندوب' : 'Sales Rep'}</th>
+                    <th className="px-3 py-2 font-semibold">{isAr ? 'الإجمالي' : 'Total'}</th>
+                    <th className="px-3 py-2 font-semibold">{isAr ? 'التاريخ' : 'Date'}</th>
+                    <th className="px-3 py-2 font-semibold">{isAr ? 'صالح حتى' : 'Valid Until'}</th>
+                    <th className="px-3 py-2 font-semibold"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quotes.map((q: any) => {
+                    const expired = q.validUntil ? new Date(q.validUntil) < new Date() : false;
+                    return (
+                      <tr key={q.id} className="border-t border-brand-100 hover:bg-brand-50/40">
+                        <td className="px-3 py-2 font-mono text-brand-900">{q.reference}</td>
+                        <td className="px-3 py-2 text-brand-700">{q.hotelName || '—'}</td>
+                        <td className="px-3 py-2 text-brand-700">{q.salesRepName || '—'}</td>
+                        <td className="px-3 py-2 font-semibold text-brand-900">
+                          {Number(q.grandTotal).toLocaleString()} {t('sar')}
+                        </td>
+                        <td className="px-3 py-2 text-brand-500">
+                          {q.createdAt ? format(parseISO(q.createdAt), 'dd MMM yyyy', { locale }) : ''}
+                        </td>
+                        <td className={`px-3 py-2 ${expired ? 'text-red-500' : 'text-brand-500'}`}>
+                          {q.validUntil ? format(parseISO(q.validUntil), 'dd MMM yyyy', { locale }) : ''}
+                          {expired && <span className="ms-1 text-[10px] font-bold">({isAr ? 'منتهي' : 'expired'})</span>}
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-brand-600 hover:text-brand-800 hover:underline"
+                            onClick={async () => {
+                              try {
+                                const res = await quotesApi.downloadPdf(q.id);
+                                const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `Quote_${q.reference}.pdf`;
+                                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                              } catch {
+                                alert(isAr ? 'تعذّر تحميل الملف' : 'Failed to download');
+                              }
+                            }}>
+                            {isAr ? 'تحميل PDF' : 'Download PDF'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Emails Tab */}
       {activeTab === 'emails' && (
         <div className="space-y-3">
@@ -1218,6 +1296,9 @@ export default function ClientDetail() {
             a.download = `Quote_${client?.companyName || 'client'}.pdf`;
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             setShowQuoteModal(false);
+            // Refresh client data so the new quote appears in the Quotes tab
+            // and the new "quote_generated" activity shows in the Activities tab.
+            load();
           } catch { alert(isAr ? 'حدث خطأ' : 'Error generating quote'); }
           finally { setSaving(false); }
         }} className="space-y-4">

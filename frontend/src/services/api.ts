@@ -138,6 +138,12 @@ export const pdfApi = {
   teamReport: (params?: any) => api.get('/pdf/team-report', { params, responseType: 'blob' }),
 };
 
+// Saved price quotes (per client)
+export const quotesApi = {
+  listByClient: (clientId: number | string) => api.get(`/quotes/client/${clientId}`),
+  downloadPdf: (quoteId: number | string) => api.get(`/quotes/${quoteId}/pdf`, { responseType: 'blob' }),
+};
+
 // Notifications
 export const notificationsApi = {
   getAll: () => api.get('/notifications'),

@@ -47,6 +47,7 @@ app.use('/api/hotels', require('./routes/hotels'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/targets', require('./routes/targets'));
 app.use('/api/pdf', require('./routes/pdf'));
+app.use('/api/quotes', require('./routes/quotes'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/gamification', require('./routes/gamification'));
