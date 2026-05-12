@@ -43,6 +43,7 @@ export default function Clients() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [repFilter, setRepFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showLookup, setShowLookup] = useState(false);
@@ -172,6 +173,25 @@ export default function Clients() {
           <option value="active">{isAr ? 'نشط' : 'Active'}</option>
           <option value="inactive">{isAr ? 'غير نشط' : 'Inactive'}</option>
         </select>
+        {hasRole('general_manager', 'vice_gm', 'sales_director') && (() => {
+          // Derive the unique sales-rep list from the already-loaded clients so
+          // there's no extra API call. Sorted by name for stable ordering.
+          const repsMap = new Map<number, string>();
+          clients.forEach(c => {
+            if (c.salesRep?.id != null) repsMap.set(c.salesRep.id, c.salesRep.name || '—');
+          });
+          const reps = Array.from(repsMap.entries())
+            .map(([id, name]) => ({ id, name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+          return (
+            <select className="input w-52" value={repFilter} onChange={e => setRepFilter(e.target.value)}>
+              <option value="">{isAr ? 'كل المندوبين' : 'All sales reps'}</option>
+              {reps.map(r => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+          );
+        })()}
         <div className="relative flex-1 min-w-48">
           <Search className={`absolute ${isAr ? 'right-3' : 'left-3'} top-2.5 w-4 h-4 text-brand-400`} />
           <input className={`input ${isAr ? 'pr-9' : 'pl-9'}`}
@@ -209,9 +229,14 @@ export default function Clients() {
             <tbody className="divide-y divide-brand-50">
               {loading ? (
                 <tr><td colSpan={6} className="py-12 text-center text-brand-400">{isAr ? 'جاري التحميل...' : 'Loading...'}</td></tr>
-              ) : clients.length === 0 ? (
-                <tr><td colSpan={6} className="py-12 text-center text-brand-400">{isAr ? 'لا يوجد عملاء' : 'No clients found'}</td></tr>
-              ) : clients.map(c => {
+              ) : (() => {
+                const visible = repFilter
+                  ? clients.filter(c => String(c.salesRep?.id) === repFilter)
+                  : clients;
+                if (visible.length === 0) {
+                  return <tr><td colSpan={6} className="py-12 text-center text-brand-400">{isAr ? 'لا يوجد عملاء' : 'No clients found'}</td></tr>;
+                }
+                return visible.map(c => {
                 const linkCell = (
                   <td className="px-3 py-4">
                     <Link to={`/clients/${c.id}`} className="p-1.5 rounded-lg hover:bg-brand-100 inline-flex items-center text-brand-400 hover:text-brand-500">
@@ -258,7 +283,8 @@ export default function Clients() {
                     )}
                   </tr>
                 );
-              })}
+                });
+              })()}
             </tbody>
           </table>
         </div>
