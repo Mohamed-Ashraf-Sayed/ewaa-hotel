@@ -28,8 +28,13 @@ try {
 } catch (e) { hasQuoteFooter = false; }
 
 // Arabic font paths
-const CAIRO_REG = path.join(__dirname, '../../fonts/Cairo-Regular.ttf');
-const CAIRO_BOLD = path.join(__dirname, '../../fonts/Cairo-Bold.ttf');
+// The original Cairo TTF shipped with this repo was a 39KB subset that was
+// missing many glyphs, producing tofu boxes for punctuation/digits in
+// mixed Arabic strings. Switched to Amiri (430KB full font, complete
+// OpenType tables, designed for digital typesetting). Variables kept as
+// CAIRO_* so existing call sites don't need to change.
+const CAIRO_REG = path.join(__dirname, '../../fonts/Amiri-Regular.ttf');
+const CAIRO_BOLD = path.join(__dirname, '../../fonts/Amiri-Bold.ttf');
 
 const NAVY = '#1a2f44';
 const DARK = '#243b53';
