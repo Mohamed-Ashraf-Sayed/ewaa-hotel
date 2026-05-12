@@ -270,6 +270,7 @@ model Quote {
   notes        String?
   lang         String   @default("ar")  // 'ar' | 'en'
   meals        String   @default("breakfast")  // none | breakfast | lunch | dinner | full_board
+  preparedByTitle String?  // job title the rep typed for this quote (free-text, not derived from role)
 
   createdAt    DateTime @default(now())
 

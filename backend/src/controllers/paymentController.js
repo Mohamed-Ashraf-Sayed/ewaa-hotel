@@ -9,15 +9,6 @@ const CREDIT_APPROVE_ROLES = ['credit_manager'];          // can approve / rejec
 const buildPaymentFilter = async (user) => {
   if (ADMIN_ROLES.includes(user.role) || user.role === 'contract_officer'
       || user.role === 'credit_manager' || user.role === 'credit_officer') return {};
-  if (user.role === 'assistant_sales' && user.managerId) {
-    const teamIds = await getSubordinateIds(user.managerId);
-    return {
-      OR: [
-        { collectedBy: { in: [user.managerId, ...teamIds] } },
-        { contract: { salesRepId: { in: [user.managerId, ...teamIds] } } },
-      ],
-    };
-  }
   if (user.role === 'sales_director') {
     const subIds = await getSubordinateIds(user.id);
     return {
@@ -27,6 +18,7 @@ const buildPaymentFilter = async (user) => {
       ],
     };
   }
+  // assistant_sales is treated like a regular sales_rep — own payments only.
   return {
     OR: [
       { collectedBy: user.id },

@@ -11,14 +11,11 @@ const RESERVATIONS_ROLES = ['reservations', 'admin', 'general_manager', 'vice_gm
 // Filter bookings by user role
 const buildBookingFilter = async (user) => {
   if (ADMIN_ROLES.includes(user.role) || user.role === 'reservations' || user.role === 'contract_officer') return {};
-  if (user.role === 'assistant_sales' && user.managerId) {
-    const teamIds = await getSubordinateIds(user.managerId);
-    return { assignedRepId: { in: [user.managerId, ...teamIds] } };
-  }
   if (user.role === 'sales_director') {
     const subIds = await getSubordinateIds(user.id);
     return { assignedRepId: { in: [user.id, ...subIds] } };
   }
+  // assistant_sales is treated like a regular sales_rep — own bookings only.
   return { assignedRepId: user.id };
 };
 

@@ -10,13 +10,11 @@ const getVisits = async (req, res) => {
     const { clientId, upcoming, salesRepId } = req.query;
     let salesRepFilter = {};
     if (!ADMIN_ROLES.includes(req.user.role)) {
-      if (req.user.role === 'assistant_sales' && req.user.managerId) {
-        const teamIds = await getSubordinateIds(req.user.managerId);
-        salesRepFilter = { salesRepId: { in: [req.user.managerId, ...teamIds] } };
-      } else if (req.user.role === 'sales_director') {
+      if (req.user.role === 'sales_director') {
         const subIds = await getSubordinateIds(req.user.id);
         salesRepFilter = { salesRepId: { in: [req.user.id, ...subIds] } };
       } else {
+        // assistant_sales is treated like a regular sales_rep here.
         salesRepFilter = { salesRepId: req.user.id };
       }
     }
@@ -103,11 +101,9 @@ const getUpcomingFollowUps = async (req, res) => {
     const days = parseInt(req.query.days) || 7;
     const future = new Date();
     future.setDate(future.getDate() + days);
+    // assistant_sales is treated like a regular sales_rep — own visits only.
     let salesRepFilter = { salesRepId: req.user.id };
-    if (req.user.role === 'assistant_sales' && req.user.managerId) {
-      const teamIds = await getSubordinateIds(req.user.managerId);
-      salesRepFilter = { salesRepId: { in: [req.user.managerId, ...teamIds] } };
-    } else if (req.user.role === 'sales_director') {
+    if (req.user.role === 'sales_director') {
       const subIds = await getSubordinateIds(req.user.id);
       salesRepFilter = { salesRepId: { in: [req.user.id, ...subIds] } };
     } else if (ADMIN_ROLES.includes(req.user.role)) {

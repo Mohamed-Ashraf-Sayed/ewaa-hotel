@@ -9,15 +9,12 @@ const buildAccessFilter = async (user) => {
   if (ADMIN_ROLES.includes(user.role)) return {};
   // Credit team, contract_officer, and reservations need cross-rep visibility
   if (['credit_manager', 'credit_officer', 'contract_officer', 'reservations'].includes(user.role)) return {};
-  // Assistant sales sees same team as their director (sibling reps + director)
-  if (user.role === 'assistant_sales' && user.managerId) {
-    const teamIds = await getSubordinateIds(user.managerId);
-    return { salesRepId: { in: [user.managerId, ...teamIds] } };
-  }
   if (MANAGER_ROLES.includes(user.role)) {
     const subIds = await getSubordinateIds(user.id);
     return { salesRepId: { in: [user.id, ...subIds] } };
   }
+  // assistant_sales is intentionally treated like a regular sales_rep here —
+  // they only see clients assigned to them personally.
   return { salesRepId: user.id };
 };
 
@@ -217,22 +214,6 @@ const updateClient = async (req, res) => {
     const { id } = req.params;
     const clientId = parseInt(id);
 
-    // Assistant sales: read-only on team-mates' clients. They can SEE the
-    // whole team's clients (handled in buildAccessFilter) but can only EDIT
-    // clients that are assigned to them personally.
-    if (req.user.role === 'assistant_sales') {
-      const owner = await prisma.client.findUnique({
-        where: { id: clientId },
-        select: { salesRepId: true },
-      });
-      if (!owner) return res.status(404).json({ message: 'Client not found' });
-      if (owner.salesRepId !== req.user.id) {
-        return res.status(403).json({
-          message: 'لا يمكنك تعديل هذا العميل — يمكنك تعديل عملاءك الشخصيين فقط.',
-        });
-      }
-    }
-
     const data = req.body;
     if (data.hotelId) data.hotelId = parseInt(data.hotelId);
     if (data.estimatedRooms) data.estimatedRooms = parseInt(data.estimatedRooms);
@@ -371,19 +352,6 @@ const deleteClient = async (req, res) => {
   try {
     const { id } = req.params;
     const clientId = parseInt(id);
-    // Same guard as updateClient — assistants can't archive team-mates' clients.
-    if (req.user.role === 'assistant_sales') {
-      const owner = await prisma.client.findUnique({
-        where: { id: clientId },
-        select: { salesRepId: true },
-      });
-      if (!owner) return res.status(404).json({ message: 'Client not found' });
-      if (owner.salesRepId !== req.user.id) {
-        return res.status(403).json({
-          message: 'لا يمكنك حذف هذا العميل — يمكنك حذف عملاءك الشخصيين فقط.',
-        });
-      }
-    }
     await prisma.client.update({ where: { id: clientId }, data: { isActive: false } });
     res.json({ message: 'Client archived successfully' });
   } catch (err) {

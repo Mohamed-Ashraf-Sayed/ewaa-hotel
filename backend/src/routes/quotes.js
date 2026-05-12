@@ -76,6 +76,7 @@ router.get('/:id/pdf', authenticate, async (req, res) => {
       municipalityTaxPercent: quote.munTaxRate,
       lang: quote.lang,
       meals: quote.meals,
+      preparedByTitle: quote.preparedByTitle,
       companyName: quote.client?.companyName,
       contactPerson: quote.client?.contactPerson,
     };

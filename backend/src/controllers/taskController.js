@@ -18,19 +18,14 @@ const getTasks = async (req, res) => {
     if (assigneeId) where.assigneeId = parseInt(assigneeId);
 
     if (!ADMIN_ROLES.includes(req.user.role)) {
-      if (req.user.role === 'assistant_sales' && req.user.managerId) {
-        const teamIds = await getSubordinateIds(req.user.managerId);
-        where.OR = [
-          { assigneeId: { in: [req.user.managerId, ...teamIds] } },
-          { createdById: req.user.id },
-        ];
-      } else if (req.user.role === 'sales_director') {
+      if (req.user.role === 'sales_director') {
         const subIds = await getSubordinateIds(req.user.id);
         where.OR = [
           { assigneeId: { in: [req.user.id, ...subIds] } },
           { createdById: req.user.id },
         ];
       } else {
+        // assistant_sales is treated like a regular sales_rep here.
         where.assigneeId = req.user.id;
       }
     }

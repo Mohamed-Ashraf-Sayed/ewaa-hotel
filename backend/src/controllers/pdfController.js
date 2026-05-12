@@ -308,8 +308,9 @@ const QUOTE_T = {
 const generateQuote = async (req, res) => {
   try {
     const { clientId, hotelId, items, validDays, notes, companyName, contactPerson,
-      municipalityTaxPercent, lang, meals: mealsRaw } = req.body;
+      municipalityTaxPercent, lang, meals: mealsRaw, preparedByTitle: titleRaw } = req.body;
     const meals = ['none','breakfast','lunch','dinner','full_board'].includes(mealsRaw) ? mealsRaw : 'breakfast';
+    const preparedByTitle = (titleRaw || '').toString().trim().slice(0, 80) || null;
     // Pick language: 'ar' uses Cairo font + RTL alignment; everything else stays English.
     const isAr = lang === 'ar';
     const t = isAr ? QUOTE_T.ar : QUOTE_T.en;
@@ -361,6 +362,7 @@ const generateQuote = async (req, res) => {
             notes: notes || null,
             lang: isAr ? 'ar' : 'en',
             meals,
+            preparedByTitle,
           },
         });
         await prisma.activity.create({
@@ -455,7 +457,11 @@ const generateQuote = async (req, res) => {
     infoStyle(t.contact, contactPerson || client?.contactPerson || '-', 300, y); y += 13;
     infoStyle(t.validUntil, formatDate(validUntil), 40, y);
     infoStyle(t.phone, client?.phone || '-', 300, y); y += 13;
-    const preparedBy = extractEnglishName(req.user.name, req.user.email);
+    const preparedByName = extractEnglishName(req.user.name, req.user.email);
+    // The rep types their own job title per quote — never inferred from
+    // user.role or any stored title, so each quote can carry whatever
+    // designation the rep wants to present.
+    const preparedBy = preparedByTitle ? `${preparedByName} — ${preparedByTitle}` : preparedByName;
     infoStyle(t.preparedBy, preparedBy, 40, y);
     infoStyle(t.email, client?.email || '-', 300, y);
     y += 25;
@@ -653,13 +659,11 @@ const generateClientReport = async (req, res) => {
 
     const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
     if (!ADMIN_ROLES.includes(req.user.role) && req.user.role !== 'contract_officer') {
-      if (req.user.role === 'assistant_sales' && req.user.managerId) {
-        const subs = await prisma.user.findMany({ where: { managerId: req.user.managerId }, select: { id: true } });
-        where.salesRepId = { in: [req.user.managerId, ...subs.map(s => s.id)] };
-      } else if (req.user.role === 'sales_director') {
+      if (req.user.role === 'sales_director') {
         const subs = await prisma.user.findMany({ where: { managerId: req.user.id }, select: { id: true } });
         where.salesRepId = { in: [req.user.id, ...subs.map(s => s.id)] };
       } else {
+        // assistant_sales is treated like a regular sales_rep here.
         where.salesRepId = req.user.id;
       }
     }
@@ -750,15 +754,11 @@ const generateClientReport = async (req, res) => {
 
 // Apply role-based scope filter to a Prisma `where` clause for entities that
 // have a `salesRepId` field. Admins / contract officers see everything;
-// directors see their team; assistants see their director's team; reps see
-// only their own.
+// directors see their team; reps (including assistant_sales) see only own.
 const applyAccessScope = async (user, where) => {
   const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
   if (ADMIN_ROLES.includes(user.role) || user.role === 'contract_officer') return;
-  if (user.role === 'assistant_sales' && user.managerId) {
-    const subs = await prisma.user.findMany({ where: { managerId: user.managerId }, select: { id: true } });
-    where.salesRepId = { in: [user.managerId, ...subs.map(s => s.id)] };
-  } else if (user.role === 'sales_director') {
+  if (user.role === 'sales_director') {
     const subs = await prisma.user.findMany({ where: { managerId: user.id }, select: { id: true } });
     where.salesRepId = { in: [user.id, ...subs.map(s => s.id)] };
   } else {
@@ -948,11 +948,8 @@ const generatePaymentsReport = async (req, res) => {
         const subs = await prisma.user.findMany({ where: { managerId: req.user.id }, select: { id: true } });
         const ids = [req.user.id, ...subs.map(s => s.id)];
         where.OR = [{ collectedBy: { in: ids } }, { contract: { salesRepId: { in: ids } } }];
-      } else if (req.user.role === 'assistant_sales' && req.user.managerId) {
-        const subs = await prisma.user.findMany({ where: { managerId: req.user.managerId }, select: { id: true } });
-        const ids = [req.user.managerId, ...subs.map(s => s.id)];
-        where.OR = [{ collectedBy: { in: ids } }, { contract: { salesRepId: { in: ids } } }];
       } else {
+        // assistant_sales is treated like a regular sales_rep here.
         where.OR = [{ collectedBy: req.user.id }, { contract: { salesRepId: req.user.id } }];
       }
     }
@@ -1033,11 +1030,8 @@ const generatePaymentMethodsReport = async (req, res) => {
         const subs = await prisma.user.findMany({ where: { managerId: req.user.id }, select: { id: true } });
         const ids = [req.user.id, ...subs.map(s => s.id)];
         where.OR = [{ collectedBy: { in: ids } }, { contract: { salesRepId: { in: ids } } }];
-      } else if (req.user.role === 'assistant_sales' && req.user.managerId) {
-        const subs = await prisma.user.findMany({ where: { managerId: req.user.managerId }, select: { id: true } });
-        const ids = [req.user.managerId, ...subs.map(s => s.id)];
-        where.OR = [{ collectedBy: { in: ids } }, { contract: { salesRepId: { in: ids } } }];
       } else {
+        // assistant_sales is treated like a regular sales_rep here.
         where.OR = [{ collectedBy: req.user.id }, { contract: { salesRepId: req.user.id } }];
       }
     }

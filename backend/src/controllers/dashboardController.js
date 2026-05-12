@@ -17,12 +17,6 @@ const getDashboard = async (req, res) => {
       contractFilter = {};
       visitFilter = {};
       teamIds = (await prisma.user.findMany({ select: { id: true } })).map(u => u.id);
-    } else if (role === 'assistant_sales' && req.user.managerId) {
-      const subs = await getSubordinateIds(req.user.managerId);
-      teamIds = [req.user.managerId, ...subs];
-      clientFilter = { salesRepId: { in: teamIds } };
-      contractFilter = { salesRepId: { in: teamIds } };
-      visitFilter = { salesRepId: { in: teamIds } };
     } else if (role === 'sales_director') {
       const subIds = await getSubordinateIds(userId);
       teamIds = [userId, ...subIds];
@@ -34,6 +28,7 @@ const getDashboard = async (req, res) => {
       contractFilter = {};
       visitFilter = {};
     } else {
+      // assistant_sales falls into this branch too — own data only.
       clientFilter = { salesRepId: userId };
       contractFilter = { salesRepId: userId };
       visitFilter = { salesRepId: userId };

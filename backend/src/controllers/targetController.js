@@ -23,13 +23,11 @@ const getTargets = async (req, res) => {
 
     // Role-based filtering
     if (!ADMIN_ROLES.includes(req.user.role)) {
-      if (req.user.role === 'assistant_sales' && req.user.managerId) {
-        const teamIds = await getSubordinateIds(req.user.managerId);
-        where.userId = { in: [req.user.managerId, ...teamIds] };
-      } else if (req.user.role === 'sales_director') {
+      if (req.user.role === 'sales_director') {
         const subIds = await getSubordinateIds(req.user.id);
         where.userId = { in: [req.user.id, ...subIds] };
       } else {
+        // assistant_sales is treated like a regular sales_rep here.
         where.userId = req.user.id;
       }
     }
@@ -134,13 +132,11 @@ const getTargetReport = async (req, res) => {
 
     // Role-based filtering
     if (!ADMIN_ROLES.includes(req.user.role)) {
-      if (req.user.role === 'assistant_sales' && req.user.managerId) {
-        const teamIds = await getSubordinateIds(req.user.managerId);
-        where.userId = { in: [req.user.managerId, ...teamIds] };
-      } else if (req.user.role === 'sales_director') {
+      if (req.user.role === 'sales_director') {
         const subIds = await getSubordinateIds(req.user.id);
         where.userId = { in: [req.user.id, ...subIds] };
       } else {
+        // assistant_sales is treated like a regular sales_rep here.
         where.userId = req.user.id;
       }
     }
