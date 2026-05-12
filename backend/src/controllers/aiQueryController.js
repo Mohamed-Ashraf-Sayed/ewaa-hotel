@@ -291,7 +291,15 @@ const tools = {
     const [contractsActual, visitsActual, revenueAgg, clientsActual] = await Promise.all([
       prisma.contract.count({ where: { salesRepId: user.id, createdAt: { gte: start, lte: end }, status: 'approved' } }),
       prisma.visit.count({ where: { salesRepId: user.id, visitDate: { gte: start, lte: end } } }),
-      prisma.contract.aggregate({ where: { salesRepId: user.id, createdAt: { gte: start, lte: end }, status: 'approved' }, _sum: { totalValue: true } }),
+      // Revenue now sourced from Opera bookings — matches target/leaderboard.
+      prisma.booking.aggregate({
+        where: {
+          assignedRepId: user.id,
+          status: { in: ['confirmed', 'checked_in', 'checked_out'] },
+          createdAt: { gte: start, lte: end },
+        },
+        _sum: { totalAmount: true },
+      }),
       prisma.client.count({ where: { salesRepId: user.id, createdAt: { gte: start, lte: end } } }),
     ]);
     return {
@@ -300,7 +308,7 @@ const tools = {
         period: t.period, year: t.year, month: t.month, quarter: t.quarter,
         targetContracts: t.targetContracts, actualContracts: contractsActual,
         targetVisits: t.targetVisits, actualVisits: visitsActual,
-        targetRevenue: t.targetRevenue, actualRevenue: revenueAgg._sum.totalValue || 0,
+        targetRevenue: t.targetRevenue, actualRevenue: revenueAgg._sum.totalAmount || 0,
         targetClients: t.targetClients, actualClients: clientsActual,
         setBy: t.setBy?.name,
       },

@@ -178,14 +178,20 @@ const getTargetReport = async (req, res) => {
         prisma.client.count({
           where: { salesRepId: t.userId, createdAt: { gte: startDate, lte: endDate } },
         }),
-        // Revenue from contracts created in period
-        prisma.contract.aggregate({
-          where: { salesRepId: t.userId, status: 'approved', createdAt: { gte: startDate, lte: endDate } },
-          _sum: { totalValue: true },
+        // Revenue from Opera-sourced bookings assigned to this rep in the period.
+        // (Contract.totalValue was the old source but became null when the
+        // upload form dropped rooms/rate fields, so it now under-counts.)
+        prisma.booking.aggregate({
+          where: {
+            assignedRepId: t.userId,
+            status: { in: ['confirmed', 'checked_in', 'checked_out'] },
+            createdAt: { gte: startDate, lte: endDate },
+          },
+          _sum: { totalAmount: true },
         }),
       ]);
 
-      const actualRevenue = revenue._sum.totalValue || 0;
+      const actualRevenue = revenue._sum.totalAmount || 0;
 
       return {
         ...t,

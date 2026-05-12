@@ -22,9 +22,15 @@ const getLeaderboard = async (req, res) => {
         prisma.contract.count({ where: { salesRepId: u.id, createdAt: { gte: startDate, lte: endDate } } }),
         prisma.visit.count({ where: { salesRepId: u.id, visitDate: { gte: startDate, lte: endDate } } }),
         prisma.client.count({ where: { salesRepId: u.id, createdAt: { gte: startDate, lte: endDate } } }),
-        prisma.contract.aggregate({
-          where: { salesRepId: u.id, status: 'approved', createdAt: { gte: startDate, lte: endDate } },
-          _sum: { totalValue: true },
+        // Revenue from Opera-sourced bookings (matches targetController so
+        // the leaderboard and the target report always agree).
+        prisma.booking.aggregate({
+          where: {
+            assignedRepId: u.id,
+            status: { in: ['confirmed', 'checked_in', 'checked_out'] },
+            createdAt: { gte: startDate, lte: endDate },
+          },
+          _sum: { totalAmount: true },
         }),
         prisma.performanceScore.findFirst({
           where: { userId: u.id, month: targetMonth, year: targetYear },
@@ -32,11 +38,11 @@ const getLeaderboard = async (req, res) => {
       ]);
 
       // Points calculation
-      const points = (contracts * 50) + (visits * 10) + (clients * 30) + Math.round((revenue._sum.totalValue || 0) / 10000);
+      const points = (contracts * 50) + (visits * 10) + (clients * 30) + Math.round((revenue._sum.totalAmount || 0) / 10000);
 
       return {
         ...u,
-        stats: { contracts, visits, clients, revenue: revenue._sum.totalValue || 0 },
+        stats: { contracts, visits, clients, revenue: revenue._sum.totalAmount || 0 },
         points,
         rating: perfScore?.rating || null,
         ratingNotes: perfScore?.notes || null,
