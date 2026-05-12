@@ -651,7 +651,7 @@ const generateQuote = async (req, res) => {
       doc.moveTo(valueX, y + 10).lineTo(lineEndX, y + 10).strokeColor(LIGHT).lineWidth(0.5).stroke();
     };
 
-    filledField(t.name, preparedBy, 40, 80, 280);
+    filledField(t.name, preparedByName, 40, 80, 280);
     drawLabel(`${t.signature}:`, 310, y);
     doc.moveTo(370, y + 10).lineTo(555, y + 10).strokeColor(LIGHT).lineWidth(0.5).stroke();
     y += 25;
