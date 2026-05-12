@@ -210,6 +210,7 @@ export default function Clients() {
                     <th className="px-4 py-3.5"></th>
                     <th className="px-4 py-3.5 text-center font-medium text-brand-400">النشاط</th>
                     <th className="px-4 py-3.5 text-center font-medium text-brand-400">النوع</th>
+                    <th className="px-4 py-3.5 text-right font-medium text-brand-400">المندوب</th>
                     <th className="px-4 py-3.5 text-right font-medium text-brand-400">الفندق</th>
                     <th className="px-4 py-3.5 text-right font-medium text-brand-400">جهة الاتصال</th>
                     <th className="px-4 py-3.5 text-right font-medium text-brand-400">الشركة</th>
@@ -219,6 +220,7 @@ export default function Clients() {
                     <th className="px-4 py-3.5 text-left font-medium text-brand-400">Company</th>
                     <th className="px-4 py-3.5 text-left font-medium text-brand-400">Contact</th>
                     <th className="px-4 py-3.5 text-left font-medium text-brand-400">Hotel</th>
+                    <th className="px-4 py-3.5 text-left font-medium text-brand-400">Sales Rep</th>
                     <th className="px-4 py-3.5 text-center font-medium text-brand-400">Type</th>
                     <th className="px-4 py-3.5 text-center font-medium text-brand-400">Activity</th>
                     <th className="px-4 py-3.5"></th>
@@ -228,13 +230,13 @@ export default function Clients() {
             </thead>
             <tbody className="divide-y divide-brand-50">
               {loading ? (
-                <tr><td colSpan={6} className="py-12 text-center text-brand-400">{isAr ? 'جاري التحميل...' : 'Loading...'}</td></tr>
+                <tr><td colSpan={7} className="py-12 text-center text-brand-400">{isAr ? 'جاري التحميل...' : 'Loading...'}</td></tr>
               ) : (() => {
                 const visible = repFilter
                   ? clients.filter(c => String(c.salesRep?.id) === repFilter)
                   : clients;
                 if (visible.length === 0) {
-                  return <tr><td colSpan={6} className="py-12 text-center text-brand-400">{isAr ? 'لا يوجد عملاء' : 'No clients found'}</td></tr>;
+                  return <tr><td colSpan={7} className="py-12 text-center text-brand-400">{isAr ? 'لا يوجد عملاء' : 'No clients found'}</td></tr>;
                 }
                 return visible.map(c => {
                 const linkCell = (
@@ -258,6 +260,13 @@ export default function Clients() {
                 const hotelCell = (
                   <td className={`px-4 py-4 text-brand-500 ${isAr ? 'text-right' : 'text-left'}`}>{c.hotel?.name || <span className="text-brand-300">—</span>}</td>
                 );
+                const repCell = (
+                  <td className={`px-4 py-4 ${isAr ? 'text-right' : 'text-left'}`}>
+                    {c.salesRep?.name
+                      ? <span className="text-brand-700">{c.salesRep.name}</span>
+                      : <span className="text-brand-300">—</span>}
+                  </td>
+                );
                 const contactCell = (
                   <td className={`px-4 py-4 ${isAr ? 'text-right' : 'text-left'}`}>
                     <div className={`flex items-center gap-1 text-brand-700 ${isAr ? 'justify-end' : 'justify-start'}`}>
@@ -277,9 +286,9 @@ export default function Clients() {
                 return (
                   <tr key={c.id} className="hover:bg-brand-50/50 transition-colors">
                     {isAr ? (
-                      <>{linkCell}{activityCell}{typeCell}{hotelCell}{contactCell}{companyCell}</>
+                      <>{linkCell}{activityCell}{typeCell}{repCell}{hotelCell}{contactCell}{companyCell}</>
                     ) : (
-                      <>{companyCell}{contactCell}{hotelCell}{typeCell}{activityCell}{linkCell}</>
+                      <>{companyCell}{contactCell}{hotelCell}{repCell}{typeCell}{activityCell}{linkCell}</>
                     )}
                   </tr>
                 );
