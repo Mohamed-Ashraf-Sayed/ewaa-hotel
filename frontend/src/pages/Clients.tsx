@@ -216,7 +216,7 @@ export default function Clients() {
                     <th className="px-4 py-3.5 text-center font-medium text-brand-400">النشاط</th>
                     <th className="px-4 py-3.5 text-center font-medium text-brand-400">النوع</th>
                     <th className="px-4 py-3.5 text-right font-medium text-brand-400">المندوب</th>
-                    <th className="px-4 py-3.5 text-right font-medium text-brand-400">الفندق</th>
+                    <th className="px-4 py-3.5 text-right font-medium text-brand-400">البراند</th>
                     <th className="px-4 py-3.5 text-right font-medium text-brand-400">جهة الاتصال</th>
                     <th className="px-4 py-3.5 text-right font-medium text-brand-400">الشركة</th>
                   </>
@@ -224,7 +224,7 @@ export default function Clients() {
                   <>
                     <th className="px-4 py-3.5 text-left font-medium text-brand-400">Company</th>
                     <th className="px-4 py-3.5 text-left font-medium text-brand-400">Contact</th>
-                    <th className="px-4 py-3.5 text-left font-medium text-brand-400">Hotel</th>
+                    <th className="px-4 py-3.5 text-left font-medium text-brand-400">Brand</th>
                     <th className="px-4 py-3.5 text-left font-medium text-brand-400">Sales Rep</th>
                     <th className="px-4 py-3.5 text-center font-medium text-brand-400">Type</th>
                     <th className="px-4 py-3.5 text-center font-medium text-brand-400">Activity</th>
@@ -262,8 +262,28 @@ export default function Clients() {
                     <span className={badgeClass(c.clientType)}>{CLIENT_TYPE_LABEL[c.clientType] || c.clientType}</span>
                   </td>
                 );
+                const brandLabels = (c.brands || '')
+                  .split(',')
+                  .map(b => b.trim())
+                  .filter(Boolean)
+                  .map(v => {
+                    const m = BRAND_OPTS.find(b => b.value === v);
+                    return m ? (isAr ? m.label_ar : m.label_en) : v;
+                  });
                 const hotelCell = (
-                  <td className={`px-4 py-4 text-brand-500 ${isAr ? 'text-right' : 'text-left'}`}>{c.hotel?.name || <span className="text-brand-300">—</span>}</td>
+                  <td className={`px-4 py-4 ${isAr ? 'text-right' : 'text-left'}`}>
+                    {brandLabels.length === 0 ? (
+                      <span className="text-brand-300">—</span>
+                    ) : (
+                      <div className={`flex flex-wrap gap-1 ${isAr ? 'justify-end' : ''}`}>
+                        {brandLabels.map((label, i) => (
+                          <span key={i} className="px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[11px] font-medium border border-brand-100">
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                 );
                 const repCell = (
                   <td className={`px-4 py-4 ${isAr ? 'text-right' : 'text-left'}`}>
