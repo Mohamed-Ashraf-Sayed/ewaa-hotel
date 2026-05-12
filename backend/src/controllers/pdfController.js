@@ -413,12 +413,8 @@ const generateQuote = async (req, res) => {
     }
 
     const hotelName = hotel?.nameEn || hotel?.name || 'Ewaa Hotels';
-    const loc = [hotel?.location, hotel?.city].filter(Boolean).join(', ');
-
-    if (loc) {
-      setFont(doc, false, loc);
-      doc.fontSize(9).fillColor(MID).text(loc, 40, lineY - 38, arabicTextOpts(loc));
-    }
+    // Location line (city, country) intentionally NOT rendered — user only
+    // wants the hotel name shown at the top of the quote header.
     setFont(doc, true, hotelName);
     doc.fontSize(16).fillColor(NAVY).text(hotelName, 40, lineY - 22, arabicTextOpts(hotelName));
 
@@ -496,25 +492,42 @@ const generateQuote = async (req, res) => {
       });
 
       y += 10;
-      // Totals
+      // Totals — render in TWO halves so each font stays in its native script.
+      // Cairo + a string like "100,000 ر.س" was producing tofu boxes for the
+      // digits because fontkit's Arabic context wrecks them. Doing the digits
+      // in Helvetica and the SAR suffix in Cairo dodges the issue entirely.
       const tx = 330;
-      const drawTotal = (label, value, bold = false) => {
+      const drawTotal = (label, amount, bold = false) => {
+        const num = formatNum(amount);
+        const fs = bold ? 11 : 9;
+        const color = bold ? NAVY : MID;
+        const valueColor = bold ? NAVY : DARK;
+        // Label (left side of the totals block)
         setFont(doc, bold, label);
-        doc.fontSize(bold ? 11 : 9).fillColor(bold ? NAVY : MID)
+        doc.fontSize(fs).fillColor(color)
            .text(label, tx, y, { width: 130, lineBreak: false, ...arabicTextOpts(label) });
-        setFont(doc, bold, value);
-        // value is typically "100,000 ر.س" — mixed digits + Arabic, so we
-        // skip ARABIC_FEATURES to avoid digits being replaced with tofu.
-        doc.fillColor(bold ? NAVY : DARK)
-           .text(value, tx + 130, y, { align: 'right', width: 95, lineBreak: false, ...arabicTextOpts(value) });
+        // Compute widths for right-aligned digit + SAR layout.
+        // SAR rendered first (right-most), then digit number to its left.
+        const sarText = ` ${t.sar}`;
+        doc.font(bold ? CAIRO_BOLD : CAIRO_REG).fontSize(fs);
+        const sarW = doc.widthOfString(sarText);
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(fs);
+        const numW = doc.widthOfString(num);
+        const blockW = numW + sarW;
+        const rightEdge = tx + 130 + 95;       // right edge of the totals column
+        const numX = rightEdge - blockW;       // digits start here
+        const sarX = numX + numW;              // SAR starts right after digits
+        doc.fillColor(valueColor).text(num, numX, y, { lineBreak: false });
+        doc.font(bold ? CAIRO_BOLD : CAIRO_REG).fillColor(valueColor)
+           .text(sarText, sarX, y, { lineBreak: false, ...arabicTextOpts(sarText) });
       };
-      drawTotal(`${t.subtotal}:`, `${formatNum(subtotal)} ${t.sar}`); y += 15;
+      drawTotal(`${t.subtotal}:`, subtotal); y += 15;
       if (munTaxRate > 0) {
-        drawTotal(`${t.municipalityTax} (${munTaxRate}%):`, `${formatNum(munTax)} ${t.sar}`); y += 15;
+        drawTotal(`${t.municipalityTax} (${munTaxRate}%):`, munTax); y += 15;
       }
-      drawTotal(`${t.vat}:`, `${formatNum(vat)} ${t.sar}`); y += 15;
+      drawTotal(`${t.vat}:`, vat); y += 15;
       doc.moveTo(tx, y - 2).lineTo(555, y - 2).strokeColor(NAVY).lineWidth(1).stroke(); y += 5;
-      drawTotal(`${t.grandTotal}:`, `${formatNum(grandTotal)} ${t.sar}`, true);
+      drawTotal(`${t.grandTotal}:`, grandTotal, true);
       y += 30;
     }
 
