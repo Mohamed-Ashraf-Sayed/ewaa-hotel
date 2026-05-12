@@ -173,13 +173,18 @@ export default function Clients() {
           <option value="active">{isAr ? 'نشط' : 'Active'}</option>
           <option value="inactive">{isAr ? 'غير نشط' : 'Inactive'}</option>
         </select>
-        {hasRole('general_manager', 'vice_gm', 'sales_director') && (() => {
-          // Derive the unique sales-rep list from the already-loaded clients so
-          // there's no extra API call. Sorted by name for stable ordering.
+        {(() => {
+          // Derive the unique sales-rep list from the already-loaded clients
+          // and only render the dropdown when the current user actually sees
+          // clients owned by more than one rep — that auto-covers every role
+          // (admin, GM, vice GM, sales_director, credit/contract/reservations)
+          // without us having to enumerate them, and stays hidden for plain
+          // sales_rep / assistant_sales who only ever see their own.
           const repsMap = new Map<number, string>();
           clients.forEach(c => {
             if (c.salesRep?.id != null) repsMap.set(c.salesRep.id, c.salesRep.name || '—');
           });
+          if (repsMap.size <= 1) return null;
           const reps = Array.from(repsMap.entries())
             .map(([id, name]) => ({ id, name }))
             .sort((a, b) => a.name.localeCompare(b.name));
