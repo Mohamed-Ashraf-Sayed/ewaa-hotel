@@ -91,10 +91,13 @@ const setFont = (doc, bold, text) => {
 // them the glyphs render isolated and read as gibberish in PDF viewers.
 const drawText = (doc, text, x, y, options = {}) => {
   const raw = String(text ?? '');
-  // Arabic content is pre-shaped into visual order (presentation forms with
-  // run order reversed) so pdfkit's LTR engine emits the glyphs exactly as
-  // an RTL reader expects. No OpenType feature flags needed.
-  doc.text(shapeForVisual(raw), x, y, options);
+  // Apply Arabic OpenType features so fontkit handles shaping + BiDi for
+  // any string that contains Arabic. Mixing in non-Arabic chars is fine —
+  // they get rendered as-is alongside the shaped Arabic runs.
+  const opts = isArabic(raw)
+    ? { ...options, features: [...(options.features || []), ...ARABIC_FEATURES] }
+    : options;
+  doc.text(raw, x, y, opts);
 };
 
 // Draw a table row. Table is drawn LEFT-TO-RIGHT in the `cols` array — for RTL
