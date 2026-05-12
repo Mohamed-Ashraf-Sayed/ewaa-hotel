@@ -467,11 +467,11 @@ const generateQuote = async (req, res) => {
     infoStyle(t.validUntil, formatDate(validUntil), 40, y);
     infoStyle(t.phone, client?.phone || '-', 300, y); y += 13;
     const preparedByName = extractEnglishName(req.user.name, req.user.email);
-    // The rep types their own job title per quote — never inferred from
-    // user.role or any stored title, so each quote can carry whatever
-    // designation the rep wants to present.
-    const preparedBy = preparedByTitle ? `${preparedByName} — ${preparedByTitle}` : preparedByName;
-    infoStyle(t.preparedBy, preparedBy, 40, y);
+    // Top "Prepared By" line shows ONLY the rep's name. The title goes into
+    // its own field in the signature block below. Concatenating them here
+    // produced mixed Latin+Arabic strings that pdfkit's BiDi handling
+    // mangled (letters appeared reversed character-by-character).
+    infoStyle(t.preparedBy, preparedByName, 40, y);
     infoStyle(t.email, client?.email || '-', 300, y);
     y += 25;
 
@@ -628,7 +628,10 @@ const generateQuote = async (req, res) => {
     setFont(doc, true, t.confirmOn);
     doc.fontSize(9).fillColor(NAVY).text(t.confirmOn, 40, y, { width: 515, align, features: ARABIC_FEATURES }); y += 28;
 
-    const repTitle = roleTitle(req.user.role);
+    // Title in the signature block is whatever the rep typed in the quote
+    // form (preparedByTitle). NOT derived from req.user.role any more — the
+    // rep wanted full control over how they present themselves on each quote.
+    const repTitle = preparedByTitle || '';
     const repDate = formatDate(today);
 
     // All labels/values in this block may be Arabic (الاسم, التوقيع, المسمى
