@@ -2,7 +2,7 @@ const { PrismaClient } = require('@prisma/client');
 const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs');
-const { shapeArabic, isArabic, isPureArabic, ARABIC_FEATURES, arabicTextOpts } = require('../utils/arabicPdf');
+const { shapeArabic, shapeForVisual, isArabic, isPureArabic, ARABIC_FEATURES, arabicTextOpts } = require('../utils/arabicPdf');
 const prisma = new PrismaClient();
 
 const logoPath = path.join(__dirname, '../../../frontend/public/logo.png');
@@ -91,13 +91,10 @@ const setFont = (doc, bold, text) => {
 // them the glyphs render isolated and read as gibberish in PDF viewers.
 const drawText = (doc, text, x, y, options = {}) => {
   const raw = String(text ?? '');
-  // Only apply features when the string is *purely* Arabic. Mixed strings
-  // (e.g. "100,000 ر.س") hit fontkit's Arabic-alternate substitution which
-  // tries to swap digits/Latin to glyphs Cairo doesn't have → tofu boxes.
-  const opts = isPureArabic(raw)
-    ? { ...options, features: [...(options.features || []), ...ARABIC_FEATURES] }
-    : options;
-  doc.text(raw, x, y, opts);
+  // Arabic content is pre-shaped into visual order (presentation forms with
+  // run order reversed) so pdfkit's LTR engine emits the glyphs exactly as
+  // an RTL reader expects. No OpenType feature flags needed.
+  doc.text(shapeForVisual(raw), x, y, options);
 };
 
 // Draw a table row. Table is drawn LEFT-TO-RIGHT in the `cols` array — for RTL
@@ -417,10 +414,10 @@ const generateQuote = async (req, res) => {
     const hotelName = hotel?.nameEn || hotel?.name || 'Ewaa Hotels';
     setFont(doc, true, hotelName);
     doc.fontSize(16).fillColor(NAVY).text(
-      hotelName,
+      shapeForVisual(hotelName),
       isAr ? 162 : 40,
       lineY - 22,
-      { width: 393, align: isAr ? 'right' : 'left', ...arabicTextOpts(hotelName) },
+      { width: 393, align: isAr ? 'right' : 'left' },
     );
 
     y = lineY;
@@ -429,7 +426,7 @@ const generateQuote = async (req, res) => {
 
     // Title
     setFont(doc, true, t.title);
-    doc.fontSize(15).fillColor(NAVY).text(t.title, 40, y, { align: 'center', ...arabicTextOpts(t.title) });
+    doc.fontSize(15).fillColor(NAVY).text(shapeForVisual(t.title), 40, y, { align: 'center' });
     y += 30;
 
     // Info columns — Arabic flips the two columns: Quote-details on the
@@ -441,9 +438,9 @@ const generateQuote = async (req, res) => {
     const colAlign   = isAr ? 'right' : 'left';
     const colWidth   = 215;
     setFont(doc, true, t.quoteDetails);
-    doc.fontSize(10).fillColor(NAVY).text(t.quoteDetails, quoteColX, y, { width: colWidth, align: colAlign, ...arabicTextOpts(t.quoteDetails) });
+    doc.fontSize(10).fillColor(NAVY).text(shapeForVisual(t.quoteDetails), quoteColX, y, { width: colWidth, align: colAlign });
     setFont(doc, true, t.clientDetails);
-    doc.text(t.clientDetails, clientColX, y, { width: colWidth, align: colAlign, ...arabicTextOpts(t.clientDetails) });
+    doc.text(shapeForVisual(t.clientDetails), clientColX, y, { width: colWidth, align: colAlign });
     y += 16;
 
     // Each info pair is "Label: value". In English we draw label first
@@ -458,24 +455,24 @@ const generateQuote = async (req, res) => {
       const valIsArabic = isArabic(valueStr);
       setFont(doc, false, labelStr);
       doc.fontSize(8).fillColor(MID);
-      const labelW = doc.widthOfString(labelStr);
+      // Measure width on the SHAPED string — it's what actually gets drawn.
+      const labelShaped = shapeForVisual(labelStr);
+      const labelW = doc.widthOfString(labelShaped);
       const labelYOff = labelIsArabic ? -3 : 0;
       if (isAr) {
-        // Label hugs the right edge of the column, value sits to its left.
         const labelX = x + COL_W - labelW;
-        doc.text(labelStr, labelX, yy + labelYOff, { lineBreak: false, ...arabicTextOpts(labelStr) });
+        doc.text(labelShaped, labelX, yy + labelYOff, { lineBreak: false });
         setFont(doc, false, valueStr);
         doc.fontSize(8).fillColor(DARK);
         const valYOff = valIsArabic ? -3 : 0;
-        const valueX = x;
         const valueW = COL_W - labelW - 5;
-        doc.text(valueStr, valueX, yy + valYOff, { width: valueW, align: 'right', lineBreak: false, ...arabicTextOpts(valueStr) });
+        doc.text(shapeForVisual(valueStr), x, yy + valYOff, { width: valueW, align: 'right', lineBreak: false });
       } else {
-        doc.text(labelStr, x, yy + labelYOff, { lineBreak: false, ...arabicTextOpts(labelStr) });
+        doc.text(labelShaped, x, yy + labelYOff, { lineBreak: false });
         setFont(doc, false, valueStr);
         doc.fontSize(8).fillColor(DARK);
         const valYOff = valIsArabic ? -3 : 0;
-        doc.text(valueStr, x + labelW, yy + valYOff, { width: COL_W - labelW - 5, lineBreak: false, ...arabicTextOpts(valueStr) });
+        doc.text(shapeForVisual(valueStr), x + labelW, yy + valYOff, { width: COL_W - labelW - 5, lineBreak: false });
       }
     };
 
@@ -540,30 +537,26 @@ const generateQuote = async (req, res) => {
         const amtBlockW = numW + sarW;
 
         if (isAr) {
-          // Label is right-aligned inside the right half of the block.
           setFont(doc, bold, label);
           doc.fontSize(fs).fillColor(color)
-             .text(label, totalsRight - labelW, y, { width: labelW, align: 'right', lineBreak: false, ...arabicTextOpts(label) });
-          // Amount sits at the left edge of the block.
+             .text(shapeForVisual(label), totalsRight - labelW, y, { width: labelW, align: 'right', lineBreak: false });
           const numX = totalsLeft;
           const sarX = numX + numW;
           doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fillColor(valueColor)
              .text(num, numX, y, { lineBreak: false });
           doc.font(bold ? CAIRO_BOLD : CAIRO_REG).fillColor(valueColor)
-             .text(sarText, sarX, y, { lineBreak: false, ...arabicTextOpts(sarText) });
+             .text(shapeForVisual(sarText), sarX, y, { lineBreak: false });
         } else {
-          // English: label on the left, amount right-aligned within its slot.
           setFont(doc, bold, label);
           doc.fontSize(fs).fillColor(color)
-             .text(label, totalsLeft, y, { width: labelW, lineBreak: false, ...arabicTextOpts(label) });
+             .text(label, totalsLeft, y, { width: labelW, lineBreak: false });
           const numX = totalsRight - amtBlockW;
           const sarX = numX + numW;
           doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fillColor(valueColor)
              .text(num, numX, y, { lineBreak: false });
           doc.font(bold ? CAIRO_BOLD : CAIRO_REG).fillColor(valueColor)
-             .text(sarText, sarX, y, { lineBreak: false, ...arabicTextOpts(sarText) });
+             .text(shapeForVisual(sarText), sarX, y, { lineBreak: false });
         }
-        // refer to amountW so eslint doesn't flag unused-var in dev builds
         void amountW;
       };
       drawTotal(`${t.subtotal}:`, subtotal); y += 15;
@@ -579,10 +572,11 @@ const generateQuote = async (req, res) => {
     // Notes
     if (notes) {
       setFont(doc, true, t.notesTerms);
-      doc.fontSize(10).fillColor(NAVY).text(t.notesTerms, 40, y, { width: 515, align: isAr ? 'right' : 'left', ...arabicTextOpts(t.notesTerms) }); y += 14;
+      doc.fontSize(10).fillColor(NAVY).text(shapeForVisual(t.notesTerms), 40, y, { width: 515, align: isAr ? 'right' : 'left' }); y += 14;
       setFont(doc, false, notes);
-      doc.fontSize(8).fillColor(MID).text(notes, 40, y, { width: 515, align: isAr ? 'right' : 'left', ...arabicTextOpts(notes) });
-      y += doc.heightOfString(notes, { width: 515 }) + 15;
+      const notesShaped = shapeForVisual(notes);
+      doc.fontSize(8).fillColor(MID).text(notesShaped, 40, y, { width: 515, align: isAr ? 'right' : 'left' });
+      y += doc.heightOfString(notesShaped, { width: 515 }) + 15;
     }
 
     // === Standard Quote Boilerplate ===
@@ -595,24 +589,26 @@ const generateQuote = async (req, res) => {
     const section = (cy, title) => {
       cy = ensureSpace(cy, 22);
       setFont(doc, true, title);
-      doc.fontSize(10).fillColor(NAVY).text(title, 40, cy, { width: 515, align, ...arabicTextOpts(title) });
+      doc.fontSize(10).fillColor(NAVY).text(shapeForVisual(title), 40, cy, { width: 515, align });
       return cy + 14;
     };
     const para = (cy, text) => {
       setFont(doc, false, text);
       doc.fontSize(8).fillColor(MID);
-      const h = doc.heightOfString(text, { width: 515 });
+      const shaped = shapeForVisual(text);
+      const h = doc.heightOfString(shaped, { width: 515 });
       cy = ensureSpace(cy, h + 6);
-      doc.text(text, 40, cy, { width: 515, align: isAr ? 'right' : 'justify', ...arabicTextOpts(text) });
+      doc.text(shaped, 40, cy, { width: 515, align: isAr ? 'right' : 'justify' });
       return cy + h + 6;
     };
     const bullet = (cy, text) => {
       const display = isAr ? `${text}  •` : `•  ${text}`;
       setFont(doc, false, display);
       doc.fontSize(8).fillColor(MID);
-      const h = doc.heightOfString(display, { width: 510 });
+      const shaped = shapeForVisual(display);
+      const h = doc.heightOfString(shaped, { width: 510 });
       cy = ensureSpace(cy, h + 3);
-      doc.text(display, isAr ? 40 : 50, cy, { width: isAr ? 510 : 500, align, ...arabicTextOpts(display) });
+      doc.text(shaped, isAr ? 40 : 50, cy, { width: isAr ? 510 : 500, align });
       return cy + h + 3;
     };
 
@@ -686,12 +682,12 @@ const generateQuote = async (req, res) => {
     y += 6;
     y = ensureSpace(y, 60);
     setFont(doc, true, t.welcoming);
-    doc.fontSize(10).fillColor(NAVY).text(t.welcoming, 40, y, { width: 515, align: 'center', ...arabicTextOpts(t.welcoming) });
+    doc.fontSize(10).fillColor(NAVY).text(shapeForVisual(t.welcoming), 40, y, { width: 515, align: 'center' });
     y += 30;
 
     y = ensureSpace(y, 90);
     setFont(doc, true, t.confirmOn);
-    doc.fontSize(9).fillColor(NAVY).text(t.confirmOn, 40, y, { width: 515, align, ...arabicTextOpts(t.confirmOn) }); y += 28;
+    doc.fontSize(9).fillColor(NAVY).text(shapeForVisual(t.confirmOn), 40, y, { width: 515, align }); y += 28;
 
     // Title in the signature block is whatever the rep typed in the quote
     // form (preparedByTitle). NOT derived from req.user.role any more — the
@@ -703,15 +699,13 @@ const generateQuote = async (req, res) => {
      // الوظيفي, التاريخ, ختم الشركة) — pick the font based on actual content.
     const drawLabel = (text, x, yy) => {
       setFont(doc, false, text);
-      const opts = { lineBreak: false, ...arabicTextOpts(text) };
-      doc.fontSize(8).fillColor(MID).text(text, x, yy + (isArabic(text) ? -3 : 0), opts);
+      doc.fontSize(8).fillColor(MID).text(shapeForVisual(text), x, yy + (isArabic(text) ? -3 : 0), { lineBreak: false });
     };
     const filledField = (label, value, labelX, valueX, lineEndX) => {
       drawLabel(`${label}:`, labelX, y);
       const v = String(value ?? '');
       setFont(doc, true, v);
-      const vopts = { lineBreak: false, ...arabicTextOpts(v) };
-      doc.fontSize(8).fillColor(DARK).text(v, valueX, (y - 1) + (isArabic(v) ? -3 : 0), vopts);
+      doc.fontSize(8).fillColor(DARK).text(shapeForVisual(v), valueX, (y - 1) + (isArabic(v) ? -3 : 0), { lineBreak: false });
       doc.moveTo(valueX, y + 10).lineTo(lineEndX, y + 10).strokeColor(LIGHT).lineWidth(0.5).stroke();
     };
 
