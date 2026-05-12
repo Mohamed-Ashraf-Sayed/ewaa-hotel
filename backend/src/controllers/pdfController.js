@@ -407,16 +407,21 @@ const generateQuote = async (req, res) => {
     let y = 40;
     const lineY = 120;  // header band ends here
 
+    // Header layout: Arabic flows RTL, so put logo on the LEFT and hotel
+    // name on the RIGHT. English keeps the original LTR layout (logo on
+    // the right, name on the left).
     if (hasLogo) {
-      // Logo is 1414x926; at height=80 width ≈ 122. Right edge aligned with margin (555).
-      doc.image(logoPath, 433, y, { height: 80 });
+      doc.image(logoPath, isAr ? 40 : 433, y, { height: 80 });
     }
 
     const hotelName = hotel?.nameEn || hotel?.name || 'Ewaa Hotels';
-    // Location line (city, country) intentionally NOT rendered — user only
-    // wants the hotel name shown at the top of the quote header.
     setFont(doc, true, hotelName);
-    doc.fontSize(16).fillColor(NAVY).text(hotelName, 40, lineY - 22, arabicTextOpts(hotelName));
+    doc.fontSize(16).fillColor(NAVY).text(
+      hotelName,
+      isAr ? 162 : 40,
+      lineY - 22,
+      { width: 393, align: isAr ? 'right' : 'left', ...arabicTextOpts(hotelName) },
+    );
 
     y = lineY;
     doc.moveTo(40, y).lineTo(555, y).strokeColor(NAVY).lineWidth(2).stroke();
@@ -427,106 +432,146 @@ const generateQuote = async (req, res) => {
     doc.fontSize(15).fillColor(NAVY).text(t.title, 40, y, { align: 'center', ...arabicTextOpts(t.title) });
     y += 30;
 
-    // Info columns — section headers may be Arabic (بيانات عرض السعر / بيانات العميل)
-    // so route them through setFont so Cairo is picked up when needed.
+    // Info columns — Arabic flips the two columns: Quote-details on the
+    // RIGHT, Client-details on the LEFT (since RTL readers start from the
+    // right). The two x anchors stay the same; we just swap which column
+    // sits where, and right-align both.
+    const quoteColX  = isAr ? 300 : 40;
+    const clientColX = isAr ? 40  : 300;
+    const colAlign   = isAr ? 'right' : 'left';
+    const colWidth   = 215;
     setFont(doc, true, t.quoteDetails);
-    doc.fontSize(10).fillColor(NAVY).text(t.quoteDetails, 40, y, arabicTextOpts(t.quoteDetails));
+    doc.fontSize(10).fillColor(NAVY).text(t.quoteDetails, quoteColX, y, { width: colWidth, align: colAlign, ...arabicTextOpts(t.quoteDetails) });
     setFont(doc, true, t.clientDetails);
-    doc.text(t.clientDetails, 300, y, arabicTextOpts(t.clientDetails));
+    doc.text(t.clientDetails, clientColX, y, { width: colWidth, align: colAlign, ...arabicTextOpts(t.clientDetails) });
     y += 16;
 
+    // Each info pair is "Label: value". In English we draw label first
+    // (LTR) then value to its right. In Arabic we draw the label
+    // right-aligned and the value to its left, so they read naturally
+    // right-to-left.
+    const COL_W = 215;
     const infoStyle = (label, value, x, yy) => {
       const labelStr = `${label}: `;
       const valueStr = String(value ?? '');
       const labelIsArabic = isArabic(labelStr);
       const valIsArabic = isArabic(valueStr);
-      // Label font based on its own content — Arabic translations (المرجع,
-      // التاريخ, ...) must render in Cairo, English/mixed labels in Helvetica.
       setFont(doc, false, labelStr);
       doc.fontSize(8).fillColor(MID);
-      const labelOpts = { lineBreak: false };
-      if (isPureArabic(labelStr)) labelOpts.features = ARABIC_FEATURES;
-      doc.text(labelStr, x, yy + (labelIsArabic ? -3 : 0), labelOpts);
-      const labelWidth = doc.widthOfString(labelStr);
-      // Value font based on content (Cairo for Arabic, Helvetica for Latin).
-      setFont(doc, false, valueStr);
-      doc.fontSize(8).fillColor(DARK);
-      const opts = { width: 250 - labelWidth - 5, lineBreak: false };
-      if (isPureArabic(valueStr)) opts.features = ARABIC_FEATURES;
-      // Cairo at fontSize 8 has a taller ascent than Helvetica — lift Arabic
-      // values 3px to put their baseline on the Helvetica label baseline.
-      const offsetY = valIsArabic ? -3 : 0;
-      doc.text(valueStr, x + labelWidth, yy + offsetY, opts);
+      const labelW = doc.widthOfString(labelStr);
+      const labelYOff = labelIsArabic ? -3 : 0;
+      if (isAr) {
+        // Label hugs the right edge of the column, value sits to its left.
+        const labelX = x + COL_W - labelW;
+        doc.text(labelStr, labelX, yy + labelYOff, { lineBreak: false, ...arabicTextOpts(labelStr) });
+        setFont(doc, false, valueStr);
+        doc.fontSize(8).fillColor(DARK);
+        const valYOff = valIsArabic ? -3 : 0;
+        const valueX = x;
+        const valueW = COL_W - labelW - 5;
+        doc.text(valueStr, valueX, yy + valYOff, { width: valueW, align: 'right', lineBreak: false, ...arabicTextOpts(valueStr) });
+      } else {
+        doc.text(labelStr, x, yy + labelYOff, { lineBreak: false, ...arabicTextOpts(labelStr) });
+        setFont(doc, false, valueStr);
+        doc.fontSize(8).fillColor(DARK);
+        const valYOff = valIsArabic ? -3 : 0;
+        doc.text(valueStr, x + labelW, yy + valYOff, { width: COL_W - labelW - 5, lineBreak: false, ...arabicTextOpts(valueStr) });
+      }
     };
 
-    infoStyle(t.reference, ref, 40, y);
-    infoStyle(t.company, companyName || client?.companyName || '-', 300, y); y += 13;
-    infoStyle(t.date, formatDate(today), 40, y);
-    infoStyle(t.contact, contactPerson || client?.contactPerson || '-', 300, y); y += 13;
-    infoStyle(t.validUntil, formatDate(validUntil), 40, y);
-    infoStyle(t.phone, client?.phone || '-', 300, y); y += 13;
+    infoStyle(t.reference, ref, quoteColX, y);
+    infoStyle(t.company, companyName || client?.companyName || '-', clientColX, y); y += 13;
+    infoStyle(t.date, formatDate(today), quoteColX, y);
+    infoStyle(t.contact, contactPerson || client?.contactPerson || '-', clientColX, y); y += 13;
+    infoStyle(t.validUntil, formatDate(validUntil), quoteColX, y);
+    infoStyle(t.phone, client?.phone || '-', clientColX, y); y += 13;
     const preparedByName = extractEnglishName(req.user.name, req.user.email);
-    // Top "Prepared By" line shows ONLY the rep's name. The title goes into
-    // its own field in the signature block below. Concatenating them here
-    // produced mixed Latin+Arabic strings that pdfkit's BiDi handling
-    // mangled (letters appeared reversed character-by-character).
-    infoStyle(t.preparedBy, preparedByName, 40, y);
-    infoStyle(t.email, client?.email || '-', 300, y);
+    infoStyle(t.preparedBy, preparedByName, quoteColX, y);
+    infoStyle(t.email, client?.email || '-', clientColX, y);
     y += 25;
 
-    // Items table
+    // Items table — Arabic flips the entire column order so reading right
+    // to left gives: Total → Rate → Nights → Rooms → Description.
     if (parsedItems.length > 0) {
-      const widths = [190, 60, 60, 80, 125];
-      const headers = [t.descRoom, t.rooms, t.nights, t.rateNight, t.totalCol];
+      const widthsEn = [190, 60, 60, 80, 125];
+      const headersEn = [t.descRoom, t.rooms, t.nights, t.rateNight, t.totalCol];
+      const alignsEn  = ['left', 'center', 'center', 'right', 'right'];
+      const widths  = isAr ? [...widthsEn].reverse()  : widthsEn;
+      const headers = isAr ? [...headersEn].reverse() : headersEn;
+      const headerAligns = isAr ? ['right', 'center', 'center', 'center', 'right'] : alignsEn;
+      const bodyAligns   = isAr ? ['right', 'center', 'center', 'center', 'right'] : alignsEn;
       y = drawRow(doc, y, headers, widths, {
         bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24,
-        aligns: ['left', 'center', 'center', 'right', 'right']
+        aligns: headerAligns,
       });
 
       parsedItems.forEach((item, i) => {
         const desc = item.description + (item.roomType ? ` - ${item.roomType}` : '');
-        y = drawRow(doc, y, [desc, item.rooms, item.nights, formatNum(item.rate), formatNum(item.total)], widths, {
+        const rowEn = [desc, item.rooms, item.nights, formatNum(item.rate), formatNum(item.total)];
+        const row = isAr ? [...rowEn].reverse() : rowEn;
+        y = drawRow(doc, y, row, widths, {
           bg: i % 2 === 0 ? BG : null,
-          aligns: ['left', 'center', 'center', 'right', 'right']
+          aligns: bodyAligns,
         });
       });
 
       y += 10;
-      // Totals — render in TWO halves so each font stays in its native script.
-      // Cairo + a string like "100,000 ر.س" was producing tofu boxes for the
-      // digits because fontkit's Arabic context wrecks them. Doing the digits
-      // in Helvetica and the SAR suffix in Cairo dodges the issue entirely.
-      const tx = 330;
+      // Totals block — flipped for Arabic so labels read right-to-left.
+      // English: block sits on the right (label left, amount right-aligned).
+      // Arabic: block sits on the left, label right-aligned within the
+      // block, amount on the left so they read RTL as "السعر = القيمة".
+      const totalsLeft  = isAr ? 30  : 330;       // x of the block's left edge
+      const totalsRight = isAr ? 225 : 555;       // x of the block's right edge
+      const labelW = 130;
+      const amountW = 95;
       const drawTotal = (label, amount, bold = false) => {
         const num = formatNum(amount);
         const fs = bold ? 11 : 9;
         const color = bold ? NAVY : MID;
         const valueColor = bold ? NAVY : DARK;
-        // Label (left side of the totals block)
-        setFont(doc, bold, label);
-        doc.fontSize(fs).fillColor(color)
-           .text(label, tx, y, { width: 130, lineBreak: false, ...arabicTextOpts(label) });
-        // Compute widths for right-aligned digit + SAR layout.
-        // SAR rendered first (right-most), then digit number to its left.
+
+        // Compute the amount block (digits in Helvetica + SAR in Cairo so
+        // each font handles its own script and digits don't tofu out).
         const sarText = ` ${t.sar}`;
         doc.font(bold ? CAIRO_BOLD : CAIRO_REG).fontSize(fs);
         const sarW = doc.widthOfString(sarText);
         doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(fs);
         const numW = doc.widthOfString(num);
-        const blockW = numW + sarW;
-        const rightEdge = tx + 130 + 95;       // right edge of the totals column
-        const numX = rightEdge - blockW;       // digits start here
-        const sarX = numX + numW;              // SAR starts right after digits
-        doc.fillColor(valueColor).text(num, numX, y, { lineBreak: false });
-        doc.font(bold ? CAIRO_BOLD : CAIRO_REG).fillColor(valueColor)
-           .text(sarText, sarX, y, { lineBreak: false, ...arabicTextOpts(sarText) });
+        const amtBlockW = numW + sarW;
+
+        if (isAr) {
+          // Label is right-aligned inside the right half of the block.
+          setFont(doc, bold, label);
+          doc.fontSize(fs).fillColor(color)
+             .text(label, totalsRight - labelW, y, { width: labelW, align: 'right', lineBreak: false, ...arabicTextOpts(label) });
+          // Amount sits at the left edge of the block.
+          const numX = totalsLeft;
+          const sarX = numX + numW;
+          doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fillColor(valueColor)
+             .text(num, numX, y, { lineBreak: false });
+          doc.font(bold ? CAIRO_BOLD : CAIRO_REG).fillColor(valueColor)
+             .text(sarText, sarX, y, { lineBreak: false, ...arabicTextOpts(sarText) });
+        } else {
+          // English: label on the left, amount right-aligned within its slot.
+          setFont(doc, bold, label);
+          doc.fontSize(fs).fillColor(color)
+             .text(label, totalsLeft, y, { width: labelW, lineBreak: false, ...arabicTextOpts(label) });
+          const numX = totalsRight - amtBlockW;
+          const sarX = numX + numW;
+          doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fillColor(valueColor)
+             .text(num, numX, y, { lineBreak: false });
+          doc.font(bold ? CAIRO_BOLD : CAIRO_REG).fillColor(valueColor)
+             .text(sarText, sarX, y, { lineBreak: false, ...arabicTextOpts(sarText) });
+        }
+        // refer to amountW so eslint doesn't flag unused-var in dev builds
+        void amountW;
       };
       drawTotal(`${t.subtotal}:`, subtotal); y += 15;
       if (munTaxRate > 0) {
         drawTotal(`${t.municipalityTax} (${munTaxRate}%):`, munTax); y += 15;
       }
       drawTotal(`${t.vat}:`, vat); y += 15;
-      doc.moveTo(tx, y - 2).lineTo(555, y - 2).strokeColor(NAVY).lineWidth(1).stroke(); y += 5;
+      doc.moveTo(totalsLeft, y - 2).lineTo(totalsRight, y - 2).strokeColor(NAVY).lineWidth(1).stroke(); y += 5;
       drawTotal(`${t.grandTotal}:`, grandTotal, true);
       y += 30;
     }
