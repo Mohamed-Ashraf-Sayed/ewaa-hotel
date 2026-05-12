@@ -428,17 +428,26 @@ const generateQuote = async (req, res) => {
     doc.fontSize(15).fillColor(NAVY).text(t.title, 40, y, { align: 'center', features: ARABIC_FEATURES });
     y += 30;
 
-    // Info columns
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(NAVY).text(t.quoteDetails, 40, y);
-    doc.text(t.clientDetails, 300, y);
+    // Info columns — section headers may be Arabic (بيانات عرض السعر / بيانات العميل)
+    // so route them through setFont so Cairo is picked up when needed.
+    setFont(doc, true, t.quoteDetails);
+    doc.fontSize(10).fillColor(NAVY).text(t.quoteDetails, 40, y, isArabic(t.quoteDetails) ? { features: ARABIC_FEATURES } : {});
+    setFont(doc, true, t.clientDetails);
+    doc.text(t.clientDetails, 300, y, isArabic(t.clientDetails) ? { features: ARABIC_FEATURES } : {});
     y += 16;
 
     const infoStyle = (label, value, x, yy) => {
       const labelStr = `${label}: `;
       const valueStr = String(value ?? '');
+      const labelIsArabic = isArabic(labelStr);
       const valIsArabic = isArabic(valueStr);
-      // Label always Helvetica for clean Latin rendering.
-      doc.font('Helvetica').fontSize(8).fillColor(MID).text(labelStr, x, yy, { lineBreak: false });
+      // Label font based on its own content — Arabic translations (المرجع,
+      // التاريخ, ...) must render in Cairo, English/mixed labels in Helvetica.
+      setFont(doc, false, labelStr);
+      doc.fontSize(8).fillColor(MID);
+      const labelOpts = { lineBreak: false };
+      if (labelIsArabic) labelOpts.features = ARABIC_FEATURES;
+      doc.text(labelStr, x, yy + (labelIsArabic ? -3 : 0), labelOpts);
       const labelWidth = doc.widthOfString(labelStr);
       // Value font based on content (Cairo for Arabic, Helvetica for Latin).
       setFont(doc, false, valueStr);
@@ -622,20 +631,31 @@ const generateQuote = async (req, res) => {
     const repTitle = roleTitle(req.user.role);
     const repDate = formatDate(today);
 
+    // All labels/values in this block may be Arabic (الاسم, التوقيع, المسمى
+     // الوظيفي, التاريخ, ختم الشركة) — pick the font based on actual content.
+    const drawLabel = (text, x, yy) => {
+      setFont(doc, false, text);
+      const opts = { lineBreak: false };
+      if (isArabic(text)) opts.features = ARABIC_FEATURES;
+      doc.fontSize(8).fillColor(MID).text(text, x, yy + (isArabic(text) ? -3 : 0), opts);
+    };
     const filledField = (label, value, labelX, valueX, lineEndX) => {
-      doc.font('Helvetica').fontSize(8).fillColor(MID).text(`${label}:`, labelX, y);
-      doc.font('Helvetica-Bold').fillColor(DARK).text(value, valueX, y - 1);
+      drawLabel(`${label}:`, labelX, y);
+      setFont(doc, true, value);
+      const vopts = { lineBreak: false };
+      if (isArabic(String(value))) vopts.features = ARABIC_FEATURES;
+      doc.fontSize(8).fillColor(DARK).text(value, valueX, (y - 1) + (isArabic(String(value)) ? -3 : 0), vopts);
       doc.moveTo(valueX, y + 10).lineTo(lineEndX, y + 10).strokeColor(LIGHT).lineWidth(0.5).stroke();
     };
 
     filledField(t.name, preparedBy, 40, 80, 280);
-    doc.font('Helvetica').fontSize(8).fillColor(MID).text(`${t.signature}:`, 310, y);
+    drawLabel(`${t.signature}:`, 310, y);
     doc.moveTo(370, y + 10).lineTo(555, y + 10).strokeColor(LIGHT).lineWidth(0.5).stroke();
     y += 25;
     filledField(t.titleField, repTitle, 40, 80, 280);
     filledField(t.dateField, repDate, 310, 350, 555);
     y += 25;
-    doc.font('Helvetica').fontSize(8).fillColor(MID).text(`${t.companyStamp}:`, 40, y);
+    drawLabel(`${t.companyStamp}:`, 40, y);
 
     doc.end();
   } catch (err) {
