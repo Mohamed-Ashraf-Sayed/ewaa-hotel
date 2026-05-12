@@ -2,7 +2,7 @@ const { PrismaClient } = require('@prisma/client');
 const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs');
-const { shapeArabic, isArabic, ARABIC_FEATURES } = require('../utils/arabicPdf');
+const { shapeArabic, isArabic, isPureArabic, ARABIC_FEATURES, arabicTextOpts } = require('../utils/arabicPdf');
 const prisma = new PrismaClient();
 
 const logoPath = path.join(__dirname, '../../../frontend/public/logo.png');
@@ -91,7 +91,10 @@ const setFont = (doc, bold, text) => {
 // them the glyphs render isolated and read as gibberish in PDF viewers.
 const drawText = (doc, text, x, y, options = {}) => {
   const raw = String(text ?? '');
-  const opts = isArabic(raw)
+  // Only apply features when the string is *purely* Arabic. Mixed strings
+  // (e.g. "100,000 ر.س") hit fontkit's Arabic-alternate substitution which
+  // tries to swap digits/Latin to glyphs Cairo doesn't have → tofu boxes.
+  const opts = isPureArabic(raw)
     ? { ...options, features: [...(options.features || []), ...ARABIC_FEATURES] }
     : options;
   doc.text(raw, x, y, opts);
@@ -414,10 +417,10 @@ const generateQuote = async (req, res) => {
 
     if (loc) {
       setFont(doc, false, loc);
-      doc.fontSize(9).fillColor(MID).text(loc, 40, lineY - 38, { features: ARABIC_FEATURES });
+      doc.fontSize(9).fillColor(MID).text(loc, 40, lineY - 38, arabicTextOpts(loc));
     }
     setFont(doc, true, hotelName);
-    doc.fontSize(16).fillColor(NAVY).text(hotelName, 40, lineY - 22, { features: ARABIC_FEATURES });
+    doc.fontSize(16).fillColor(NAVY).text(hotelName, 40, lineY - 22, arabicTextOpts(hotelName));
 
     y = lineY;
     doc.moveTo(40, y).lineTo(555, y).strokeColor(NAVY).lineWidth(2).stroke();
@@ -425,15 +428,15 @@ const generateQuote = async (req, res) => {
 
     // Title
     setFont(doc, true, t.title);
-    doc.fontSize(15).fillColor(NAVY).text(t.title, 40, y, { align: 'center', features: ARABIC_FEATURES });
+    doc.fontSize(15).fillColor(NAVY).text(t.title, 40, y, { align: 'center', ...arabicTextOpts(t.title) });
     y += 30;
 
     // Info columns — section headers may be Arabic (بيانات عرض السعر / بيانات العميل)
     // so route them through setFont so Cairo is picked up when needed.
     setFont(doc, true, t.quoteDetails);
-    doc.fontSize(10).fillColor(NAVY).text(t.quoteDetails, 40, y, isArabic(t.quoteDetails) ? { features: ARABIC_FEATURES } : {});
+    doc.fontSize(10).fillColor(NAVY).text(t.quoteDetails, 40, y, arabicTextOpts(t.quoteDetails));
     setFont(doc, true, t.clientDetails);
-    doc.text(t.clientDetails, 300, y, isArabic(t.clientDetails) ? { features: ARABIC_FEATURES } : {});
+    doc.text(t.clientDetails, 300, y, arabicTextOpts(t.clientDetails));
     y += 16;
 
     const infoStyle = (label, value, x, yy) => {
@@ -446,14 +449,14 @@ const generateQuote = async (req, res) => {
       setFont(doc, false, labelStr);
       doc.fontSize(8).fillColor(MID);
       const labelOpts = { lineBreak: false };
-      if (labelIsArabic) labelOpts.features = ARABIC_FEATURES;
+      if (isPureArabic(labelStr)) labelOpts.features = ARABIC_FEATURES;
       doc.text(labelStr, x, yy + (labelIsArabic ? -3 : 0), labelOpts);
       const labelWidth = doc.widthOfString(labelStr);
       // Value font based on content (Cairo for Arabic, Helvetica for Latin).
       setFont(doc, false, valueStr);
       doc.fontSize(8).fillColor(DARK);
       const opts = { width: 250 - labelWidth - 5, lineBreak: false };
-      if (valIsArabic) opts.features = ARABIC_FEATURES;
+      if (isPureArabic(valueStr)) opts.features = ARABIC_FEATURES;
       // Cairo at fontSize 8 has a taller ascent than Helvetica — lift Arabic
       // values 3px to put their baseline on the Helvetica label baseline.
       const offsetY = valIsArabic ? -3 : 0;
@@ -497,9 +500,13 @@ const generateQuote = async (req, res) => {
       const tx = 330;
       const drawTotal = (label, value, bold = false) => {
         setFont(doc, bold, label);
-        doc.fontSize(bold ? 11 : 9).fillColor(bold ? NAVY : MID).text(label, tx, y, { width: 130, lineBreak: false, features: ARABIC_FEATURES });
+        doc.fontSize(bold ? 11 : 9).fillColor(bold ? NAVY : MID)
+           .text(label, tx, y, { width: 130, lineBreak: false, ...arabicTextOpts(label) });
         setFont(doc, bold, value);
-        doc.fillColor(bold ? NAVY : DARK).text(value, tx + 130, y, { align: 'right', width: 95, lineBreak: false, features: ARABIC_FEATURES });
+        // value is typically "100,000 ر.س" — mixed digits + Arabic, so we
+        // skip ARABIC_FEATURES to avoid digits being replaced with tofu.
+        doc.fillColor(bold ? NAVY : DARK)
+           .text(value, tx + 130, y, { align: 'right', width: 95, lineBreak: false, ...arabicTextOpts(value) });
       };
       drawTotal(`${t.subtotal}:`, `${formatNum(subtotal)} ${t.sar}`); y += 15;
       if (munTaxRate > 0) {
@@ -514,9 +521,9 @@ const generateQuote = async (req, res) => {
     // Notes
     if (notes) {
       setFont(doc, true, t.notesTerms);
-      doc.fontSize(10).fillColor(NAVY).text(t.notesTerms, 40, y, { width: 515, align: isAr ? 'right' : 'left', features: ARABIC_FEATURES }); y += 14;
+      doc.fontSize(10).fillColor(NAVY).text(t.notesTerms, 40, y, { width: 515, align: isAr ? 'right' : 'left', ...arabicTextOpts(t.notesTerms) }); y += 14;
       setFont(doc, false, notes);
-      doc.fontSize(8).fillColor(MID).text(notes, 40, y, { width: 515, align: isAr ? 'right' : 'left', features: ARABIC_FEATURES });
+      doc.fontSize(8).fillColor(MID).text(notes, 40, y, { width: 515, align: isAr ? 'right' : 'left', ...arabicTextOpts(notes) });
       y += doc.heightOfString(notes, { width: 515 }) + 15;
     }
 
@@ -530,7 +537,7 @@ const generateQuote = async (req, res) => {
     const section = (cy, title) => {
       cy = ensureSpace(cy, 22);
       setFont(doc, true, title);
-      doc.fontSize(10).fillColor(NAVY).text(title, 40, cy, { width: 515, align, features: ARABIC_FEATURES });
+      doc.fontSize(10).fillColor(NAVY).text(title, 40, cy, { width: 515, align, ...arabicTextOpts(title) });
       return cy + 14;
     };
     const para = (cy, text) => {
@@ -538,7 +545,7 @@ const generateQuote = async (req, res) => {
       doc.fontSize(8).fillColor(MID);
       const h = doc.heightOfString(text, { width: 515 });
       cy = ensureSpace(cy, h + 6);
-      doc.text(text, 40, cy, { width: 515, align: isAr ? 'right' : 'justify', features: ARABIC_FEATURES });
+      doc.text(text, 40, cy, { width: 515, align: isAr ? 'right' : 'justify', ...arabicTextOpts(text) });
       return cy + h + 6;
     };
     const bullet = (cy, text) => {
@@ -547,7 +554,7 @@ const generateQuote = async (req, res) => {
       doc.fontSize(8).fillColor(MID);
       const h = doc.heightOfString(display, { width: 510 });
       cy = ensureSpace(cy, h + 3);
-      doc.text(display, isAr ? 40 : 50, cy, { width: isAr ? 510 : 500, align, features: ARABIC_FEATURES });
+      doc.text(display, isAr ? 40 : 50, cy, { width: isAr ? 510 : 500, align, ...arabicTextOpts(display) });
       return cy + h + 3;
     };
 
@@ -621,12 +628,12 @@ const generateQuote = async (req, res) => {
     y += 6;
     y = ensureSpace(y, 60);
     setFont(doc, true, t.welcoming);
-    doc.fontSize(10).fillColor(NAVY).text(t.welcoming, 40, y, { width: 515, align: 'center', features: ARABIC_FEATURES });
+    doc.fontSize(10).fillColor(NAVY).text(t.welcoming, 40, y, { width: 515, align: 'center', ...arabicTextOpts(t.welcoming) });
     y += 30;
 
     y = ensureSpace(y, 90);
     setFont(doc, true, t.confirmOn);
-    doc.fontSize(9).fillColor(NAVY).text(t.confirmOn, 40, y, { width: 515, align, features: ARABIC_FEATURES }); y += 28;
+    doc.fontSize(9).fillColor(NAVY).text(t.confirmOn, 40, y, { width: 515, align, ...arabicTextOpts(t.confirmOn) }); y += 28;
 
     // Title in the signature block is whatever the rep typed in the quote
     // form (preparedByTitle). NOT derived from req.user.role any more — the
@@ -638,16 +645,15 @@ const generateQuote = async (req, res) => {
      // الوظيفي, التاريخ, ختم الشركة) — pick the font based on actual content.
     const drawLabel = (text, x, yy) => {
       setFont(doc, false, text);
-      const opts = { lineBreak: false };
-      if (isArabic(text)) opts.features = ARABIC_FEATURES;
+      const opts = { lineBreak: false, ...arabicTextOpts(text) };
       doc.fontSize(8).fillColor(MID).text(text, x, yy + (isArabic(text) ? -3 : 0), opts);
     };
     const filledField = (label, value, labelX, valueX, lineEndX) => {
       drawLabel(`${label}:`, labelX, y);
-      setFont(doc, true, value);
-      const vopts = { lineBreak: false };
-      if (isArabic(String(value))) vopts.features = ARABIC_FEATURES;
-      doc.fontSize(8).fillColor(DARK).text(value, valueX, (y - 1) + (isArabic(String(value)) ? -3 : 0), vopts);
+      const v = String(value ?? '');
+      setFont(doc, true, v);
+      const vopts = { lineBreak: false, ...arabicTextOpts(v) };
+      doc.fontSize(8).fillColor(DARK).text(v, valueX, (y - 1) + (isArabic(v) ? -3 : 0), vopts);
       doc.moveTo(valueX, y + 10).lineTo(lineEndX, y + 10).strokeColor(LIGHT).lineWidth(0.5).stroke();
     };
 
