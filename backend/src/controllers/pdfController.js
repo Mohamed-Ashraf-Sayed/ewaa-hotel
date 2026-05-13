@@ -389,40 +389,49 @@ const generateQuote = async (req, res) => {
       }
     }
 
-    // === Arabic quote → HTML + Puppeteer ===
-    // PDFKit's Arabic rendering is fragile (BiDi/digit/shaping issues with
-    // every font we tried). The Arabic quote renders through a Chromium
-    // headless instance with a CSS template that matches the customer's
-    // expected layout. If Chromium fails to launch (e.g. the internal
-    // Windows Server 2012 R2 box can't run modern Chromium binaries) we
-    // fall through to the existing PDFKit path so users still get a
-    // (less-polished) Arabic PDF rather than a 500.
+    // === Arabic quote → HTML renderer (Chromium → wkhtmltopdf → PDFKit) ===
+    // PDFKit's Arabic rendering is fragile. We render an HTML template via
+    // a real browser instead. Preferred path is headless Chromium (cloud,
+    // Ubuntu). When Chromium can't launch — e.g. the internal Windows
+    // Server 2012 R2 box that can only run legacy binaries — we fall back
+    // to wkhtmltopdf, an old but rock-solid Qt-WebKit renderer that
+    // installs cleanly on every Windows version. Last-ditch fallback is
+    // the PDFKit code path below so users always get *some* PDF.
     if (isAr) {
-      try {
-        const { renderQuoteHtmlAr } = require('../services/quoteHtmlAr');
-        const { htmlToPdf } = require('../services/htmlPdf');
-        const html = renderQuoteHtmlAr({
-          ref, today, validUntil,
-          hotel, client,
-          companyName, contactPerson,
-          items: parsedItems,
-          subtotal, munTaxRate, munTax, vat, grandTotal,
-          notes, meals,
-          preparedByName: req.user?.name || '',
-          preparedByTitle: preparedByTitle || '',
-          preparedByPhone: req.user?.phone || '',
-          year: today.getFullYear(),
-        });
-        const pdfBuffer = await htmlToPdf(html);
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=Quote_${ref}.pdf`);
-        return res.send(pdfBuffer);
-      } catch (err) {
-        console.warn('[generateQuote AR] Chromium path failed, falling back to PDFKit:', err.message);
-        // Fall through — the PDFKit code path below renders the Arabic
-        // quote using the old layout. Not as clean visually but works
-        // anywhere Node runs.
+      const { renderQuoteHtmlAr } = require('../services/quoteHtmlAr');
+      const html = renderQuoteHtmlAr({
+        ref, today, validUntil,
+        hotel, client,
+        companyName, contactPerson,
+        items: parsedItems,
+        subtotal, munTaxRate, munTax, vat, grandTotal,
+        notes, meals,
+        preparedByName: req.user?.name || '',
+        preparedByTitle: preparedByTitle || '',
+        preparedByPhone: req.user?.phone || '',
+        year: today.getFullYear(),
+      });
+
+      // Try renderers in order until one produces a PDF.
+      const renderers = [
+        { name: 'chromium', mod: '../services/htmlPdf' },
+        { name: 'wkhtmltopdf', mod: '../services/wkhtmlPdf' },
+      ];
+      for (const r of renderers) {
+        try {
+          const { htmlToPdf, isAvailable } = require(r.mod);
+          if (typeof isAvailable === 'function' && !isAvailable()) continue;
+          const pdfBuffer = await htmlToPdf(html);
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `attachment; filename=Quote_${ref}.pdf`);
+          return res.send(pdfBuffer);
+        } catch (err) {
+          console.warn(`[generateQuote AR] ${r.name} failed: ${err.message}`);
+          // try next renderer
+        }
       }
+      console.warn('[generateQuote AR] all HTML renderers failed, falling back to PDFKit');
+      // Fall through to the PDFKit code path below.
     }
 
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
