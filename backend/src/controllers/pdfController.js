@@ -391,9 +391,12 @@ const generateQuote = async (req, res) => {
 
     // === Arabic quote → HTML + Puppeteer ===
     // PDFKit's Arabic rendering is fragile (BiDi/digit/shaping issues with
-    // every font we tried). The Arabic quote now renders through a Chromium
+    // every font we tried). The Arabic quote renders through a Chromium
     // headless instance with a CSS template that matches the customer's
-    // expected layout. English keeps the PDFKit path below.
+    // expected layout. If Chromium fails to launch (e.g. the internal
+    // Windows Server 2012 R2 box can't run modern Chromium binaries) we
+    // fall through to the existing PDFKit path so users still get a
+    // (less-polished) Arabic PDF rather than a 500.
     if (isAr) {
       try {
         const { renderQuoteHtmlAr } = require('../services/quoteHtmlAr');
@@ -415,8 +418,10 @@ const generateQuote = async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename=Quote_${ref}.pdf`);
         return res.send(pdfBuffer);
       } catch (err) {
-        console.error('[generateQuote AR] HTML render failed:', err.message, err.stack);
-        return res.status(500).json({ message: 'Arabic quote render failed', error: err.message });
+        console.warn('[generateQuote AR] Chromium path failed, falling back to PDFKit:', err.message);
+        // Fall through — the PDFKit code path below renders the Arabic
+        // quote using the old layout. Not as clean visually but works
+        // anywhere Node runs.
       }
     }
 
