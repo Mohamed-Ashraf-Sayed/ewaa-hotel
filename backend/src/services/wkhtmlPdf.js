@@ -41,14 +41,18 @@ const htmlToPdf = (html, opts = {}) => new Promise((resolve, reject) => {
   const bin = findBinary();
   if (!bin) return reject(new Error('wkhtmltopdf binary not found'));
 
-  // Write the HTML to a temp file. Some wkhtmltopdf builds have quirks with
-  // stdin-piped HTML when CSS uses @import (Google Fonts), so a real file
-  // url is more reliable.
   const tmpDir = os.tmpdir();
   const id = crypto.randomBytes(8).toString('hex');
-  const htmlPath = path.join(tmpDir, `wkpdf-${id}.html`);
-  const pdfPath  = path.join(tmpDir, `wkpdf-${id}.pdf`);
+  const htmlPath   = path.join(tmpDir, `wkpdf-${id}.html`);
+  const pdfPath    = path.join(tmpDir, `wkpdf-${id}.pdf`);
+  const footerPath = opts.footerHtml ? path.join(tmpDir, `wkpdf-${id}-footer.html`) : null;
   fs.writeFileSync(htmlPath, html, 'utf8');
+  if (footerPath) fs.writeFileSync(footerPath, opts.footerHtml, 'utf8');
+
+  // When we're rendering a footer, reserve extra bottom margin for it.
+  const marginBottom = opts.footerHtml
+    ? (opts.marginBottom || '26mm')
+    : (opts.marginBottom || '22mm');
 
   const args = [
     '--quiet',
@@ -58,13 +62,16 @@ const htmlToPdf = (html, opts = {}) => new Promise((resolve, reject) => {
     '--load-media-error-handling', 'ignore',
     '--javascript-delay', String(opts.jsDelayMs || 800),
     '--page-size', opts.pageSize || 'A4',
-    '--margin-top', opts.marginTop || '18mm',
-    '--margin-right', opts.marginRight || '16mm',
-    '--margin-bottom', opts.marginBottom || '22mm',
-    '--margin-left', opts.marginLeft || '16mm',
-    htmlPath,
-    pdfPath,
+    '--margin-top', opts.marginTop || '16mm',
+    '--margin-right', opts.marginRight || '14mm',
+    '--margin-bottom', marginBottom,
+    '--margin-left', opts.marginLeft || '14mm',
   ];
+  if (footerPath) {
+    args.push('--footer-html', footerPath);
+    args.push('--footer-spacing', '2');
+  }
+  args.push(htmlPath, pdfPath);
 
   const child = spawn(bin, args, { windowsHide: true });
   let stderr = '';
@@ -91,6 +98,7 @@ const htmlToPdf = (html, opts = {}) => new Promise((resolve, reject) => {
   function cleanup() {
     try { fs.unlinkSync(htmlPath); } catch (_) {}
     try { fs.unlinkSync(pdfPath); } catch (_) {}
+    if (footerPath) { try { fs.unlinkSync(footerPath); } catch (_) {} }
   }
 });
 

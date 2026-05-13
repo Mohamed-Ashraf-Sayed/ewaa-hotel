@@ -398,7 +398,7 @@ const generateQuote = async (req, res) => {
     // installs cleanly on every Windows version. Last-ditch fallback is
     // the PDFKit code path below so users always get *some* PDF.
     if (isAr) {
-      const { renderQuoteHtmlAr } = require('../services/quoteHtmlAr');
+      const { renderQuoteHtmlAr, renderQuoteFooterHtml } = require('../services/quoteHtmlAr');
       const html = renderQuoteHtmlAr({
         ref, today, validUntil,
         hotel, client,
@@ -408,9 +408,8 @@ const generateQuote = async (req, res) => {
         notes, meals,
         preparedByName: req.user?.name || '',
         preparedByTitle: preparedByTitle || '',
-        preparedByPhone: req.user?.phone || '',
-        year: today.getFullYear(),
       });
+      const footerHtml = renderQuoteFooterHtml();
 
       // Try renderers in order until one produces a PDF.
       const renderers = [
@@ -421,7 +420,7 @@ const generateQuote = async (req, res) => {
         try {
           const { htmlToPdf, isAvailable } = require(r.mod);
           if (typeof isAvailable === 'function' && !isAvailable()) continue;
-          const pdfBuffer = await htmlToPdf(html);
+          const pdfBuffer = await htmlToPdf(html, { footerHtml });
           res.setHeader('Content-Type', 'application/pdf');
           res.setHeader('Content-Disposition', `attachment; filename=Quote_${ref}.pdf`);
           return res.send(pdfBuffer);

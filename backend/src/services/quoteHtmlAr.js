@@ -172,20 +172,30 @@ const renderQuoteHtmlAr = ({
     margin: 0;
     padding: 0;
   }
+  /* Explicit left/right anchoring instead of flex so the layout is the
+     same in Chromium and in wkhtmltopdf's older WebKit (whose flex+RTL
+     interaction is flaky). The logo always lands on the LEFT, the hotel
+     name on the RIGHT in this RTL document. */
   .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    position: relative;
+    min-height: 60px;
     border-bottom: 2px solid #0f4c81;
     padding-bottom: 8px;
     margin-bottom: 12px;
   }
-  .hotel-name {
+  .header .logo-slot {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  .header .logo-slot img { height: 55px; display: block; }
+  .header .hotel-name {
+    text-align: right;
     font-size: 16pt;
     font-weight: 700;
     color: #0f4c81;
+    padding-top: 12px;
   }
-  .header img { height: 55px; }
   h1.quote-title {
     font-size: 16pt;
     color: #0f4c81;
@@ -318,22 +328,16 @@ const renderQuoteHtmlAr = ({
   .sig-field .lbl { color: #6b7280; min-width: 80px; }
   .sig-field .val { color: #1f2937; font-weight: 600; }
 
-  ${footerDataUri ? `
-  .footer-banner {
-    position: fixed;
-    bottom: 4mm;
-    left: 14mm;
-    right: 14mm;
-    height: 18mm;
-  }
-  .footer-banner img { width: 100%; height: 100%; object-fit: contain; }
-  ` : ''}
+  /* Footer is rendered per-page via the PDF renderer's footer template
+     (Puppeteer footerTemplate / wkhtmltopdf --footer-html), not as a
+     position:fixed element in the body — those don't repeat reliably
+     across pages and were overlapping the signature block. */
 </style>
 </head>
 <body>
   <div class="header">
+    ${logoDataUri ? `<div class="logo-slot"><img src="${logoDataUri}" alt="logo"></div>` : ''}
     <div class="hotel-name">${escapeHtml(hotelName)}</div>
-    ${logoDataUri ? `<img src="${logoDataUri}" alt="logo">` : ''}
   </div>
 
   <h1 class="quote-title">${T.title}</h1>
@@ -473,9 +477,24 @@ const renderQuoteHtmlAr = ({
     </div>
   </div>
 
-  ${footerDataUri ? `<div class="footer-banner"><img src="${footerDataUri}" alt="footer"></div>` : ''}
 </body>
 </html>`;
 };
 
-module.exports = { renderQuoteHtmlAr };
+// Separate footer HTML, repeated on every page by the renderer. Kept tiny
+// (just the banner image stretched to the printable width) so it doesn't
+// fight with Puppeteer's footerTemplate scale quirks.
+const renderQuoteFooterHtml = () => {
+  if (!footerDataUri) return '';
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; }
+  .wrap { width: 100%; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  img { width: 100%; height: 18mm; object-fit: contain; display: block; }
+</style></head>
+<body><div class="wrap"><img src="${footerDataUri}" alt="footer"></div></body>
+</html>`;
+};
+
+module.exports = { renderQuoteHtmlAr, renderQuoteFooterHtml };

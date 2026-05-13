@@ -28,18 +28,34 @@ const getBrowser = async () => {
   return b;
 };
 
-// Render HTML to a PDF Buffer using a one-shot Chromium page.
+// Render HTML to a PDF Buffer using a one-shot Chromium page. If a
+// `footerHtml` is supplied the renderer enables displayHeaderFooter and
+// repeats it on every page (Puppeteer's footerTemplate path), reserving
+// `footerHeightMm` of bottom margin so the page body doesn't overlap it.
 const htmlToPdf = async (html, opts = {}) => {
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
-    const pdf = await page.pdf({
+    const pdfOpts = {
       format: opts.format || 'A4',
       printBackground: true,
-      preferCSSPageSize: true,
-      margin: opts.margin || undefined,
-    });
+    };
+    if (opts.footerHtml) {
+      pdfOpts.displayHeaderFooter = true;
+      pdfOpts.headerTemplate = '<div></div>';
+      pdfOpts.footerTemplate = opts.footerHtml;
+      // Override CSS page size — Puppeteer ignores margin when
+      // preferCSSPageSize is true, but we need explicit margins to make
+      // room for the per-page footer.
+      pdfOpts.margin = opts.margin || {
+        top: '16mm', right: '14mm', bottom: '26mm', left: '14mm',
+      };
+    } else {
+      pdfOpts.preferCSSPageSize = true;
+      if (opts.margin) pdfOpts.margin = opts.margin;
+    }
+    const pdf = await page.pdf(pdfOpts);
     return Buffer.from(pdf);
   } finally {
     await page.close().catch(() => null);
