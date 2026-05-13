@@ -399,6 +399,16 @@ const generateQuote = async (req, res) => {
     // the PDFKit code path below so users always get *some* PDF.
     if (isAr) {
       const { renderQuoteHtmlAr, renderQuoteFooterHtml } = require('../services/quoteHtmlAr');
+      // Look up the rep's phone from the User row — req.user is the decoded
+      // JWT payload and doesn't carry phone, so the auth middleware's
+      // shorthand object isn't enough.
+      let preparedByPhone = '';
+      if (req.user?.id) {
+        try {
+          const u = await prisma.user.findUnique({ where: { id: req.user.id }, select: { phone: true } });
+          preparedByPhone = u?.phone || '';
+        } catch (_) { /* non-fatal */ }
+      }
       const html = renderQuoteHtmlAr({
         ref, today, validUntil,
         hotel, client,
@@ -408,6 +418,7 @@ const generateQuote = async (req, res) => {
         notes, meals,
         preparedByName: req.user?.name || '',
         preparedByTitle: preparedByTitle || '',
+        preparedByPhone,
       });
       const footerHtml = renderQuoteFooterHtml();
 

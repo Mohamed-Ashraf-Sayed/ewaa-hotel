@@ -100,7 +100,8 @@ const T = {
   standard4: 'نكون ممتنين لو تكرمتم بإرسال التأكيد قبل تاريخ الوصول بـ 15 يومًا على الأقل. وفي حال عدم وصول رد منكم خلال هذه الفترة، سنعتبر أن الحجز لم يعد مطلوبًا وسنقوم بتحرير المساحة المحجوزة.',
   welcoming: 'نتطلّع لاستقبالكم واستقبال ضيوفكم في فنادق إيواء اكسبريس.',
   confirmOn: 'التأكيد بالنيابة عن:',
-  name: 'الاسم', signature: 'التوقيع', titleField: 'المسمى الوظيفي', dateField: 'التاريخ', companyStamp: 'ختم الشركة',
+  name: 'الاسم', signature: 'التوقيع', titleField: 'المسمى الوظيفي', dateField: 'التاريخ',
+  phoneField: 'رقم الجوال', companyStamp: 'ختم الشركة',
 };
 
 const renderQuoteHtmlAr = ({
@@ -121,6 +122,7 @@ const renderQuoteHtmlAr = ({
   meals,
   preparedByName,
   preparedByTitle,
+  preparedByPhone,
 }) => {
   const hotelName = hotel?.name || hotel?.nameEn || 'فنادق إيواء';
   const recipientCompany = companyName || client?.companyName || '-';
@@ -129,6 +131,7 @@ const renderQuoteHtmlAr = ({
   const recipientEmail   = client?.email || '-';
   const repName  = preparedByName || '-';
   const repTitle = preparedByTitle || '';
+  const repPhone = (preparedByPhone || '').toString().trim();
   const todayStr = formatDateAr(today);
   const validStr = formatDateAr(validUntil);
 
@@ -473,6 +476,7 @@ const renderQuoteHtmlAr = ({
       <div class="sig-field"><span class="lbl">${T.signature}:</span><span class="val"></span></div>
       <div class="sig-field"><span class="lbl">${T.titleField}:</span><span class="val">${escapeHtml(repTitle)}</span></div>
       <div class="sig-field"><span class="lbl">${T.dateField}:</span><span class="val">${todayStr}</span></div>
+      <div class="sig-field"><span class="lbl">${T.phoneField}:</span><span class="val" dir="ltr" style="text-align:right;">${escapeHtml(repPhone)}</span></div>
       <div class="sig-field" style="grid-column: 1 / -1;"><span class="lbl">${T.companyStamp}:</span><span class="val"></span></div>
     </div>
   </div>
