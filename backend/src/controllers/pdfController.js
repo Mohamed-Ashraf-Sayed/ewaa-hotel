@@ -389,6 +389,37 @@ const generateQuote = async (req, res) => {
       }
     }
 
+    // === Arabic quote → HTML + Puppeteer ===
+    // PDFKit's Arabic rendering is fragile (BiDi/digit/shaping issues with
+    // every font we tried). The Arabic quote now renders through a Chromium
+    // headless instance with a CSS template that matches the customer's
+    // expected layout. English keeps the PDFKit path below.
+    if (isAr) {
+      try {
+        const { renderQuoteHtmlAr } = require('../services/quoteHtmlAr');
+        const { htmlToPdf } = require('../services/htmlPdf');
+        const html = renderQuoteHtmlAr({
+          ref, today, validUntil,
+          hotel, client,
+          companyName, contactPerson,
+          items: parsedItems,
+          subtotal, munTaxRate, munTax, vat, grandTotal,
+          notes, meals,
+          preparedByName: req.user?.name || '',
+          preparedByTitle: preparedByTitle || '',
+          preparedByPhone: req.user?.phone || '',
+          year: today.getFullYear(),
+        });
+        const pdfBuffer = await htmlToPdf(html);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=Quote_${ref}.pdf`);
+        return res.send(pdfBuffer);
+      } catch (err) {
+        console.error('[generateQuote AR] HTML render failed:', err.message, err.stack);
+        return res.status(500).json({ message: 'Arabic quote render failed', error: err.message });
+      }
+    }
+
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=Quote_${ref}.pdf`);
