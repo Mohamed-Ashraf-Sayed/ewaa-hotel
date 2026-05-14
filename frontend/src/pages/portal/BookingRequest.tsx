@@ -201,11 +201,6 @@ export default function PortalBookingRequest() {
               ✓ سيتم تطبيق سعر العقد المتفق عليه: <b>{selectedContract.ratePerRoom?.toLocaleString()} ر.س / ليلة</b>
             </p>
           )}
-          {form.hotelId && !selectedContract && (
-            <p className="text-[11px] text-amber-700 mt-1.5">
-              ⚠ مفيش عقد إطاري لهذا الفندق — قسم الحجوزات هيتواصل معاك بالسعر بعد المراجعة.
-            </p>
-          )}
         </div>
 
         {/* Guests — multi-row */}
