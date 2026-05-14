@@ -52,7 +52,7 @@ const T = {
   sar: 'ر.س',
   notesTerms: 'ملاحظات وشروط',
   benefits: 'المزايا',
-  benefit1: (tax) => `الأسعار أعلاه لا تشمل ضريبة القيمة المضافة 15%${tax > 0 ? ` ورسوم البلدية ${tax}%` : ''} في فنادق إيواء اكسبريس.`,
+  benefit1: (tax) => `الأسعار أعلاه تشمل ضريبة القيمة المضافة 15%${tax > 0 ? ` ورسوم البلدية ${tax}%` : ''} في فنادق إيواء.`,
   benefit2: 'الأسعار أعلاه صافية وغير قابلة للعمولة وبالريال السعودي.',
   benefit3: 'الأسعار المعروضة شاملة الإنترنت اللاسلكي WI-Fi.',
   benefit4: (meals) => {
@@ -98,7 +98,7 @@ const T = {
   standard2: 'يرجى ملاحظة أنه تم بالفعل عمل حجز مبدئي لكم. ومع ذلك، نشكر لكم الرد المكتوب السريع لكي نتمكن من الاستعداد اللازم.',
   standard3: 'نأمل أن يكون العرض أعلاه يفي بمتطلباتكم. يرجى توقيع العرض ووضع ختم الشركة لتأكيد الموافقة على الشروط والأحكام أعلاه. وفي حال احتجتم أي توضيحات، لا تترددوا في التواصل معي مباشرةً.',
   standard4: 'نكون ممتنين لو تكرمتم بإرسال التأكيد قبل تاريخ الوصول بـ 15 يومًا على الأقل. وفي حال عدم وصول رد منكم خلال هذه الفترة، سنعتبر أن الحجز لم يعد مطلوبًا وسنقوم بتحرير المساحة المحجوزة.',
-  welcoming: 'نتطلّع لاستقبالكم واستقبال ضيوفكم في فنادق إيواء اكسبريس.',
+  welcoming: 'نتطلّع لاستقبالكم واستقبال ضيوفكم في فنادق إيواء.',
   confirmOn: 'التأكيد بالنيابة عن:',
   name: 'الاسم', signature: 'التوقيع', titleField: 'المسمى الوظيفي', dateField: 'التاريخ',
   phoneField: 'رقم الجوال', companyStamp: 'ختم الشركة',
@@ -334,9 +334,12 @@ const renderQuoteHtmlAr = ({
   }
   .signature-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px 30px;
+    /* Single column — each field sits under the previous one so the rep
+       can sign / stamp without the layout fighting them. */
+    grid-template-columns: 1fr;
+    gap: 12px;
     margin-top: 6px;
+    max-width: 360px;
   }
   .sig-field {
     border-bottom: 1px solid #9ca3af;
@@ -442,8 +445,6 @@ const renderQuoteHtmlAr = ({
     <p>${T.otherText}</p>
   </div>
 
-  <div class="page-break"></div>
-
   <div class="section">
     <h2>${T.payments}</h2>
     <ul class="bullets">
@@ -492,11 +493,11 @@ const renderQuoteHtmlAr = ({
     <h2>${T.confirmOn}</h2>
     <div class="signature-grid">
       <div class="sig-field"><span class="lbl">${T.name}:</span><span class="val">${escapeHtml(repName)}</span></div>
-      <div class="sig-field"><span class="lbl">${T.signature}:</span><span class="val"></span></div>
       <div class="sig-field"><span class="lbl">${T.titleField}:</span><span class="val">${escapeHtml(repTitle)}</span></div>
+      <div class="sig-field"><span class="lbl">${T.signature}:</span><span class="val"></span></div>
       <div class="sig-field"><span class="lbl">${T.dateField}:</span><span class="val">${todayStr}</span></div>
       <div class="sig-field"><span class="lbl">${T.phoneField}:</span><span class="val" dir="ltr" style="text-align:right;">${escapeHtml(repPhone)}</span></div>
-      <div class="sig-field" style="grid-column: 1 / -1;"><span class="lbl">${T.companyStamp}:</span><span class="val"></span></div>
+      <div class="sig-field"><span class="lbl">${T.companyStamp}:</span><span class="val"></span></div>
     </div>
   </div>
 
