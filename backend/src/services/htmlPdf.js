@@ -47,9 +47,9 @@ const htmlToPdf = async (html, opts = {}) => {
       pdfOpts.footerTemplate = opts.footerHtml;
       // Override CSS page size — Puppeteer ignores margin when
       // preferCSSPageSize is true, but we need explicit margins to make
-      // room for the per-page footer.
+      // room for the per-page footer (24mm banner + a few mm spacing).
       pdfOpts.margin = opts.margin || {
-        top: '16mm', right: '14mm', bottom: '26mm', left: '14mm',
+        top: '16mm', right: '14mm', bottom: '32mm', left: '14mm',
       };
     } else {
       pdfOpts.preferCSSPageSize = true;

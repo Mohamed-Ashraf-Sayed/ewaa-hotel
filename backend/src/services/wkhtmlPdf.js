@@ -49,9 +49,10 @@ const htmlToPdf = (html, opts = {}) => new Promise((resolve, reject) => {
   fs.writeFileSync(htmlPath, html, 'utf8');
   if (footerPath) fs.writeFileSync(footerPath, opts.footerHtml, 'utf8');
 
-  // When we're rendering a footer, reserve extra bottom margin for it.
+  // When we're rendering a footer, reserve extra bottom margin for it
+  // (24mm footer banner + spacing).
   const marginBottom = opts.footerHtml
-    ? (opts.marginBottom || '26mm')
+    ? (opts.marginBottom || '32mm')
     : (opts.marginBottom || '22mm');
 
   const args = [

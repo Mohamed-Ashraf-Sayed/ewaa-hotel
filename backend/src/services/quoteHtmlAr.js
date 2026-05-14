@@ -182,7 +182,7 @@ const renderQuoteHtmlAr = ({
      name on the RIGHT in this RTL document. */
   .header {
     position: relative;
-    min-height: 60px;
+    min-height: 90px;
     border-bottom: 2px solid #0f4c81;
     padding-bottom: 8px;
     margin-bottom: 12px;
@@ -192,13 +192,14 @@ const renderQuoteHtmlAr = ({
     left: 0;
     top: 0;
   }
-  .header .logo-slot img { height: 55px; display: block; }
+  /* Logo sized to match the English PDFKit version (height: 80pt). */
+  .header .logo-slot img { height: 80px; display: block; }
   .header .hotel-name {
     text-align: right;
     font-size: 16pt;
     font-weight: 700;
     color: #0f4c81;
-    padding-top: 12px;
+    padding-top: 28px;
   }
   h1.quote-title {
     font-size: 16pt;
@@ -505,9 +506,9 @@ const renderQuoteHtmlAr = ({
 </html>`;
 };
 
-// Separate footer HTML, repeated on every page by the renderer. Kept tiny
-// (just the banner image stretched to the printable width) so it doesn't
-// fight with Puppeteer's footerTemplate scale quirks.
+// Separate footer HTML, repeated on every page by the renderer. Sized to
+// match the English PDFKit version (width 515pt at the document margin
+// edge). Banner ratio 1728×229, so 515pt wide → ~68pt tall ≈ 24mm.
 const renderQuoteFooterHtml = () => {
   if (!footerDataUri) return '';
   return `<!DOCTYPE html>
@@ -515,7 +516,7 @@ const renderQuoteFooterHtml = () => {
 <style>
   html, body { margin: 0; padding: 0; }
   .wrap { width: 100%; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  img { width: 100%; height: 18mm; object-fit: contain; display: block; }
+  img { width: 100%; height: 24mm; object-fit: contain; display: block; }
 </style></head>
 <body><div class="wrap"><img src="${footerDataUri}" alt="footer"></div></body>
 </html>`;
