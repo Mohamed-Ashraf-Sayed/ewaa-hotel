@@ -10,7 +10,10 @@ const RESERVATIONS_ROLES = ['reservations', 'admin', 'general_manager', 'vice_gm
 
 // Filter bookings by user role
 const buildBookingFilter = async (user) => {
-  if (ADMIN_ROLES.includes(user.role) || user.role === 'reservations' || user.role === 'contract_officer') return {};
+  if (ADMIN_ROLES.includes(user.role) || user.role === 'contract_officer') return {};
+  // Reservations team sees everything EXCEPT bookings still awaiting the
+  // sales rep's approval — those aren't theirs to act on yet.
+  if (user.role === 'reservations') return { status: { not: 'pending_sales_approval' } };
   if (user.role === 'sales_director') {
     const subIds = await getSubordinateIds(user.id);
     return { assignedRepId: { in: [user.id, ...subIds] } };
@@ -548,6 +551,140 @@ const confirmPendingRequest = async (req, res) => {
   }
 };
 
+// POST /bookings/:id/approve-request — assigned sales rep approves a
+// portal-submitted booking so it can move on to the reservations queue.
+const approveSalesRequest = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const existing = await prisma.booking.findUnique({ where: { id }, include: { client: { select: { companyName: true } } } });
+    if (!existing) return res.status(404).json({ message: 'Booking not found' });
+    if (existing.status !== 'pending_sales_approval') {
+      return res.status(400).json({ message: 'الحجز ليس بانتظار موافقة المندوب' });
+    }
+    // Only the assigned rep, their manager, or admin can approve.
+    const isAdmin = ['admin', 'general_manager', 'vice_gm'].includes(req.user.role);
+    const isAssignedRep = existing.assignedRepId === req.user.id;
+    let isManagerOfRep = false;
+    if (req.user.role === 'sales_director') {
+      const subs = await getSubordinateIds(req.user.id);
+      isManagerOfRep = subs.includes(existing.assignedRepId);
+    }
+    if (!isAdmin && !isAssignedRep && !isManagerOfRep) {
+      return res.status(403).json({ message: 'لا تملك صلاحية الموافقة على هذا الحجز' });
+    }
+
+    const booking = await prisma.booking.update({
+      where: { id },
+      data: { status: 'pending_reservations' },
+      include: bookingInclude,
+    });
+
+    await prisma.bookingChangeLog.create({
+      data: {
+        bookingId: booking.id,
+        changedById: req.user.id,
+        action: 'sales_approve_request',
+        reason: 'موافقة المندوب على طلب الحجز',
+        changesJson: JSON.stringify({ status: { from: 'pending_sales_approval', to: 'pending_reservations' } }),
+        fieldsList: 'status',
+      },
+    });
+
+    // Notify reservations team now that the request is theirs to handle.
+    const reservationsUsers = await prisma.user.findMany({
+      where: { role: 'reservations', isActive: true },
+      select: { id: true },
+    });
+    for (const u of reservationsUsers) {
+      await prisma.notification.create({
+        data: {
+          userId: u.id,
+          type: 'booking_request',
+          title: 'طلب حجز جديد للمراجعة',
+          message: `${existing.client?.companyName || 'عميل'} — حجز بانتظار التأكيد في أوبرا (الضيف: ${booking.guestName})`,
+          link: `/bookings`,
+        },
+      });
+    }
+
+    await prisma.activity.create({
+      data: {
+        clientId: booking.clientId,
+        userId: req.user.id,
+        type: 'booking_sales_approved',
+        description: `وافق على طلب حجز من البورتال للضيف ${booking.guestName} — تم تحويله لفريق الحجوزات`,
+      },
+    });
+
+    res.json(booking);
+  } catch (err) {
+    console.error('approveSalesRequest error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// POST /bookings/:id/reject-request — assigned sales rep rejects a portal-
+// submitted booking. Sets status to cancelled with the rep's reason.
+const rejectSalesRequest = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const reason = String(req.body?.reason || '').trim();
+    if (!reason) return res.status(400).json({ message: 'سبب الرفض مطلوب' });
+
+    const existing = await prisma.booking.findUnique({ where: { id }, include: { client: { select: { companyName: true } } } });
+    if (!existing) return res.status(404).json({ message: 'Booking not found' });
+    if (existing.status !== 'pending_sales_approval') {
+      return res.status(400).json({ message: 'الحجز ليس بانتظار موافقة المندوب' });
+    }
+    const isAdmin = ['admin', 'general_manager', 'vice_gm'].includes(req.user.role);
+    const isAssignedRep = existing.assignedRepId === req.user.id;
+    let isManagerOfRep = false;
+    if (req.user.role === 'sales_director') {
+      const subs = await getSubordinateIds(req.user.id);
+      isManagerOfRep = subs.includes(existing.assignedRepId);
+    }
+    if (!isAdmin && !isAssignedRep && !isManagerOfRep) {
+      return res.status(403).json({ message: 'لا تملك صلاحية رفض هذا الحجز' });
+    }
+
+    const booking = await prisma.booking.update({
+      where: { id },
+      data: {
+        status: 'cancelled',
+        cancelledAt: new Date(),
+        cancelledById: req.user.id,
+        cancellationReason: reason,
+      },
+      include: bookingInclude,
+    });
+
+    await prisma.bookingChangeLog.create({
+      data: {
+        bookingId: booking.id,
+        changedById: req.user.id,
+        action: 'sales_reject_request',
+        reason,
+        changesJson: JSON.stringify({ status: { from: 'pending_sales_approval', to: 'cancelled' } }),
+        fieldsList: 'status',
+      },
+    });
+
+    await prisma.activity.create({
+      data: {
+        clientId: booking.clientId,
+        userId: req.user.id,
+        type: 'booking_sales_rejected',
+        description: `رفض طلب حجز من البورتال للضيف ${booking.guestName}. السبب: ${reason}`,
+      },
+    });
+
+    res.json(booking);
+  } catch (err) {
+    console.error('rejectSalesRequest error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // GET /bookings/:id/history
 const getBookingHistory = async (req, res) => {
   try {
@@ -638,4 +775,6 @@ module.exports = {
   extractFromLetter,
   getBookingHistory,
   confirmPendingRequest,
+  approveSalesRequest,
+  rejectSalesRequest,
 };

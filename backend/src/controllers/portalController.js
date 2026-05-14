@@ -487,7 +487,10 @@ const requestBooking = async (req, res) => {
         currency: 'SAR',
         paymentMethod: paymentMethod || null,
         source: 'portal',
-        status: 'pending_reservations',
+        // Portal-submitted bookings now sit in the assigned sales rep's
+        // queue first; once the rep approves, the booking flips to
+        // pending_reservations and is released to the reservations team.
+        status: 'pending_sales_approval',
         notes: notes ? String(notes).trim() : null,
         guests: {
           create: normalizedGuests.map((g, i) => ({
@@ -500,29 +503,15 @@ const requestBooking = async (req, res) => {
       select: { ...bookingPortalSelect, guests: { select: { id: true, name: true, nationality: true, isPrimary: true } } },
     });
 
-    // Notify reservations team
-    const reservationsUsers = await prisma.user.findMany({
-      where: { role: 'reservations', isActive: true },
-      select: { id: true },
-    });
-    for (const u of reservationsUsers) {
-      await prisma.notification.create({
-        data: {
-          userId: u.id,
-          type: 'booking_request',
-          title: 'طلب حجز جديد من العميل',
-          message: `${req.client.companyName} طلبت حجز ${rooms} غرفة من ${arr.toLocaleDateString('ar-EG')} إلى ${dep.toLocaleDateString('ar-EG')} - الضيف: ${booking.guestName}`,
-          link: `/bookings`,
-        },
-      });
-    }
-    // Also notify the assigned rep
+    // Notify ONLY the assigned sales rep — they have to approve before the
+    // booking is released to the reservations team. The reservations team
+    // gets a separate notification later, in approveRequest.
     await prisma.notification.create({
       data: {
         userId: req.client.salesRepId,
-        type: 'booking_request',
-        title: 'طلب حجز من عميلك',
-        message: `${req.client.companyName} قدّمت طلب حجز عبر البورتال`,
+        type: 'booking_pending_sales_approval',
+        title: 'حجز جديد بانتظار موافقتك',
+        message: `${req.client.companyName} قدّمت طلب حجز عبر البورتال (${rooms} غرفة، ${nights} ليالي، الضيف: ${booking.guestName})`,
         link: `/bookings`,
       },
     });
