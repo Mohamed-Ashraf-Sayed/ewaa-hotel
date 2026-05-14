@@ -200,7 +200,7 @@ export interface Activity {
   user?: { id: number; name: string; role: Role };
 }
 
-export type BookingStatus = 'pending_sales_approval' | 'pending_reservations' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled' | 'no_show';
+export type BookingStatus = 'pending_reservations' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled' | 'no_show';
 export type BookingSource = 'outlook' | 'phone' | 'walk_in' | 'portal' | 'other';
 
 export interface Booking {

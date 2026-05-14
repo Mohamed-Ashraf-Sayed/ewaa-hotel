@@ -12,18 +12,15 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { format, parseISO } from 'date-fns';
 import { arSA, enUS } from 'date-fns/locale';
 
-type Tab = 'sales_pending' | 'pending' | 'all' | 'upcoming' | 'today' | 'in_house' | 'cancelled';
+type Tab = 'pending' | 'all' | 'upcoming' | 'today' | 'in_house' | 'cancelled';
 
 export default function Bookings() {
   const { lang } = useLanguage();
-  const { user, hasRole } = useAuth();
+  const { hasRole } = useAuth();
   const isAr = lang === 'ar';
   const locale = isAr ? arSA : enUS;
 
   const canManage = hasRole('reservations', 'admin', 'general_manager', 'vice_gm');
-  // Sales reps and their managers can approve / reject the portal requests
-  // sitting in their queue. Admins always can.
-  const canApprove = hasRole('sales_rep', 'assistant_sales', 'sales_director', 'admin', 'general_manager', 'vice_gm');
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [hotels, setHotels] = useState<Hotel[]>([]);
@@ -37,8 +34,6 @@ export default function Bookings() {
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
   const [historyTarget, setHistoryTarget] = useState<Booking | null>(null);
   const [confirmRequestTarget, setConfirmRequestTarget] = useState<Booking | null>(null);
-  const [rejectTarget, setRejectTarget] = useState<Booking | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -64,19 +59,17 @@ export default function Bookings() {
 
   const counts = useMemo(() => {
     const all = bookings.length;
-    const salesPending = bookings.filter(b => b.status === 'pending_sales_approval').length;
     const pending = bookings.filter(b => b.status === 'pending_reservations').length;
     const upcoming = bookings.filter(b => b.status === 'confirmed' && new Date(b.arrivalDate) >= tomorrow).length;
     const todayCount = bookings.filter(b => b.status !== 'cancelled' && b.status !== 'checked_out' && new Date(b.arrivalDate).toDateString() === today.toDateString()).length;
     const inHouse = bookings.filter(b => b.status === 'checked_in').length;
     const cancelled = bookings.filter(b => b.status === 'cancelled').length;
-    return { all, sales_pending: salesPending, pending, upcoming, today: todayCount, in_house: inHouse, cancelled };
+    return { all, pending, upcoming, today: todayCount, in_house: inHouse, cancelled };
   }, [bookings]);
 
   const visible = useMemo(() => {
     let list = bookings;
-    if (tab === 'sales_pending') list = list.filter(b => b.status === 'pending_sales_approval');
-    else if (tab === 'pending') list = list.filter(b => b.status === 'pending_reservations');
+    if (tab === 'pending') list = list.filter(b => b.status === 'pending_reservations');
     else if (tab === 'upcoming') list = list.filter(b => b.status === 'confirmed' && new Date(b.arrivalDate) >= tomorrow);
     else if (tab === 'today') list = list.filter(b => b.status !== 'cancelled' && b.status !== 'checked_out' && new Date(b.arrivalDate).toDateString() === today.toDateString());
     else if (tab === 'in_house') list = list.filter(b => b.status === 'checked_in');
@@ -86,7 +79,6 @@ export default function Bookings() {
 
   const StatusBadge = ({ status }: { status: BookingStatus }) => {
     const map: Record<BookingStatus, { ar: string; en: string; cls: string }> = {
-      pending_sales_approval: { ar: 'بانتظار موافقة المندوب', en: 'Awaiting Sales Approval', cls: 'bg-purple-50 text-purple-700 border-purple-200' },
       pending_reservations: { ar: 'قيد المراجعة', en: 'Pending Review', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
       confirmed: { ar: 'مؤكد', en: 'Confirmed', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
       checked_in: { ar: 'داخل الفندق', en: 'Checked-in', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -122,32 +114,6 @@ export default function Bookings() {
       await load();
     } catch (err: any) {
       alert(err?.response?.data?.message || (isAr ? 'فشل التحديث' : 'Failed'));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const approveSalesRequest = async (b: Booking) => {
-    setBusy(b.id);
-    try {
-      await bookingsApi.approveRequest(b.id);
-      await load();
-    } catch (err: any) {
-      alert(err?.response?.data?.message || (isAr ? 'فشل الموافقة' : 'Failed to approve'));
-    } finally {
-      setBusy(null);
-    }
-  };
-  const submitRejectSalesRequest = async () => {
-    if (!rejectTarget || !rejectReason.trim()) return;
-    setBusy(rejectTarget.id);
-    try {
-      await bookingsApi.rejectRequest(rejectTarget.id, rejectReason.trim());
-      setRejectTarget(null);
-      setRejectReason('');
-      await load();
-    } catch (err: any) {
-      alert(err?.response?.data?.message || (isAr ? 'فشل الرفض' : 'Failed to reject'));
     } finally {
       setBusy(null);
     }
@@ -196,9 +162,6 @@ export default function Bookings() {
 
       {/* Tabs */}
       <div className="border-b border-brand-200 flex gap-2 overflow-x-auto">
-        {canApprove && (
-          <TabBtn id="sales_pending" label={isAr ? 'بانتظار موافقتي' : 'Awaiting My Approval'} count={counts.sales_pending} />
-        )}
         <TabBtn id="pending" label={isAr ? 'قيد المراجعة' : 'Pending Review'} count={counts.pending} />
         <TabBtn id="all" label={isAr ? 'الكل' : 'All'} count={counts.all} />
         <TabBtn id="upcoming" label={isAr ? 'القادمة' : 'Upcoming'} count={counts.upcoming} />
@@ -269,33 +232,6 @@ export default function Bookings() {
                     <p className="text-xs text-red-600 mt-2">{isAr ? 'سبب الإلغاء:' : 'Reason:'} {b.cancellationReason}</p>
                   )}
                 </div>
-
-                {/* Approve/Reject — visible to the assigned rep, their
-                    manager, or admin while the booking still needs sales
-                    sign-off. Lives outside the canManage gate because
-                    sales reps aren't part of the reservations team. */}
-                {b.status === 'pending_sales_approval' && canApprove
-                    && (b.assignedRepId === user?.id || hasRole('admin', 'general_manager', 'vice_gm', 'sales_director')) && (
-                  <div className={`flex items-center gap-1.5 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
-                    <button
-                      className="px-2.5 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1 disabled:opacity-60"
-                      disabled={busy === b.id}
-                      onClick={() => approveSalesRequest(b)}
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" /> {isAr ? 'موافقة وتحويل للحجوزات' : 'Approve & Send to Reservations'}
-                    </button>
-                    <button
-                      className="px-2.5 py-1.5 rounded-md text-xs font-semibold border border-red-300 text-red-700 hover:bg-red-50 flex items-center gap-1 disabled:opacity-60"
-                      disabled={busy === b.id}
-                      onClick={() => { setRejectTarget(b); setRejectReason(''); }}
-                    >
-                      <XCircle className="w-3.5 h-3.5" /> {isAr ? 'رفض' : 'Reject'}
-                    </button>
-                    <button className="btn-secondary text-xs py-1.5" onClick={() => setHistoryTarget(b)} title={isAr ? 'سجل التغييرات' : 'Change History'}>
-                      <History className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
 
                 {/* Actions */}
                 {canManage && (
@@ -371,40 +307,6 @@ export default function Bookings() {
         onClose={() => setConfirmRequestTarget(null)}
         onConfirmed={() => load()}
       />
-
-      {/* Reject portal request — small inline modal with mandatory reason. */}
-      {rejectTarget && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setRejectTarget(null)}>
-          <div className="bg-white rounded-xl shadow-elevated w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-brand-900 mb-2">
-              {isAr ? 'رفض طلب الحجز' : 'Reject Booking Request'}
-            </h3>
-            <p className="text-sm text-brand-500 mb-3">
-              {isAr ? `سيتم إلغاء الحجز للضيف "${rejectTarget.guestName}" وإبلاغ العميل بسبب الرفض.` : `Booking for "${rejectTarget.guestName}" will be cancelled and the client notified.`}
-            </p>
-            <label className="label">{isAr ? 'سبب الرفض' : 'Reason'} *</label>
-            <textarea
-              className="input resize-none"
-              rows={3}
-              value={rejectReason}
-              onChange={e => setRejectReason(e.target.value)}
-              placeholder={isAr ? 'اكتب سبب الرفض...' : 'Type the reason...'}
-            />
-            <div className="flex gap-2 mt-4">
-              <button className="btn-secondary flex-1" onClick={() => setRejectTarget(null)}>
-                {isAr ? 'إلغاء' : 'Cancel'}
-              </button>
-              <button
-                className="px-4 py-2 rounded-md text-sm font-semibold bg-red-600 hover:bg-red-700 text-white flex-1 disabled:opacity-60"
-                disabled={!rejectReason.trim() || busy === rejectTarget.id}
-                onClick={submitRejectSalesRequest}
-              >
-                {busy === rejectTarget.id ? (isAr ? 'جاري الرفض...' : 'Rejecting...') : (isAr ? 'تأكيد الرفض' : 'Confirm Reject')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

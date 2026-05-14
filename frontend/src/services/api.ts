@@ -327,6 +327,4 @@ export const bookingsApi = {
     if (file) fd.append('confirmationLetter', file);
     return api.post(`/bookings/${id}/confirm-request`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
-  approveRequest: (id: number) => api.post(`/bookings/${id}/approve-request`),
-  rejectRequest: (id: number, reason: string) => api.post(`/bookings/${id}/reject-request`, { reason }),
 };
