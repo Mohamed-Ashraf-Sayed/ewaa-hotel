@@ -142,6 +142,9 @@ export const pdfApi = {
 export const quotesApi = {
   listByClient: (clientId: number | string) => api.get(`/quotes/client/${clientId}`),
   downloadPdf: (quoteId: number | string) => api.get(`/quotes/${quoteId}/pdf`, { responseType: 'blob' }),
+  pendingApproval: () => api.get('/quotes/pending-approval'),
+  approve: (quoteId: number, note?: string) => api.post(`/quotes/${quoteId}/approve`, { note }),
+  reject: (quoteId: number, note: string) => api.post(`/quotes/${quoteId}/reject`, { note }),
 };
 
 // Notifications

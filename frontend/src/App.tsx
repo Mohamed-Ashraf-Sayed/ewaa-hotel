@@ -31,6 +31,7 @@ import OrgChart from './pages/OrgChart';
 import Chat from './pages/Chat';
 import Inbox from './pages/Inbox';
 import Bookings from './pages/Bookings';
+import Quotes from './pages/Quotes';
 import Marketing from './pages/Marketing';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -105,6 +106,7 @@ function AppRoutes() {
         <Route path="chat" element={<Chat />} />
         <Route path="inbox" element={<Inbox />} />
         <Route path="bookings" element={<Bookings />} />
+        <Route path="quotes" element={<Quotes />} />
         <Route path="marketing" element={<Marketing />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

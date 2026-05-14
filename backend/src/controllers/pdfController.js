@@ -376,6 +376,7 @@ const generateQuote = async (req, res) => {
             preparedByTitle,
             paymentTerms,
             arrivalDate,
+            status: 'pending_manager_approval',
           },
         });
         await prisma.activity.create({
@@ -384,10 +385,25 @@ const generateQuote = async (req, res) => {
             userId: req.user.id,
             type: 'quote_generated',
             description: hotel
-              ? `أنشأ عرض سعر ${ref} على ${hotel.name} بإجمالي ${grandTotal.toLocaleString('en-US')} ر.س`
-              : `أنشأ عرض سعر ${ref} بإجمالي ${grandTotal.toLocaleString('en-US')} ر.س`,
+              ? `أنشأ عرض سعر ${ref} على ${hotel.name} بإجمالي ${grandTotal.toLocaleString('en-US')} ر.س — بانتظار موافقة مدير المبيعات`
+              : `أنشأ عرض سعر ${ref} بإجمالي ${grandTotal.toLocaleString('en-US')} ر.س — بانتظار موافقة مدير المبيعات`,
           },
         }).catch(() => null);
+        // Notify the rep's manager so they can approve from the new tab.
+        try {
+          const rep = await prisma.user.findUnique({ where: { id: req.user.id }, select: { managerId: true, name: true } });
+          if (rep?.managerId) {
+            await prisma.notification.create({
+              data: {
+                userId: rep.managerId,
+                type: 'quote_pending_approval',
+                title: 'عرض سعر بانتظار موافقتك',
+                message: `${rep.name || 'مندوب'} أنشأ عرض سعر ${ref}${hotel ? ` على ${hotel.name}` : ''} بإجمالي ${grandTotal.toLocaleString('en-US')} ر.س`,
+                link: `/clients/${clientId}`,
+              },
+            });
+          }
+        } catch (_) { /* non-fatal */ }
       } catch (e) {
         // Don't fail the PDF response if persist fails — log and continue.
         console.error('[generateQuote] persist failed:', e.message);

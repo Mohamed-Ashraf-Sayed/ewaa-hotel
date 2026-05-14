@@ -83,6 +83,7 @@ model User {
   bookingChangesByMe BookingChangeLog[] @relation("BookingChangedBy")
   promotionsCreated Promotion[]  @relation("PromotionCreator")
   quotes            Quote[]
+  quotesApproved    Quote[]      @relation("QuoteApprover")
 }
 
 model Message {
@@ -273,6 +274,22 @@ model Quote {
   preparedByTitle String?  // job title the rep typed for this quote (free-text, not derived from role)
   paymentTerms    String?  // free-text payment installments the rep typed per quote
   arrivalDate     DateTime?  // optional arrival date the rep entered for this quote
+
+  // Approval workflow:
+  // pending_manager_approval (default for new quotes the rep creates)
+  //   → approved   (sales_director approved, visible to credit + reservations)
+  //   → rejected   (sales_director rejected with reason)
+  //   → closed     (a confirmed booking linked to this quote has finished —
+  //                  the client needs a fresh quote to book again)
+  status            String    @default("pending_manager_approval")
+  approvalNote      String?   // approver's note on approval/rejection
+  approvedById      Int?
+  approvedAt        DateTime?
+  closedAt          DateTime? // set when the linked booking's departure passes
+  linkedBookingId   Int?      // the confirmed booking that consumed this quote
+
+  approvedBy   User?    @relation("QuoteApprover", fields: [approvedById], references: [id])
+  linkedBooking Booking? @relation("QuoteLinkedBooking", fields: [linkedBookingId], references: [id])
 
   createdAt    DateTime @default(now())
 
@@ -574,6 +591,7 @@ model Booking {
   cancelledBy  User?     @relation("BookingCancelledBy", fields: [cancelledById], references: [id])
   changeLogs   BookingChangeLog[]
   guests       BookingGuest[]
+  fundingQuotes Quote[]  @relation("QuoteLinkedBooking")
 
   @@index([clientId])
   @@index([hotelId])

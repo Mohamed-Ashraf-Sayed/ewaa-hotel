@@ -18,6 +18,7 @@ const translations = {
   nav_org_chart: { ar: 'الهيكل التنظيمي', en: 'Org Chart' },
   nav_chat: { ar: 'المحادثات', en: 'Chat' },
   nav_bookings: { ar: 'الحجوزات', en: 'Bookings' },
+  nav_quotes: { ar: 'عروض الأسعار', en: 'Quotes' },
   nav_marketing: { ar: 'العروض التسويقية', en: 'Marketing' },
   nav_inbox: { ar: 'الوارد', en: 'Inbox' },
 

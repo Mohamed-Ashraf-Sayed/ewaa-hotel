@@ -909,6 +909,7 @@ export default function ClientDetail() {
                 <thead className="bg-brand-50 text-brand-600">
                   <tr>
                     <th className="px-3 py-2 font-semibold">{isAr ? 'المرجع' : 'Reference'}</th>
+                    <th className="px-3 py-2 font-semibold">{isAr ? 'الحالة' : 'Status'}</th>
                     <th className="px-3 py-2 font-semibold">{isAr ? 'الفندق' : 'Hotel'}</th>
                     <th className="px-3 py-2 font-semibold">{isAr ? 'المندوب' : 'Sales Rep'}</th>
                     <th className="px-3 py-2 font-semibold">{isAr ? 'الإجمالي' : 'Total'}</th>
@@ -920,9 +921,24 @@ export default function ClientDetail() {
                 <tbody>
                   {quotes.map((q: any) => {
                     const expired = q.validUntil ? new Date(q.validUntil) < new Date() : false;
+                    const QUOTE_STATUS_MAP: Record<string, { ar: string; en: string; cls: string }> = {
+                      pending_manager_approval: { ar: 'بانتظار موافقة المدير', en: 'Awaiting Manager', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+                      approved: { ar: 'معتمد', en: 'Approved', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                      rejected: { ar: 'مرفوض', en: 'Rejected', cls: 'bg-red-50 text-red-700 border-red-200' },
+                      closed: { ar: 'مُغلق', en: 'Closed', cls: 'bg-brand-100 text-brand-600 border-brand-200' },
+                    };
+                    const sInfo = QUOTE_STATUS_MAP[q.status] || QUOTE_STATUS_MAP.approved;
                     return (
                       <tr key={q.id} className="border-t border-brand-100 hover:bg-brand-50/40">
                         <td className="px-3 py-2 font-mono text-brand-900">{q.reference}</td>
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] ${sInfo.cls}`}>
+                            {isAr ? sInfo.ar : sInfo.en}
+                          </span>
+                          {q.approvalNote && (
+                            <div className="text-[10px] text-brand-400 mt-0.5 truncate max-w-[180px]" title={q.approvalNote}>{q.approvalNote}</div>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-brand-700">{q.hotelName || '—'}</td>
                         <td className="px-3 py-2 text-brand-700">{q.salesRepName || '—'}</td>
                         <td className="px-3 py-2 font-semibold text-brand-900">
