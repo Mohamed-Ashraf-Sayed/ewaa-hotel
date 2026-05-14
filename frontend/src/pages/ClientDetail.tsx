@@ -106,7 +106,7 @@ export default function ClientDetail() {
   const [emailFiles, setEmailFiles] = useState<File[]>([]);
   const [emailSending, setEmailSending] = useState(false);
   const [quoteItems, setQuoteItems] = useState([{ description: '', roomType: '', nights: '', rooms: '', ratePerNight: '' }]);
-  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en', meals: 'breakfast' as 'none' | 'breakfast' | 'lunch' | 'dinner' | 'full_board', preparedByTitle: '' });
+  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en', meals: 'breakfast' as 'none' | 'breakfast' | 'lunch' | 'dinner' | 'full_board', preparedByTitle: '', paymentTerms: '' });
   const [quoteHotelId, setQuoteHotelId] = useState<number | null>(null);
   const [hotelSearch, setHotelSearch] = useState('');
   const [showHotelDropdown, setShowHotelDropdown] = useState(false);
@@ -1291,6 +1291,7 @@ export default function ClientDetail() {
               lang: quoteForm.lang,
               meals: quoteForm.meals,
               preparedByTitle: quoteForm.preparedByTitle,
+              paymentTerms: quoteForm.paymentTerms,
             });
             const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
             const a = document.createElement('a'); a.href = url;
@@ -1527,6 +1528,14 @@ export default function ClientDetail() {
                 placeholder="0" value={quoteForm.municipalityTaxPercent}
                 onChange={e => setQuoteForm(p => ({ ...p, municipalityTaxPercent: e.target.value }))} />
             </div>
+          </div>
+          <div>
+            <label className="label">
+              {isAr ? 'دفعات السداد (تظهر في قسم الدفعات بالـ PDF)' : 'Payment Terms (shown in the PDF Payments section)'}
+            </label>
+            <textarea className="input resize-none" rows={3} value={quoteForm.paymentTerms}
+              placeholder={isAr ? 'مثال:\nيتم سداد 50% من إجمالي مبلغ المجموعة بعد توقيع هذا العرض.\nيتم سداد المبلغ المتبقي مع كشف الإقامة قبل الوصول بـ 3 أيام.' : 'e.g. 50% on signing, balance with rooming list 3 days before arrival.'}
+              onChange={e => setQuoteForm(p => ({ ...p, paymentTerms: e.target.value }))} />
           </div>
           <div>
             <label className="label">{isAr ? 'ملاحظات وشروط إضافية' : 'Additional Notes & Terms'}</label>

@@ -316,9 +316,11 @@ const QUOTE_T = {
 const generateQuote = async (req, res) => {
   try {
     const { clientId, hotelId, items, validDays, notes, companyName, contactPerson,
-      municipalityTaxPercent, lang, meals: mealsRaw, preparedByTitle: titleRaw } = req.body;
+      municipalityTaxPercent, lang, meals: mealsRaw, preparedByTitle: titleRaw,
+      paymentTerms: paymentTermsRaw } = req.body;
     const meals = ['none','breakfast','lunch','dinner','full_board'].includes(mealsRaw) ? mealsRaw : 'breakfast';
     const preparedByTitle = (titleRaw || '').toString().trim().slice(0, 80) || null;
+    const paymentTerms = (paymentTermsRaw || '').toString().trim().slice(0, 2000) || null;
     // Pick language: 'ar' uses Cairo font + RTL alignment; everything else stays English.
     const isAr = lang === 'ar';
     const t = isAr ? QUOTE_T.ar : QUOTE_T.en;
@@ -371,6 +373,7 @@ const generateQuote = async (req, res) => {
             lang: isAr ? 'ar' : 'en',
             meals,
             preparedByTitle,
+            paymentTerms,
           },
         });
         await prisma.activity.create({
@@ -419,6 +422,7 @@ const generateQuote = async (req, res) => {
         preparedByName: req.user?.name || '',
         preparedByTitle: preparedByTitle || '',
         preparedByPhone,
+        paymentTerms,
       });
       const footerHtml = renderQuoteFooterHtml();
 

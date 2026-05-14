@@ -78,8 +78,6 @@ const T = {
   otherConditions: 'شروط أخرى',
   otherText: 'يخضع تنفيذ هذه الاتفاقية للإنهاء دون أي مسؤولية عند حدوث أي ظرف خارج عن إرادة الطرفين — كالكوارث الطبيعية والحرب والإرهاب والأنظمة الحكومية والإضرابات والاضطرابات المدنية أو تعليق وسائل النقل — إلى الحد الذي يجعل تقديم خدمات الفندق أو استخدامها غير ممكن. يشترط لإنهاء الاتفاقية بموجب هذه الفقرة تسليم إشعار مكتوب للطرف الآخر يوضح أساس الإنهاء في أقرب وقت ممكن، وبما لا يتجاوز 10 أيام من علم الطرف بالظرف.',
   payments: 'الدفعات',
-  pay1: 'يتم سداد 50% من إجمالي مبلغ المجموعة بعد توقيع هذا العرض.',
-  pay2: 'يتم سداد المبلغ المتبقي مع كشف الإقامة (Rooming List) قبل الوصول بـ 3 أيام.',
   bankAccount: 'بيانات الحساب البنكي',
   bankNameLabel: 'اسم البنك',
   beneficiaryLabel: 'اسم المستفيد',
@@ -123,6 +121,7 @@ const renderQuoteHtmlAr = ({
   preparedByName,
   preparedByTitle,
   preparedByPhone,
+  paymentTerms,
 }) => {
   const hotelName = hotel?.name || hotel?.nameEn || 'فنادق إيواء';
   const recipientCompany = companyName || client?.companyName || '-';
@@ -445,13 +444,11 @@ const renderQuoteHtmlAr = ({
     <p>${T.otherText}</p>
   </div>
 
+  ${(paymentTerms || '').toString().trim() ? `
   <div class="section">
     <h2>${T.payments}</h2>
-    <ul class="bullets">
-      <li>${T.pay1}</li>
-      <li>${T.pay2}</li>
-    </ul>
-  </div>
+    <p style="white-space:pre-wrap;">${escapeHtml(paymentTerms)}</p>
+  </div>` : ''}
 
   <div class="section">
     <h2>${T.bankAccount}</h2>
