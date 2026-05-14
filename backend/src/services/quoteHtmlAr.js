@@ -262,6 +262,11 @@ const renderQuoteHtmlAr = ({
 
   .section {
     margin: 10px 0;
+    /* Don't split a section across pages when there's enough room for it
+       to fit as a whole — keeps the title attached to its body and stops
+       trailing sentences from landing on a page by themselves. */
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
   .section h2 {
     color: #0f4c81;
@@ -270,11 +275,25 @@ const renderQuoteHtmlAr = ({
     font-weight: 700;
     border-bottom: 1px dashed #cbd5e1;
     padding-bottom: 2px;
+    /* Keep the heading with its first paragraph. */
+    page-break-after: avoid;
+    break-after: avoid;
   }
-  .section p { margin: 4px 0; text-align: justify; font-size: 10pt; }
+  .section p {
+    margin: 4px 0;
+    text-align: justify;
+    font-size: 10pt;
+    /* Same: never split a single paragraph across pages. */
+    page-break-inside: avoid;
+    break-inside: avoid;
+    orphans: 3;
+    widows: 3;
+  }
   ul.bullets {
     margin: 4px 0;
     padding-right: 18px;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
   ul.bullets li { margin: 3px 0; font-size: 10pt; }
 
