@@ -47,7 +47,7 @@ const T = {
   reference: 'المرجع', date: 'التاريخ', validUntil: 'صالح حتى', preparedBy: 'أُعدّ بواسطة',
   arrivalDate: 'تاريخ الوصول',
   company: 'الشركة', contact: 'جهة الاتصال', phone: 'الهاتف', email: 'البريد الإلكتروني',
-  descRoom: 'الوصف / نوع الغرفة', rooms: 'الغرف', nights: 'الليالي',
+  descRoom: 'الوصف', roomType: 'نوع الغرفة', rooms: 'الغرف', nights: 'الليالي',
   rateNight: 'السعر / ليلة (ر.س)', totalCol: 'الإجمالي (ر.س)',
   subtotal: 'المجموع الفرعي', vat: 'ضريبة القيمة المضافة (15%)', municipalityTax: 'رسوم البلدية', grandTotal: 'الإجمالي النهائي',
   sar: 'ر.س',
@@ -140,7 +140,8 @@ const renderQuoteHtmlAr = ({
 
   const itemRows = items.map((it) => `
       <tr>
-        <td class="td-desc">${escapeHtml(it.description || '')}${it.roomType ? ' / ' + escapeHtml(it.roomType) : ''}</td>
+        <td class="td-desc">${escapeHtml(it.description || '')}</td>
+        <td>${escapeHtml(it.roomType || '-')}</td>
         <td>${it.rooms || 0}</td>
         <td>${it.nights || 0}</td>
         <td>${formatNum(it.rate)}</td>
@@ -391,6 +392,7 @@ const renderQuoteHtmlAr = ({
     <thead>
       <tr>
         <th>${T.descRoom}</th>
+        <th>${T.roomType}</th>
         <th>${T.rooms}</th>
         <th>${T.nights}</th>
         <th>${T.rateNight}</th>

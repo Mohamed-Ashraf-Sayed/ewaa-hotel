@@ -195,7 +195,7 @@ const QUOTE_T = {
     clientDetails: 'Client Details',
     reference: 'Reference', date: 'Date', validUntil: 'Valid Until', preparedBy: 'Prepared By',
     company: 'Company', contact: 'Contact', phone: 'Phone', email: 'Email',
-    descRoom: 'Description / Room Type', rooms: 'Rooms', nights: 'Nights',
+    descRoom: 'Description', roomType: 'Room Type', rooms: 'Rooms', nights: 'Nights',
     rateNight: 'Rate/Night (SAR)', totalCol: 'Total (SAR)',
     subtotal: 'Subtotal', vat: 'VAT (15%)', municipalityTax: 'Municipality Tax', grandTotal: 'Grand Total',
     sar: 'SAR', notesTerms: 'Notes & Terms',
@@ -256,7 +256,7 @@ const QUOTE_T = {
     clientDetails: 'بيانات العميل',
     reference: 'المرجع', date: 'التاريخ', validUntil: 'صالح حتى', preparedBy: 'أُعدّ بواسطة',
     company: 'الشركة', contact: 'جهة الاتصال', phone: 'الهاتف', email: 'البريد الإلكتروني',
-    descRoom: 'الوصف / نوع الغرفة', rooms: 'الغرف', nights: 'الليالي',
+    descRoom: 'الوصف', roomType: 'نوع الغرفة', rooms: 'الغرف', nights: 'الليالي',
     rateNight: 'السعر / ليلة (ر.س)', totalCol: 'الإجمالي (ر.س)',
     subtotal: 'المجموع الفرعي', vat: 'ضريبة القيمة المضافة (15%)', municipalityTax: 'رسوم البلدية', grandTotal: 'الإجمالي النهائي',
     sar: 'ر.س', notesTerms: 'ملاحظات وشروط',
@@ -557,24 +557,24 @@ const generateQuote = async (req, res) => {
     infoStyle(t.email, client?.email || '-', clientColX, y);
     y += 25;
 
-    // Items table — Arabic flips the entire column order so reading right
-    // to left gives: Total → Rate → Nights → Rooms → Description.
+    // Items table — Room Type is its own column now (was glued to the
+    // description). Arabic flips the entire column order so reading right
+    // to left gives: Total → Rate → Nights → Rooms → Room Type → Description.
     if (parsedItems.length > 0) {
-      const widthsEn = [190, 60, 60, 80, 125];
-      const headersEn = [t.descRoom, t.rooms, t.nights, t.rateNight, t.totalCol];
-      const alignsEn  = ['left', 'center', 'center', 'right', 'right'];
+      const widthsEn  = [140, 80, 50, 50, 75, 120];
+      const headersEn = [t.descRoom, t.roomType, t.rooms, t.nights, t.rateNight, t.totalCol];
+      const alignsEn  = ['left', 'left', 'center', 'center', 'right', 'right'];
       const widths  = isAr ? [...widthsEn].reverse()  : widthsEn;
       const headers = isAr ? [...headersEn].reverse() : headersEn;
-      const headerAligns = isAr ? ['right', 'center', 'center', 'center', 'right'] : alignsEn;
-      const bodyAligns   = isAr ? ['right', 'center', 'center', 'center', 'right'] : alignsEn;
+      const headerAligns = isAr ? ['right', 'center', 'center', 'center', 'right', 'right'] : alignsEn;
+      const bodyAligns   = isAr ? ['right', 'center', 'center', 'center', 'right', 'right'] : alignsEn;
       y = drawRow(doc, y, headers, widths, {
         bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24,
         aligns: headerAligns,
       });
 
       parsedItems.forEach((item, i) => {
-        const desc = item.description + (item.roomType ? ` - ${item.roomType}` : '');
-        const rowEn = [desc, item.rooms, item.nights, formatNum(item.rate), formatNum(item.total)];
+        const rowEn = [item.description, item.roomType || '-', item.rooms, item.nights, formatNum(item.rate), formatNum(item.total)];
         const row = isAr ? [...rowEn].reverse() : rowEn;
         y = drawRow(doc, y, row, widths, {
           bg: i % 2 === 0 ? BG : null,
