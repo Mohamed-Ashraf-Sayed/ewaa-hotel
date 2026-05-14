@@ -78,6 +78,7 @@ router.get('/:id/pdf', authenticate, async (req, res) => {
       meals: quote.meals,
       preparedByTitle: quote.preparedByTitle,
       paymentTerms: quote.paymentTerms,
+      arrivalDate: quote.arrivalDate,
       companyName: quote.client?.companyName,
       contactPerson: quote.client?.contactPerson,
     };

@@ -45,6 +45,7 @@ const T = {
   quoteDetails: 'بيانات عرض السعر',
   clientDetails: 'بيانات العميل',
   reference: 'المرجع', date: 'التاريخ', validUntil: 'صالح حتى', preparedBy: 'أُعدّ بواسطة',
+  arrivalDate: 'تاريخ الوصول',
   company: 'الشركة', contact: 'جهة الاتصال', phone: 'الهاتف', email: 'البريد الإلكتروني',
   descRoom: 'الوصف / نوع الغرفة', rooms: 'الغرف', nights: 'الليالي',
   rateNight: 'السعر / ليلة (ر.س)', totalCol: 'الإجمالي (ر.س)',
@@ -122,6 +123,7 @@ const renderQuoteHtmlAr = ({
   preparedByTitle,
   preparedByPhone,
   paymentTerms,
+  arrivalDate,
 }) => {
   const hotelName = hotel?.name || hotel?.nameEn || 'فنادق إيواء';
   const recipientCompany = companyName || client?.companyName || '-';
@@ -371,6 +373,7 @@ const renderQuoteHtmlAr = ({
       <h3>${T.quoteDetails}</h3>
       <div class="info-line"><span class="lbl">${T.reference}:</span><span class="val">${escapeHtml(ref)}</span></div>
       <div class="info-line"><span class="lbl">${T.date}:</span><span class="val">${todayStr}</span></div>
+      ${arrivalDate ? `<div class="info-line"><span class="lbl">${T.arrivalDate}:</span><span class="val">${formatDateAr(arrivalDate)}</span></div>` : ''}
       <div class="info-line"><span class="lbl">${T.validUntil}:</span><span class="val">${validStr}</span></div>
       <div class="info-line"><span class="lbl">${T.preparedBy}:</span><span class="val">${escapeHtml(repName)}${repTitle ? ' — ' + escapeHtml(repTitle) : ''}</span></div>
     </div>

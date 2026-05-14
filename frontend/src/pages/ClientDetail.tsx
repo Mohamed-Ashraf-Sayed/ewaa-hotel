@@ -106,7 +106,7 @@ export default function ClientDetail() {
   const [emailFiles, setEmailFiles] = useState<File[]>([]);
   const [emailSending, setEmailSending] = useState(false);
   const [quoteItems, setQuoteItems] = useState([{ description: '', roomType: '', nights: '', rooms: '', ratePerNight: '' }]);
-  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en', meals: 'breakfast' as 'none' | 'breakfast' | 'lunch' | 'dinner' | 'full_board', preparedByTitle: '', paymentTerms: '' });
+  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en', meals: 'breakfast' as 'none' | 'breakfast' | 'lunch' | 'dinner' | 'full_board', preparedByTitle: '', paymentTerms: '', arrivalDate: '' });
   const [quoteHotelId, setQuoteHotelId] = useState<number | null>(null);
   const [hotelSearch, setHotelSearch] = useState('');
   const [showHotelDropdown, setShowHotelDropdown] = useState(false);
@@ -1292,6 +1292,7 @@ export default function ClientDetail() {
               meals: quoteForm.meals,
               preparedByTitle: quoteForm.preparedByTitle,
               paymentTerms: quoteForm.paymentTerms,
+              arrivalDate: quoteForm.arrivalDate || null,
             });
             const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
             const a = document.createElement('a'); a.href = url;
@@ -1516,7 +1517,12 @@ export default function ClientDetail() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="label">{isAr ? 'تاريخ الوصول' : 'Arrival Date'}</label>
+              <input className="input" type="date" value={quoteForm.arrivalDate}
+                onChange={e => setQuoteForm(p => ({ ...p, arrivalDate: e.target.value }))} />
+            </div>
             <div>
               <label className="label">{isAr ? 'صلاحية العرض (أيام)' : 'Valid for (days)'}</label>
               <input className="input" type="number" min="1" value={quoteForm.validDays}

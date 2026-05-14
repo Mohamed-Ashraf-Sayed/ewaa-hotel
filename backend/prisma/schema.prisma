@@ -272,6 +272,7 @@ model Quote {
   meals        String   @default("breakfast")  // none | breakfast | lunch | dinner | full_board
   preparedByTitle String?  // job title the rep typed for this quote (free-text, not derived from role)
   paymentTerms    String?  // free-text payment installments the rep typed per quote
+  arrivalDate     DateTime?  // optional arrival date the rep entered for this quote
 
   createdAt    DateTime @default(now())
 
