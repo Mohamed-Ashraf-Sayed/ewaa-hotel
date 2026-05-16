@@ -219,8 +219,14 @@ const approveContract = async (req, res) => {
     // Step 3: contract_officer approves credit_approved → contract_approved
     // Step 4: vice_gm approves contract_approved → approved (final)
     // GM/Admin can approve at any stage directly
+    //
+    // Cash short-circuit: when paymentMethod is 'cash', there's no credit
+    // exposure so credit/contracts/vp gates add no value — the sales
+    // director's approval becomes final, and the contract pops directly
+    // into reservations / contracts officer / credit / vp listings.
     let newStatus = status;
     const role = req.user.role;
+    const isCashContract = current.paymentMethod === 'cash';
 
     if (status === 'approved') {
       if (role === 'general_manager' || role === 'admin') {
@@ -229,7 +235,7 @@ const approveContract = async (req, res) => {
         if (current.status !== 'pending') {
           return res.status(400).json({ message: 'العقد ليس في حالة "في الانتظار"' });
         }
-        newStatus = 'sales_approved';
+        newStatus = isCashContract ? 'approved' : 'sales_approved';
       } else if (role === 'credit_manager') {
         if (current.status !== 'sales_approved') {
           return res.status(400).json({ message: 'العقد لم يحصل على موافقة مدير المبيعات بعد' });
