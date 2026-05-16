@@ -159,6 +159,28 @@ export default function PortalDashboard() {
               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
               نظرة شاملة لحسابك ومتابعة حجوزاتك
             </p>
+
+            {/* Sales rep contact — pinned to the top of the dashboard so the
+                client always knows who to call. Phone is a tel: link on
+                mobile. Falls back gracefully if no rep is assigned. */}
+            {client?.salesRep && (
+              <div className="mt-3 inline-flex items-center gap-2 flex-row-reverse bg-white/[0.08] backdrop-blur-sm rounded-xl border border-white/15 px-3 py-2 text-sm">
+                <span className="text-white/60 text-xs">مندوب المبيعات:</span>
+                <span className="font-semibold text-white">{client.salesRep.name}</span>
+                {client.salesRep.phone && (
+                  <>
+                    <span className="text-white/30">·</span>
+                    <a
+                      href={`tel:${client.salesRep.phone}`}
+                      dir="ltr"
+                      className="text-amber-300 hover:text-amber-200 font-mono tracking-wide"
+                    >
+                      {client.salesRep.phone}
+                    </a>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Quick stats inline */}
