@@ -47,7 +47,7 @@ export default function Users() {
     { value: 'marketing_manager', label: t('role_marketing_manager') },
   ];
 
-  const emptyForm = { name: '', email: '', password: '', role: 'sales_rep', managerId: '', phone: '', hotelIds: [] as string[] };
+  const emptyForm = { name: '', email: '', password: '', role: 'sales_rep', managerId: '', phone: '', title: '', hotelIds: [] as string[] };
   const [form, setForm] = useState(emptyForm);
 
   const loadUsers = () => {
@@ -63,6 +63,7 @@ export default function Users() {
       name: u.name, email: u.email, password: '',
       role: u.role, managerId: u.managerId?.toString() || '',
       phone: u.phone || '',
+      title: u.title || '',
       hotelIds: u.hotels?.map(h => h.hotel.id.toString()) || []
     });
     setShowModal(true);
@@ -72,9 +73,9 @@ export default function Users() {
     e.preventDefault(); setSaving(true);
     try {
       if (editUser) {
-        await usersApi.update(editUser.id, { name: form.name, email: form.email, role: form.role, phone: form.phone, managerId: form.managerId || null, hotelIds: form.hotelIds });
+        await usersApi.update(editUser.id, { name: form.name, email: form.email, role: form.role, phone: form.phone, title: form.title || null, managerId: form.managerId || null, hotelIds: form.hotelIds });
       } else {
-        await usersApi.create({ ...form, managerId: form.managerId || null });
+        await usersApi.create({ ...form, title: form.title || null, managerId: form.managerId || null });
       }
       setShowModal(false); loadUsers();
     } catch (err: any) {
@@ -148,6 +149,12 @@ export default function Users() {
                 </div>
                 <div className={isAr ? 'text-right' : 'text-left'}>
                   <p className="font-bold text-brand-900 text-sm">{u.name}</p>
+                  {/* Custom job title (e.g. "مدير التطوير") — shown on the
+                      card itself so admins see the real title, not just the
+                      permission-role group header above. */}
+                  {u.title && (
+                    <p className="text-[11px] font-semibold text-brand-600 mt-0.5">{u.title}</p>
+                  )}
                   <p className="text-xs text-brand-400 mt-0.5 dir-ltr">{u.email}</p>
                   {u.phone && <p className="text-xs text-brand-400 mt-0.5">{u.phone}</p>}
                   {u.manager && (
@@ -250,6 +257,21 @@ export default function Users() {
                   <option key={m.id} value={m.id}>{m.name} ({ROLES.find(r => r.value === m.role)?.label})</option>
                 ))}
               </select>
+            </div>
+            {/* Optional display title that overrides the role label on the
+                user's own screens (header / sidebar) and on their card here.
+                Permissions still come from `role`. */}
+            <div className="col-span-2">
+              <label className="label">
+                {lang === 'ar' ? 'المسمى الوظيفي (يظهر بدلاً من الدور)' : 'Job Title (overrides role label)'}
+              </label>
+              <input
+                className="input"
+                maxLength={80}
+                placeholder={lang === 'ar' ? 'مثال: مدير التطوير' : 'e.g. Development Manager'}
+                value={form.title}
+                onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+              />
             </div>
           </div>
           <div>

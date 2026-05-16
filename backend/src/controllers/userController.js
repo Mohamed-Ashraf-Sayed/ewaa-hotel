@@ -22,7 +22,7 @@ const getUsers = async (req, res) => {
     const users = await prisma.user.findMany({
       where: whereClause,
       select: {
-        id: true, name: true, email: true, role: true, phone: true,
+        id: true, name: true, email: true, role: true, title: true, phone: true,
         isActive: true, createdAt: true, managerId: true, commissionRate: true,
         manager: { select: { id: true, name: true, role: true } },
         hotels: { include: { hotel: { select: { id: true, name: true } } } },
@@ -38,7 +38,7 @@ const getUsers = async (req, res) => {
 
 const createUser = async (req, res) => {
   try {
-    const { name, email, password, role, managerId, phone, hotelIds } = req.body;
+    const { name, email, password, role, managerId, phone, title, hotelIds } = req.body;
     // Normalize email to lowercase so login is case-insensitive (stored emails are always lowercase)
     const emailNormalized = String(email || '').trim().toLowerCase();
     const exists = await prisma.user.findUnique({ where: { email: emailNormalized } });
@@ -49,6 +49,7 @@ const createUser = async (req, res) => {
         name, email: emailNormalized, password: hashed, role,
         managerId: managerId ? parseInt(managerId) : null,
         phone,
+        title: title || null,
         hotels: hotelIds?.length
           ? { create: hotelIds.map(id => ({ hotelId: parseInt(id) })) }
           : undefined
@@ -90,7 +91,7 @@ const updateCommissionRate = async (req, res) => {
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, role, managerId, phone, isActive, hotelIds } = req.body;
+    const { name, email, role, managerId, phone, title, isActive, hotelIds } = req.body;
     // Normalize email if changing it (stored emails are always lowercase for case-insensitive login)
     const emailNormalized = email !== undefined ? String(email).trim().toLowerCase() : undefined;
     const updated = await prisma.user.update({
@@ -99,6 +100,7 @@ const updateUser = async (req, res) => {
         name,
         ...(emailNormalized !== undefined && { email: emailNormalized }),
         role, phone, isActive,
+        ...(title !== undefined && { title: title || null }),
         managerId: managerId ? parseInt(managerId) : null,
         hotels: hotelIds !== undefined ? {
           deleteMany: {},
