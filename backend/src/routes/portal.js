@@ -7,6 +7,7 @@ const {
   getMe,
   getHotels,
   getContracts,
+  getMyApprovedQuotes,
   getMyBookings,
   getMyBooking,
   requestBooking,
@@ -68,6 +69,7 @@ router.post('/auth/verify-otp',  otpVerifyLimiter,  verifyOtp);
 router.get('/me',              portalAuth, readLimiter, getMe);
 router.get('/hotels',          portalAuth, readLimiter, getHotels);
 router.get('/contracts',       portalAuth, readLimiter, getContracts);
+router.get('/quotes',          portalAuth, readLimiter, getMyApprovedQuotes);
 router.get('/account-summary', portalAuth, readLimiter, getAccountSummary);
 router.get('/statement.pdf',   portalAuth, readLimiter, getStatementPdf);
 router.get('/bookings',        portalAuth, readLimiter, getMyBookings);

@@ -348,6 +348,58 @@ const getMyBooking = async (req, res) => {
   }
 };
 
+// GET /portal/quotes — approved, still-usable quotes the client can book against.
+// "Still-usable" = status approved AND validUntil in the future AND not yet
+// linked to a booking that has departed. Used by the portal booking form to
+// show the client whether they can submit a request at all.
+const getMyApprovedQuotes = async (req, res) => {
+  try {
+    // Sweep stale approved-but-departed quotes into 'closed' so the eligibility
+    // check below doesn't admit a quote whose linked booking already wrapped.
+    const stale = await prisma.quote.findMany({
+      where: {
+        status: 'approved',
+        linkedBookingId: { not: null },
+        linkedBooking: { departureDate: { lt: new Date() } },
+      },
+      select: { id: true },
+    });
+    if (stale.length > 0) {
+      await prisma.quote.updateMany({
+        where: { id: { in: stale.map(q => q.id) } },
+        data: { status: 'closed', closedAt: new Date() },
+      });
+    }
+
+    const quotes = await prisma.quote.findMany({
+      where: {
+        clientId: req.client.id,
+        status: 'approved',
+        validUntil: { gt: new Date() },
+        linkedBookingId: null,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, reference: true, hotelId: true, grandTotal: true,
+        validUntil: true, arrivalDate: true, createdAt: true,
+        hotel: { select: { name: true } },
+      },
+    });
+    res.json(quotes.map(q => ({
+      id: q.id,
+      reference: q.reference,
+      hotelId: q.hotelId,
+      hotelName: q.hotel?.name || null,
+      grandTotal: q.grandTotal,
+      validUntil: q.validUntil,
+      arrivalDate: q.arrivalDate,
+      createdAt: q.createdAt,
+    })));
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
 // POST /portal/bookings — submit a booking REQUEST (status = pending_reservations)
 const requestBooking = async (req, res) => {
   try {
@@ -460,6 +512,28 @@ const requestBooking = async (req, res) => {
       });
     }
 
+    // Eligibility gate: a portal booking requires EITHER an active contract
+    // OR an approved, still-usable quote. Without either, the client has to
+    // wait for sales to issue something first.
+    let linkedQuote = null;
+    if (!linkedContract) {
+      linkedQuote = await prisma.quote.findFirst({
+        where: {
+          clientId: req.client.id,
+          status: 'approved',
+          validUntil: { gt: new Date() },
+          linkedBookingId: null, // not yet consumed by another booking
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, reference: true },
+      });
+      if (!linkedQuote) {
+        return res.status(400).json({
+          message: 'لا يمكن إنشاء حجز — يجب أن يكون لديك عقد ساري أو عرض سعر معتمد ساري. تواصل مع المندوب لإصدار عرض سعر جديد.',
+        });
+      }
+    }
+
     const ratePerNight = linkedContract?.ratePerRoom ?? null;
     const totalAmount = ratePerNight ? ratePerNight * nights * rooms : null;
 
@@ -499,6 +573,16 @@ const requestBooking = async (req, res) => {
       },
       select: { ...bookingPortalSelect, guests: { select: { id: true, name: true, nationality: true, isPrimary: true } } },
     });
+
+    // If the booking was admitted on the strength of a quote (no contract),
+    // consume the quote — record the booking on it. When that booking's
+    // departure date passes, the quote flips to 'closed' (phase 4).
+    if (linkedQuote) {
+      await prisma.quote.update({
+        where: { id: linkedQuote.id },
+        data: { linkedBookingId: booking.id },
+      }).catch(() => null);
+    }
 
     // Notify reservations team + the assigned rep so both sides see the
     // request immediately.
@@ -717,6 +801,7 @@ module.exports = {
   getMe,
   getHotels,
   getContracts,
+  getMyApprovedQuotes,
   getMyBookings,
   getMyBooking,
   requestBooking,

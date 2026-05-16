@@ -7,6 +7,26 @@ const { generateQuote } = require('../controllers/pdfController');
 const prisma = new PrismaClient();
 const APPROVER_ROLES = ['sales_director', 'general_manager', 'vice_gm', 'admin'];
 
+// Sweep any approved-but-consumed quotes whose linked booking has departed,
+// flipping them to 'closed'. Called before every quote listing so the team
+// sees up-to-date statuses without us running a cron. Cheap query: only
+// touches the small set of approved quotes that actually have a link.
+const closeExpiredQuotes = async () => {
+  const stale = await prisma.quote.findMany({
+    where: {
+      status: 'approved',
+      linkedBookingId: { not: null },
+      linkedBooking: { departureDate: { lt: new Date() } },
+    },
+    select: { id: true },
+  });
+  if (stale.length === 0) return;
+  await prisma.quote.updateMany({
+    where: { id: { in: stale.map(q => q.id) } },
+    data: { status: 'closed', closedAt: new Date() },
+  });
+};
+
 // Shared select shape used by both the per-client listing and the global
 // "pending approval" listing for managers.
 const quoteListShape = (q) => ({
@@ -42,6 +62,7 @@ router.get('/client/:clientId', authenticate, async (req, res) => {
     const clientId = parseInt(req.params.clientId);
     if (!Number.isFinite(clientId)) return res.status(400).json({ message: 'Invalid clientId' });
 
+    await closeExpiredQuotes();
     const quotes = await prisma.quote.findMany({
       where: { clientId },
       orderBy: { createdAt: 'desc' },
@@ -50,9 +71,14 @@ router.get('/client/:clientId', authenticate, async (req, res) => {
         salesRep:   { select: { id: true, name: true } },
         approvedBy: { select: { id: true, name: true } },
         client:     { select: { companyName: true } },
+        linkedBooking: { select: { id: true, departureDate: true, operaConfirmationNo: true } },
       },
     });
-    res.json(quotes.map(quoteListShape));
+    res.json(quotes.map(q => ({
+      ...quoteListShape(q),
+      linkedBookingDeparture: q.linkedBooking?.departureDate || null,
+      linkedBookingOpera:     q.linkedBooking?.operaConfirmationNo || null,
+    })));
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
@@ -62,6 +88,7 @@ router.get('/client/:clientId', authenticate, async (req, res) => {
 // is allowed to approve. Sales director sees their team's, admins see all.
 router.get('/pending-approval', authenticate, authorize(...APPROVER_ROLES), async (req, res) => {
   try {
+    await closeExpiredQuotes();
     const isAdmin = ['admin', 'general_manager', 'vice_gm'].includes(req.user.role);
     const where = { status: 'pending_manager_approval' };
     if (!isAdmin && req.user.role === 'sales_director') {

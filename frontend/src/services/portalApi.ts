@@ -54,6 +54,7 @@ export const portalDataApi = {
   me: () => portalApi.get('/me'),
   hotels: () => portalApi.get('/hotels'),
   contracts: () => portalApi.get('/contracts'),
+  approvedQuotes: () => portalApi.get('/quotes'),
   bookings: () => portalApi.get('/bookings'),
   booking: (id: number) => portalApi.get(`/bookings/${id}`),
   requestBooking: (data: any) => portalApi.post('/bookings', data),

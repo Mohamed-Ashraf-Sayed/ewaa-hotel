@@ -76,13 +76,20 @@ export default function PortalBookingRequest() {
   const [guests, setGuests] = useState<GuestRow[]>([{ name: '', nationality: '' }]);
   const [hotels, setHotels] = useState<PortalHotel[]>([]);
   const [contracts, setContracts] = useState<PortalContract[]>([]);
+  const [approvedQuotes, setApprovedQuotes] = useState<Array<{ id: number; reference: string; hotelId: number | null; hotelName: string | null; validUntil: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     portalDataApi.hotels().then(r => setHotels(r.data)).catch(() => setHotels([]));
     portalDataApi.contracts().then(r => setContracts(r.data)).catch(() => setContracts([]));
+    portalDataApi.approvedQuotes().then(r => setApprovedQuotes(r.data)).catch(() => setApprovedQuotes([]));
   }, []);
+
+  // Eligibility: portal booking requires at least one active contract OR a
+  // usable approved quote. Without either, the form is blocked and the
+  // client is told to contact the rep for a fresh quote.
+  const eligible = contracts.length > 0 || approvedQuotes.length > 0;
 
   const update = (k: keyof typeof initial, v: string) => setForm(p => ({ ...p, [k]: v }));
 
@@ -176,7 +183,23 @@ export default function PortalBookingRequest() {
         <p className="text-sm text-brand-500 mt-1">قسم الحجوزات هيراجع طلبك ويأكد التوافر مع الفندق.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="card p-5 space-y-5">
+      {/* Eligibility banner — block the form entirely when the client has
+          neither an active contract nor a usable approved quote. */}
+      {!eligible && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800 text-sm leading-relaxed">
+          <strong className="block mb-1">لا يمكنك تقديم طلب حجز حالياً</strong>
+          يلزم وجود <b>عقد إطاري ساري</b> أو <b>عرض سعر معتمد</b> قبل تقديم الحجز.
+          تواصل مع مندوب المبيعات لإصدار عرض سعر، وبعد اعتماده من قسم المبيعات يمكنك تقديم الحجز من هنا.
+        </div>
+      )}
+      {eligible && approvedQuotes.length > 0 && contracts.length === 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-emerald-800 text-sm">
+          ✓ يوجد عرض سعر معتمد متاح للحجز (المرجع: <span className="font-mono">{approvedQuotes[0].reference}</span>)
+          — سيتم اعتماده تلقائياً مع هذا الطلب.
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className={`card p-5 space-y-5 ${!eligible ? 'opacity-60 pointer-events-none' : ''}`}>
         {error && <div className="bg-red-50 text-red-700 text-sm px-4 py-2.5 rounded-lg border border-red-200">{error}</div>}
 
         {/* Hotel — grouped by brand */}
