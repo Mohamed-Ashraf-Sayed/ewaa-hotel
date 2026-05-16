@@ -144,7 +144,7 @@ export default function PortalBookingDetail() {
           booking.paymentMethod === 'City Ledger' ? 'على حساب الشركة' :
           booking.paymentMethod === 'Cash' ? 'كاش' : booking.paymentMethod
         } />}
-        {booking.operaConfirmationNo && <Row icon={FileText} label="رقم اوبرا" value={booking.operaConfirmationNo} />}
+        {booking.operaConfirmationNo && <Row icon={FileText} label="رقم الحجز" value={booking.operaConfirmationNo} />}
       </div>
 
       {/* Pricing */}

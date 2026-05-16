@@ -284,7 +284,7 @@ export default function PortalBookingRequest() {
             ))}
           </div>
           <p className="text-[10px] text-brand-500 mt-2">
-            ★ الضيف الأول هو الضيف الرئيسي — سيتم استخدامه في تأكيد اوبرا والمراسلات.
+            ★ الضيف الأول هو الضيف الرئيسي — سيتم استخدامه في تأكيد الحجز والمراسلات.
           </p>
         </div>
 
