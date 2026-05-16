@@ -220,7 +220,12 @@ router.get('/:id/pdf', authenticate, async (req, res) => {
 
     const quote = await prisma.quote.findUnique({
       where: { id },
-      include: { client: true },
+      include: {
+        client: true,
+        // Original rep — whoever re-downloads (manager, VP), the PDF still
+        // says "Prepared by <original sales rep>" instead of the current user.
+        salesRep: { select: { name: true, email: true, phone: true } },
+      },
     });
     if (!quote) return res.status(404).json({ message: 'Quote not found' });
 
@@ -252,6 +257,9 @@ router.get('/:id/pdf', authenticate, async (req, res) => {
     req._overrideRef = quote.reference;
     req._overrideDate = quote.createdAt;
     req._overrideValidUntil = quote.validUntil;
+    req._overrideRepName  = quote.salesRep?.name  || null;
+    req._overrideRepEmail = quote.salesRep?.email || null;
+    req._overrideRepPhone = quote.salesRep?.phone || '';
     return generateQuote(req, res);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });

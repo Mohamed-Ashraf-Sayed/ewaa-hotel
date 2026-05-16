@@ -422,9 +422,15 @@ const generateQuote = async (req, res) => {
       const { renderQuoteHtmlAr, renderQuoteFooterHtml } = require('../services/quoteHtmlAr');
       // Look up the rep's phone from the User row — req.user is the decoded
       // JWT payload and doesn't carry phone, so the auth middleware's
-      // shorthand object isn't enough.
+      // shorthand object isn't enough. On PDF re-download, the route hands
+      // us the ORIGINAL rep via _overrideRep* so a manager re-downloading
+      // a quote doesn't get their own name stamped onto someone else's quote.
+      const repNameOverride  = req._overrideRepName;
+      const repPhoneOverride = req._overrideRepPhone;
       let preparedByPhone = '';
-      if (req.user?.id) {
+      if (repPhoneOverride != null) {
+        preparedByPhone = repPhoneOverride || '';
+      } else if (req.user?.id) {
         try {
           const u = await prisma.user.findUnique({ where: { id: req.user.id }, select: { phone: true } });
           preparedByPhone = u?.phone || '';
@@ -437,7 +443,7 @@ const generateQuote = async (req, res) => {
         items: parsedItems,
         subtotal, munTaxRate, munTax, vat, grandTotal,
         notes, meals,
-        preparedByName: req.user?.name || '',
+        preparedByName: repNameOverride || req.user?.name || '',
         preparedByTitle: preparedByTitle || '',
         preparedByPhone,
         paymentTerms,
@@ -568,7 +574,9 @@ const generateQuote = async (req, res) => {
     infoStyle(t.contact, contactPerson || client?.contactPerson || '-', clientColX, y); y += 13;
     infoStyle(t.validUntil, formatDate(validUntil), quoteColX, y);
     infoStyle(t.phone, client?.phone || '-', clientColX, y); y += 13;
-    const preparedByName = extractEnglishName(req.user.name, req.user.email);
+    const preparedByName = req._overrideRepName
+      ? extractEnglishName(req._overrideRepName, req._overrideRepEmail)
+      : extractEnglishName(req.user.name, req.user.email);
     infoStyle(t.preparedBy, preparedByName, quoteColX, y);
     infoStyle(t.email, client?.email || '-', clientColX, y);
     y += 25;
