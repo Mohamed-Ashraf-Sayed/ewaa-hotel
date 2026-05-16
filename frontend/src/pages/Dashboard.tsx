@@ -135,7 +135,10 @@ export default function Dashboard() {
               {greeting}، <span className="text-white/90">{user?.name?.split(' ')[0]}</span> 👋
             </h1>
             <p className="text-white/70 text-sm mt-1">
-              {user && ROLE_LABELS[user.role]}
+              {/* Prefer the user's custom title (e.g. "مدير التطوير") so
+                  the dashboard greeting matches what they see in the
+                  header/sidebar instead of the underlying role label. */}
+              {user && (user.title || ROLE_LABELS[user.role])}
               <span className="mx-2 text-white/30">·</span>
               {isAr
                 ? `لديك ${stats.totalClients} عميل و ${stats.totalContracts} عقد، ${stats.visitsThisMonth} زيارة هذا الشهر`
