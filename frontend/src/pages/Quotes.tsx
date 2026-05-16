@@ -43,7 +43,8 @@ export default function Quotes() {
   const [rows, setRows] = useState<QuoteRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [search, setSearch] = useState('');
+  const [clientFilter, setClientFilter] = useState<string>('all');
+  const [repFilter, setRepFilter] = useState<string>('all');
   const [busy, setBusy] = useState<number | null>(null);
   const [rejectTarget, setRejectTarget] = useState<QuoteRow | null>(null);
   const [rejectNote, setRejectNote] = useState('');
@@ -100,19 +101,29 @@ export default function Quotes() {
     { key: 'rejected',                 ar: 'مرفوضة',   en: 'Rejected' },
     { key: 'closed',                   ar: 'مُغلقة',   en: 'Closed' },
   ];
-  // Apply text search first so the filter chip counts reflect the visible
-  // result set — easier to scan "Approved (3)" vs the total when you've
-  // already narrowed to a specific company or rep.
-  const q = search.trim().toLowerCase();
-  const searched = q
-    ? rows.filter(r =>
-        (r.clientName || '').toLowerCase().includes(q) ||
-        (r.salesRepName || '').toLowerCase().includes(q) ||
-        (r.reference || '').toLowerCase().includes(q))
-    : rows;
+  // Unique client/rep options sourced from the loaded rows, so the dropdowns
+  // only show what the user can actually pick — empty values are dropped.
+  const clientOptions = useMemo(
+    () => Array.from(new Set(rows.map(r => r.clientName).filter((n): n is string => !!n)))
+      .sort((a, b) => a.localeCompare(b, 'ar')),
+    [rows],
+  );
+  const repOptions = useMemo(
+    () => Array.from(new Set(rows.map(r => r.salesRepName).filter((n): n is string => !!n)))
+      .sort((a, b) => a.localeCompare(b, 'ar')),
+    [rows],
+  );
+
+  // Apply the dropdown filters first so the status chip counts reflect the
+  // narrowed slice — picking a company and seeing "Approved (3)" tells you
+  // how many of HIS quotes are approved.
+  const narrowed = rows.filter(r =>
+    (clientFilter === 'all' || r.clientName === clientFilter) &&
+    (repFilter === 'all' || r.salesRepName === repFilter)
+  );
   const countFor = (k: StatusFilter) =>
-    k === 'all' ? searched.length : searched.filter(r => r.status === k).length;
-  const filtered = statusFilter === 'all' ? searched : searched.filter(r => r.status === statusFilter);
+    k === 'all' ? narrowed.length : narrowed.filter(r => r.status === k).length;
+  const filtered = statusFilter === 'all' ? narrowed : narrowed.filter(r => r.status === statusFilter);
 
   return (
     <div className="space-y-5">
@@ -125,15 +136,36 @@ export default function Quotes() {
         </div>
       </div>
 
-      {/* Search box — matches client name / sales rep name / reference. */}
-      <div className={isAr ? 'text-right' : ''}>
-        <input
-          type="text"
-          className="input max-w-md"
-          placeholder={isAr ? 'ابحث باسم الشركة أو المندوب أو المرجع...' : 'Search by client, sales rep, or reference...'}
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+      {/* Client + sales rep dropdown filters. Populated from whatever quotes
+          the user can see, so picking one narrows the list to a single
+          company or rep without typing. */}
+      <div className={`flex flex-wrap gap-3 ${isAr ? 'flex-row-reverse' : ''}`}>
+        <div className="min-w-[200px]">
+          <label className="block text-xs text-brand-500 mb-1">{isAr ? 'الشركة' : 'Client'}</label>
+          <select
+            className="input"
+            value={clientFilter}
+            onChange={e => setClientFilter(e.target.value)}
+          >
+            <option value="all">{isAr ? 'كل الشركات' : 'All clients'}</option>
+            {clientOptions.map(name => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="min-w-[200px]">
+          <label className="block text-xs text-brand-500 mb-1">{isAr ? 'المندوب' : 'Sales Rep'}</label>
+          <select
+            className="input"
+            value={repFilter}
+            onChange={e => setRepFilter(e.target.value)}
+          >
+            <option value="all">{isAr ? 'كل المندوبين' : 'All reps'}</option>
+            {repOptions.map(name => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Status filter chips — visible to every role; same labels as the
