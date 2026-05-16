@@ -106,7 +106,7 @@ export default function ClientDetail() {
   const [emailFiles, setEmailFiles] = useState<File[]>([]);
   const [emailSending, setEmailSending] = useState(false);
   const [quoteItems, setQuoteItems] = useState([{ description: '', roomType: '', nights: '', rooms: '', ratePerNight: '' }]);
-  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en', meals: 'breakfast' as 'none' | 'breakfast' | 'lunch' | 'dinner' | 'full_board', preparedByTitle: '', paymentTerms: '', arrivalDate: '' });
+  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en', meals: 'breakfast' as 'none' | 'breakfast' | 'lunch' | 'dinner' | 'full_board', paymentTerms: '', arrivalDate: '' });
   const [quoteHotelId, setQuoteHotelId] = useState<number | null>(null);
   const [hotelSearch, setHotelSearch] = useState('');
   const [showHotelDropdown, setShowHotelDropdown] = useState(false);
@@ -1306,7 +1306,6 @@ export default function ClientDetail() {
               municipalityTaxPercent: quoteForm.municipalityTaxPercent,
               lang: quoteForm.lang,
               meals: quoteForm.meals,
-              preparedByTitle: quoteForm.preparedByTitle,
               paymentTerms: quoteForm.paymentTerms,
               arrivalDate: quoteForm.arrivalDate || null,
             });
@@ -1459,17 +1458,6 @@ export default function ClientDetail() {
             </div>
           </div>
           {/* Language picker — chooses what language the generated PDF is rendered in */}
-          {/* Job title the rep types per quote — appears next to their name in
-              the PDF. Never inferred from user.role, so each quote can carry
-              a different designation. */}
-          <div>
-            <label className="label">{isAr ? 'المسمى الوظيفي للمندوب (يظهر في الـ PDF)' : 'Your Job Title (shown on PDF)'}</label>
-            <input className="input"
-              maxLength={80}
-              placeholder={isAr ? 'مثال: مدير حسابات رئيسية' : 'e.g. Senior Account Manager'}
-              value={quoteForm.preparedByTitle}
-              onChange={e => setQuoteForm(p => ({ ...p, preparedByTitle: e.target.value }))} />
-          </div>
 
           {/* Meals — adds a "prices include …" line in the PDF benefits section */}
           <div>
