@@ -23,6 +23,7 @@ export interface User {
   name: string;
   email: string;
   role: Role;
+  title?: string;
   phone?: string;
   managerId?: number;
   isActive: boolean;

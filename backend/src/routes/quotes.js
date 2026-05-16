@@ -84,6 +84,53 @@ router.get('/client/:clientId', authenticate, async (req, res) => {
   }
 });
 
+// Cross-client quote listing for the standalone "/quotes" page. Every
+// department lands here: sales sees their own, sales_director sees the
+// team's, credit / contracts / reservations / vp / admin see everything.
+// Optional ?status= filters to a single lifecycle state.
+router.get('/all', authenticate, async (req, res) => {
+  try {
+    await closeExpiredQuotes();
+    const statusFilter = (req.query.status || '').toString();
+    const where = {};
+    if (['pending_manager_approval', 'approved', 'rejected', 'closed'].includes(statusFilter)) {
+      where.status = statusFilter;
+    }
+
+    // Role-based visibility:
+    //   sales_rep / assistant_sales  → own quotes
+    //   sales_director               → own + team's quotes
+    //   everyone else (credit, contracts, reservations, vp, gm, admin) → all
+    const role = req.user.role;
+    if (role === 'sales_rep' || role === 'assistant_sales') {
+      where.salesRepId = req.user.id;
+    } else if (role === 'sales_director') {
+      const subIds = await getSubordinateIds(req.user.id);
+      where.salesRepId = { in: [req.user.id, ...subIds] };
+    }
+    // Other roles see everything — no salesRepId filter.
+
+    const quotes = await prisma.quote.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        hotel:      { select: { id: true, name: true, nameEn: true } },
+        salesRep:   { select: { id: true, name: true } },
+        approvedBy: { select: { id: true, name: true } },
+        client:     { select: { companyName: true } },
+        linkedBooking: { select: { id: true, departureDate: true, operaConfirmationNo: true } },
+      },
+    });
+    res.json(quotes.map(q => ({
+      ...quoteListShape(q),
+      linkedBookingDeparture: q.linkedBooking?.departureDate || null,
+      linkedBookingOpera:     q.linkedBooking?.operaConfirmationNo || null,
+    })));
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
 // Listing for the "approvals" workspace — pending quotes the current user
 // is allowed to approve. Sales director sees their team's, admins see all.
 router.get('/pending-approval', authenticate, authorize(...APPROVER_ROLES), async (req, res) => {

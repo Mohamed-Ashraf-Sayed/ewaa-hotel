@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Receipt, Download, CheckCircle, XCircle, Hourglass, Building2, User as UserIcon } from 'lucide-react';
+import { Receipt, Download, CheckCircle, XCircle, Building2, User as UserIcon } from 'lucide-react';
 import { quotesApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -8,6 +8,7 @@ import { format, parseISO } from 'date-fns';
 import { arSA, enUS } from 'date-fns/locale';
 
 type QuoteStatus = 'pending_manager_approval' | 'approved' | 'rejected' | 'closed';
+type StatusFilter = 'all' | QuoteStatus;
 
 interface QuoteRow {
   id: number;
@@ -35,24 +36,22 @@ export default function Quotes() {
   const isAr = lang === 'ar';
   const locale = isAr ? arSA : enUS;
 
-  // Manager-side queue lives at /quotes/pending-approval. Reps / credit /
-  // reservations don't see anything on this page yet; they continue to view
-  // quotes from inside each client profile. We can add a personal "my
-  // quotes across clients" tab later.
+  // Approve / reject buttons only render for roles that can act on
+  // pending quotes. Everyone else sees the same list read-only.
   const canApprove = hasRole('sales_director', 'admin', 'general_manager', 'vice_gm');
 
-  const [pending, setPending] = useState<QuoteRow[]>([]);
+  const [rows, setRows] = useState<QuoteRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [busy, setBusy] = useState<number | null>(null);
   const [rejectTarget, setRejectTarget] = useState<QuoteRow | null>(null);
   const [rejectNote, setRejectNote] = useState('');
 
   const load = async () => {
-    if (!canApprove) { setLoading(false); return; }
     setLoading(true);
     try {
-      const r = await quotesApi.pendingApproval();
-      setPending(r.data);
+      const r = await quotesApi.listAll();
+      setRows(r.data);
     } finally {
       setLoading(false);
     }
@@ -93,42 +92,64 @@ export default function Quotes() {
     closed: { ar: 'مُغلق', en: 'Closed', cls: 'bg-brand-100 text-brand-600 border-brand-200' },
   }), []);
 
-  if (!canApprove) {
-    return (
-      <div className="card p-10 text-center text-brand-400">
-        <Receipt className="w-12 h-12 mx-auto mb-3 opacity-40" />
-        <p>{isAr ? 'عروض الأسعار تُدار من داخل بروفايل كل عميل.' : 'Quotes are managed inside each client profile.'}</p>
-      </div>
-    );
-  }
+  const FILTER_OPTS: { key: StatusFilter; ar: string; en: string }[] = [
+    { key: 'all',                      ar: 'الكل',     en: 'All' },
+    { key: 'pending_manager_approval', ar: 'معلقة',    en: 'Pending' },
+    { key: 'approved',                 ar: 'معتمدة',   en: 'Approved' },
+    { key: 'rejected',                 ar: 'مرفوضة',   en: 'Rejected' },
+    { key: 'closed',                   ar: 'مُغلقة',   en: 'Closed' },
+  ];
+  const countFor = (k: StatusFilter) =>
+    k === 'all' ? rows.length : rows.filter(r => r.status === k).length;
+  const filtered = statusFilter === 'all' ? rows : rows.filter(r => r.status === statusFilter);
 
   return (
     <div className="space-y-5">
       <div className={`flex items-center justify-between gap-3 ${isAr ? 'flex-row-reverse' : ''}`}>
         <div className={isAr ? 'text-right' : ''}>
-          <h1 className="text-2xl font-bold text-brand-900">{isAr ? 'عروض الأسعار المعتمدة' : 'Quote Approvals'}</h1>
+          <h1 className="text-2xl font-bold text-brand-900">{isAr ? 'عروض الأسعار' : 'Quotes'}</h1>
           <p className="text-sm text-brand-500 mt-1">
-            {isAr ? 'عروض الأسعار اللي بانتظار موافقتك قبل تحويلها لقسم الحجوزات' : 'Quotes awaiting your approval before they reach reservations'}
+            {isAr ? 'كل عروض الأسعار حسب صلاحياتك. فلتر بالحالة لإيجاد المعتمد أو المرفوض بسرعة.' : 'Every quote you can see. Filter by status to find approved, rejected, or pending fast.'}
           </p>
         </div>
-        <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-sm">
-          <Hourglass className="w-4 h-4" /> {pending.length} {isAr ? 'عرض بانتظار الموافقة' : 'awaiting approval'}
-        </span>
+      </div>
+
+      {/* Status filter chips — visible to every role; same labels as the
+          per-client tab so the workflow is identical from anywhere. */}
+      <div className={`flex flex-wrap gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+        {FILTER_OPTS.map(opt => {
+          const active = statusFilter === opt.key;
+          const n = countFor(opt.key);
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setStatusFilter(opt.key)}
+              className={`text-xs px-3 py-1.5 rounded-full border transition ${
+                active
+                  ? 'bg-brand-600 text-white border-brand-600'
+                  : 'bg-white text-brand-600 border-brand-200 hover:bg-brand-50'
+              }`}>
+              {isAr ? opt.ar : opt.en} ({n})
+            </button>
+          );
+        })}
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center h-48">
           <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : pending.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="card p-10 text-center text-brand-400">
-          <CheckCircle className="w-12 h-12 mx-auto mb-3 text-emerald-300" />
-          <p>{isAr ? 'لا توجد عروض بانتظار موافقتك حالياً.' : 'No quotes awaiting your approval.'}</p>
+          <Receipt className="w-12 h-12 mx-auto mb-3 opacity-40" />
+          <p>{isAr ? 'لا توجد عروض بهذه الحالة.' : 'No quotes match this filter.'}</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {pending.map(q => {
+          {filtered.map(q => {
             const s = statusInfo[q.status] || statusInfo.pending_manager_approval;
+            const isPending = q.status === 'pending_manager_approval';
             return (
               <div key={q.id} className="card p-4">
                 <div className={`flex flex-wrap items-start justify-between gap-3 ${isAr ? 'flex-row-reverse text-right' : ''}`}>
@@ -138,10 +159,20 @@ export default function Quotes() {
                         {isAr ? s.ar : s.en}
                       </span>
                       <span className="text-xs text-brand-400 font-mono">#{q.reference}</span>
+                      {q.approvedByName && !isPending && (
+                        <span className="text-[11px] text-brand-400">
+                          {isAr ? `${q.status === 'rejected' ? 'رفضه' : 'اعتمده'}: ${q.approvedByName}` : `${q.status === 'rejected' ? 'Rejected by' : 'Approved by'}: ${q.approvedByName}`}
+                        </span>
+                      )}
                     </div>
                     <Link to={`/clients/${q.clientId}`} className="text-base font-bold text-brand-900 hover:text-brand-700">
                       {q.clientName || '—'}
                     </Link>
+                    {q.approvalNote && (
+                      <div className="text-[11px] text-brand-500 mt-1 italic" title={q.approvalNote}>
+                        {q.approvalNote}
+                      </div>
+                    )}
                     <div className={`grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-sm`}>
                       <div>
                         <div className="text-[11px] text-brand-400">{isAr ? 'المندوب' : 'Sales Rep'}</div>
@@ -165,20 +196,24 @@ export default function Quotes() {
                     <button className="btn-secondary text-xs py-1.5" onClick={() => downloadPdf(q)} title={isAr ? 'تحميل PDF' : 'Download PDF'}>
                       <Download className="w-3.5 h-3.5" /> PDF
                     </button>
-                    <button
-                      className="px-2.5 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1 disabled:opacity-60"
-                      disabled={busy === q.id}
-                      onClick={() => approve(q)}
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" /> {isAr ? 'اعتماد' : 'Approve'}
-                    </button>
-                    <button
-                      className="px-2.5 py-1.5 rounded-md text-xs font-semibold border border-red-300 text-red-700 hover:bg-red-50 flex items-center gap-1 disabled:opacity-60"
-                      disabled={busy === q.id}
-                      onClick={() => { setRejectTarget(q); setRejectNote(''); }}
-                    >
-                      <XCircle className="w-3.5 h-3.5" /> {isAr ? 'رفض' : 'Reject'}
-                    </button>
+                    {canApprove && isPending && (
+                      <>
+                        <button
+                          className="px-2.5 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1 disabled:opacity-60"
+                          disabled={busy === q.id}
+                          onClick={() => approve(q)}
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" /> {isAr ? 'اعتماد' : 'Approve'}
+                        </button>
+                        <button
+                          className="px-2.5 py-1.5 rounded-md text-xs font-semibold border border-red-300 text-red-700 hover:bg-red-50 flex items-center gap-1 disabled:opacity-60"
+                          disabled={busy === q.id}
+                          onClick={() => { setRejectTarget(q); setRejectNote(''); }}
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> {isAr ? 'رفض' : 'Reject'}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

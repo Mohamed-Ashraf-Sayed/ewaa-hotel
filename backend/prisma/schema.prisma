@@ -41,6 +41,10 @@ model User {
   email          String   @unique
   password       String
   role           String
+  // Optional human-readable job title that overrides the role-based label
+  // on the user's own screens (header / sidebar / PDF prepared-by). The
+  // permissions vector still comes from `role`; this is display-only.
+  title          String?
   managerId      Int?
   isActive       Boolean  @default(true)
   phone          String?

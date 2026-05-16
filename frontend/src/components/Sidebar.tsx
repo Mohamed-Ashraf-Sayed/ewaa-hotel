@@ -57,7 +57,9 @@ export default function Sidebar({ open, isMobile, onClose }: SidebarProps) {
   );
 
   const roleKey = user?.role as any;
-  const roleLabel = user ? t(`role_${roleKey}` as any) : '';
+  // Prefer the user's custom title when set — lets us show e.g. "مدير
+  // التطوير" for someone whose technical role is still vice_gm.
+  const roleLabel = user ? (user.title || t(`role_${roleKey}` as any)) : '';
 
   const handleNavClick = () => { if (isMobile && onClose) onClose(); };
 

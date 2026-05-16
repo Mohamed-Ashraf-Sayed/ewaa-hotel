@@ -143,6 +143,7 @@ export const quotesApi = {
   listByClient: (clientId: number | string) => api.get(`/quotes/client/${clientId}`),
   downloadPdf: (quoteId: number | string) => api.get(`/quotes/${quoteId}/pdf`, { responseType: 'blob' }),
   pendingApproval: () => api.get('/quotes/pending-approval'),
+  listAll: (status?: string) => api.get('/quotes/all', status ? { params: { status } } : undefined),
   approve: (quoteId: number, note?: string) => api.post(`/quotes/${quoteId}/approve`, { note }),
   reject: (quoteId: number, note: string) => api.post(`/quotes/${quoteId}/reject`, { note }),
 };

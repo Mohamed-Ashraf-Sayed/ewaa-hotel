@@ -67,7 +67,8 @@ export default function Header({ onMenuClick }: Props) {
 
   const handleLogout = () => { logout(); navigate('/login'); };
   const roleKey = user?.role as any;
-  const roleLabel = t(`role_${roleKey}` as any);
+  // Prefer a custom user title (e.g. "مدير التطوير") over the role label.
+  const roleLabel = user?.title || t(`role_${roleKey}` as any);
 
   const typeIcon: Record<string, string> = {
     contract_expiring: '⏰', target_missed: '📉', pending_approval: '📋',
