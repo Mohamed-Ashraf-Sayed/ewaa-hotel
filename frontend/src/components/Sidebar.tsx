@@ -13,7 +13,7 @@ interface NavItem { to: string; icon: any; labelKey: TranslationKey; badge?: str
 
 const navItems: NavItem[] = [
   { to: '/', icon: LayoutDashboard, labelKey: 'nav_dashboard' },
-  { to: '/clients', icon: Building2, labelKey: 'nav_clients', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer'] },
+  { to: '/clients', icon: Building2, labelKey: 'nav_clients', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer', 'credit_manager', 'credit_officer'] },
   { to: '/contracts', icon: FileText, labelKey: 'nav_contracts', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer', 'reservations', 'credit_manager', 'credit_officer'] },
   { to: '/quotes', icon: Receipt, labelKey: 'nav_quotes', roles: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'credit_manager', 'credit_officer', 'reservations'] },
   { to: '/bookings', icon: BedDouble, labelKey: 'nav_bookings', roles: ['admin', 'general_manager', 'vice_gm', 'reservations', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer'] },

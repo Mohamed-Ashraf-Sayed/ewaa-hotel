@@ -31,6 +31,7 @@ export default function ClientDetail() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'visits' | 'contracts' | 'bookings' | 'activities' | 'payments' | 'receipts' | 'emails' | 'attachments' | 'quotes'>('overview');
   const [quotes, setQuotes] = useState<any[]>([]);
+  const [quoteStatusFilter, setQuoteStatusFilter] = useState<'all' | 'pending_manager_approval' | 'approved' | 'rejected' | 'closed'>('all');
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -892,7 +893,7 @@ export default function ClientDetail() {
 
       {/* Quotes Tab */}
       {activeTab === 'quotes' && (
-        <div>
+        <div className="space-y-3">
           {quotes.length === 0 ? (
             <div className="card py-16 text-center">
               <Receipt className="w-12 h-12 text-brand-200 mx-auto mb-3" />
@@ -903,7 +904,47 @@ export default function ClientDetail() {
                 {isAr ? 'كل عرض سعر بتنشئه هنا بيتحفظ تلقائياً وتقدر ترجعله بعدين' : 'Every quote you create is saved here for later'}
               </p>
             </div>
-          ) : (
+          ) : (() => {
+            // Status filter chips — credit & sales both use this list, so we
+            // need a quick way to slice by approval state.
+            const STATUS_FILTER_OPTS: { key: typeof quoteStatusFilter; ar: string; en: string }[] = [
+              { key: 'all',                       ar: 'الكل',            en: 'All' },
+              { key: 'pending_manager_approval',  ar: 'معلقة',           en: 'Pending' },
+              { key: 'approved',                  ar: 'معتمدة',          en: 'Approved' },
+              { key: 'rejected',                  ar: 'مرفوضة',          en: 'Rejected' },
+              { key: 'closed',                    ar: 'مُغلقة',          en: 'Closed' },
+            ];
+            const countFor = (k: typeof quoteStatusFilter) =>
+              k === 'all' ? quotes.length : quotes.filter((q: any) => q.status === k).length;
+            const filteredQuotes = quoteStatusFilter === 'all'
+              ? quotes
+              : quotes.filter((q: any) => q.status === quoteStatusFilter);
+            return (
+              <>
+                <div className={`flex flex-wrap gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+                  {STATUS_FILTER_OPTS.map(opt => {
+                    const active = quoteStatusFilter === opt.key;
+                    const n = countFor(opt.key);
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setQuoteStatusFilter(opt.key)}
+                        className={`text-xs px-3 py-1.5 rounded-full border transition ${
+                          active
+                            ? 'bg-brand-600 text-white border-brand-600'
+                            : 'bg-white text-brand-600 border-brand-200 hover:bg-brand-50'
+                        }`}>
+                        {isAr ? opt.ar : opt.en} ({n})
+                      </button>
+                    );
+                  })}
+                </div>
+                {filteredQuotes.length === 0 ? (
+                  <div className="card py-12 text-center text-brand-400 text-sm">
+                    {isAr ? 'لا توجد عروض بهذه الحالة' : 'No quotes match this filter'}
+                  </div>
+                ) : (
             <div className="card overflow-hidden">
               <table className={`w-full text-sm ${isAr ? 'text-right' : 'text-left'}`}>
                 <thead className="bg-brand-50 text-brand-600">
@@ -919,7 +960,7 @@ export default function ClientDetail() {
                   </tr>
                 </thead>
                 <tbody>
-                  {quotes.map((q: any) => {
+                  {filteredQuotes.map((q: any) => {
                     const expired = q.validUntil ? new Date(q.validUntil) < new Date() : false;
                     const QUOTE_STATUS_MAP: Record<string, { ar: string; en: string; cls: string }> = {
                       pending_manager_approval: { ar: 'بانتظار موافقة المدير', en: 'Awaiting Manager', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
@@ -976,7 +1017,10 @@ export default function ClientDetail() {
                 </tbody>
               </table>
             </div>
-          )}
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
