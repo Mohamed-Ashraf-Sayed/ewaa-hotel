@@ -43,6 +43,7 @@ export default function Quotes() {
   const [rows, setRows] = useState<QuoteRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [search, setSearch] = useState('');
   const [busy, setBusy] = useState<number | null>(null);
   const [rejectTarget, setRejectTarget] = useState<QuoteRow | null>(null);
   const [rejectNote, setRejectNote] = useState('');
@@ -99,9 +100,19 @@ export default function Quotes() {
     { key: 'rejected',                 ar: 'مرفوضة',   en: 'Rejected' },
     { key: 'closed',                   ar: 'مُغلقة',   en: 'Closed' },
   ];
+  // Apply text search first so the filter chip counts reflect the visible
+  // result set — easier to scan "Approved (3)" vs the total when you've
+  // already narrowed to a specific company or rep.
+  const q = search.trim().toLowerCase();
+  const searched = q
+    ? rows.filter(r =>
+        (r.clientName || '').toLowerCase().includes(q) ||
+        (r.salesRepName || '').toLowerCase().includes(q) ||
+        (r.reference || '').toLowerCase().includes(q))
+    : rows;
   const countFor = (k: StatusFilter) =>
-    k === 'all' ? rows.length : rows.filter(r => r.status === k).length;
-  const filtered = statusFilter === 'all' ? rows : rows.filter(r => r.status === statusFilter);
+    k === 'all' ? searched.length : searched.filter(r => r.status === k).length;
+  const filtered = statusFilter === 'all' ? searched : searched.filter(r => r.status === statusFilter);
 
   return (
     <div className="space-y-5">
@@ -112,6 +123,17 @@ export default function Quotes() {
             {isAr ? 'كل عروض الأسعار حسب صلاحياتك. فلتر بالحالة لإيجاد المعتمد أو المرفوض بسرعة.' : 'Every quote you can see. Filter by status to find approved, rejected, or pending fast.'}
           </p>
         </div>
+      </div>
+
+      {/* Search box — matches client name / sales rep name / reference. */}
+      <div className={isAr ? 'text-right' : ''}>
+        <input
+          type="text"
+          className="input max-w-md"
+          placeholder={isAr ? 'ابحث باسم الشركة أو المندوب أو المرجع...' : 'Search by client, sales rep, or reference...'}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
       </div>
 
       {/* Status filter chips — visible to every role; same labels as the
