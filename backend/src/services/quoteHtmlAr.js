@@ -243,7 +243,7 @@ const renderQuoteHtmlAr = ({
   .totals {
     margin: 10px 0 14px;
     margin-right: auto;
-    width: 360px;
+    width: 460px;
   }
   .totals .row {
     display: flex;
@@ -252,13 +252,13 @@ const renderQuoteHtmlAr = ({
     /* breathing room between "Label:" and the amount so the colon doesn't
        hug the number — required because flex space-between collapses to
        zero gap once the two ends reach each other. */
-    gap: 18px;
+    gap: 48px;
     padding: 3px 0;
     border-bottom: 1px dotted #e5e7eb;
     font-size: 10pt;
   }
   .totals .row .lbl { color: #6b7280; flex-shrink: 0; }
-  .totals .row .val { color: #1f2937; font-weight: 600; padding-inline-start: 12px; }
+  .totals .row .val { color: #1f2937; font-weight: 600; padding-inline-start: 32px; }
   .totals .row.grand {
     border-top: 1.5px solid #0f4c81;
     border-bottom: 1.5px solid #0f4c81;
