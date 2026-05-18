@@ -9,7 +9,7 @@ import { arSA, enUS } from 'date-fns/locale';
 type Department = 'management' | 'credit' | 'reservations' | 'contracts' | 'sales_muhaidib' | 'sales_grand_awa' | 'sales_other' | 'other';
 
 interface Contact {
-  id: number; name: string; role: string; email: string;
+  id: number; name: string; role: string; title?: string | null; email: string;
   department: Department;
   lastMessage?: { content: string; createdAt: string; fromUserId: number };
   unreadCount: number;
@@ -217,7 +217,7 @@ export default function Chat() {
                               )}
                             </div>
                             <p className="text-[11px] text-brand-400 mt-0.5">
-                              {ROLE_LABEL[c.role]?.[isAr ? 'ar' : 'en'] || c.role}
+                              {c.title || ROLE_LABEL[c.role]?.[isAr ? 'ar' : 'en'] || c.role}
                             </p>
                             {c.lastMessage && (
                               <p className={`text-xs mt-1 truncate ${c.unreadCount > 0 ? 'text-brand-700 font-semibold' : 'text-brand-400'}`}>
@@ -257,7 +257,7 @@ export default function Chat() {
                 </div>
                 <div className={`flex-1 ${isAr ? 'text-right' : ''}`}>
                   <p className="font-bold text-brand-900 text-sm">{activeContact.name}</p>
-                  <p className="text-[11px] text-brand-400">{ROLE_LABEL[activeContact.role]?.[isAr ? 'ar' : 'en']}</p>
+                  <p className="text-[11px] text-brand-400">{activeContact.title || ROLE_LABEL[activeContact.role]?.[isAr ? 'ar' : 'en']}</p>
                 </div>
               </div>
 

@@ -11,7 +11,7 @@ const getContacts = async (req, res) => {
     const contacts = await prisma.user.findMany({
       where: { isActive: true, NOT: { id: me.id } },
       select: {
-        id: true, name: true, role: true, email: true,
+        id: true, name: true, role: true, title: true, email: true,
         hotels: { select: { hotel: { select: { group: true } } } },
       },
       orderBy: { name: 'asc' },
