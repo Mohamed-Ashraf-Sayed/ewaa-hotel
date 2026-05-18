@@ -33,6 +33,7 @@
     "pdfmake": "^0.3.7",
     "prisma": "^5.14.0",
     "puppeteer": "^24.43.1",
+    "selfsigned": "^2.4.1",
     "tesseract.js": "^7.0.0",
     "validator": "^13.15.35",
     "xlsx": "^0.18.5"

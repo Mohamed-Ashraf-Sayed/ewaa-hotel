@@ -4,6 +4,9 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const fs = require('fs');
+const https = require('https');
+const http = require('http');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -75,12 +78,33 @@ app.get('*', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Hotel CRM running on port ${PORT}`);
-  // Background job: notify managers when tasks are overdue
+
+// HTTPS support: if certs/server.key + certs/server.crt exist next to the
+// app, listen over TLS on PORT. Otherwise fall back to plain HTTP (dev /
+// pre-cert deploys). Generate certs with `node scripts/generate-cert.js`.
+const certDir = path.join(__dirname, '..', 'certs');
+const keyPath = path.join(certDir, 'server.key');
+const crtPath = path.join(certDir, 'server.crt');
+const hasCerts = fs.existsSync(keyPath) && fs.existsSync(crtPath);
+
+const startJobs = () => {
   require('./jobs/taskOverdueChecker').startTaskOverdueChecker();
-  // Background job: sync local holidays from Nager.Date API
   require('./jobs/holidaySync').startHolidaySync();
-  // Background job: poll IMAP for client emails into the Inbox
   require('./jobs/inboxPoll').startInboxPoll();
-});
+};
+
+if (hasCerts) {
+  const credentials = {
+    key:  fs.readFileSync(keyPath),
+    cert: fs.readFileSync(crtPath),
+  };
+  https.createServer(credentials, app).listen(PORT, () => {
+    console.log(`Hotel CRM running on HTTPS port ${PORT}`);
+    startJobs();
+  });
+} else {
+  http.createServer(app).listen(PORT, () => {
+    console.log(`Hotel CRM running on HTTP port ${PORT} (no certs found in ${certDir})`);
+    startJobs();
+  });
+}

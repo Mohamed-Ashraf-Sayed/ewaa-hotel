@@ -42,6 +42,13 @@ yarn-error.log*
 backend/uploads/
 **/uploads/
 
+# TLS certificates — generated per-host with scripts/generate-cert.js
+backend/certs/
+**/certs/
+*.key
+*.crt
+*.pem
+
 # Prisma
 backend/prisma/migrations/
 **/migrations/
