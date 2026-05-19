@@ -305,11 +305,11 @@ const renderQuoteHtmlAr = ({
 
   .section {
     margin: 10px 0;
-    /* Don't split a section across pages when there's enough room for it
-       to fit as a whole — keeps the title attached to its body and stops
-       trailing sentences from landing on a page by themselves. */
-    page-break-inside: avoid;
-    break-inside: avoid;
+    /* Sections themselves are allowed to split across pages — locking the
+       whole section caused tall ones to jump to the next page and leave
+       most of the prior page blank. We keep the smaller "don't split"
+       rules below (heading stays with its first paragraph, individual
+       paragraphs don't split) so the layout still reads cleanly. */
   }
   .section h2 {
     color: #0f4c81;
@@ -326,17 +326,19 @@ const renderQuoteHtmlAr = ({
     margin: 4px 0;
     text-align: justify;
     font-size: 10pt;
-    /* Same: never split a single paragraph across pages. */
+    /* Single paragraphs stay intact (no orphaned half-sentences), but the
+       parent section is allowed to split between paragraphs so the page
+       fills naturally. */
     page-break-inside: avoid;
     break-inside: avoid;
-    orphans: 3;
-    widows: 3;
+    orphans: 2;
+    widows: 2;
   }
   ul.bullets {
     margin: 4px 0;
     padding-right: 18px;
-    page-break-inside: avoid;
-    break-inside: avoid;
+    /* Bullet lists may split — locking them was contributing to the
+       half-empty pages too. */
   }
   ul.bullets li { margin: 3px 0; font-size: 10pt; }
 
@@ -368,7 +370,15 @@ const renderQuoteHtmlAr = ({
     margin: 14px 0;
   }
 
-  .signature-block { margin-top: 10px; }
+  .signature-block {
+    margin-top: 10px;
+    /* Signature lines should stay together — splitting "Name / Title /
+       Signature / Date / Phone / Stamp" across a page break looks
+       broken. Keep each whole block intact even though regular sections
+       are allowed to split. */
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
   .signature-block h2 {
     color: #0f4c81;
     font-size: 11pt;
