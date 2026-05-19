@@ -602,6 +602,11 @@ const generateQuote = async (req, res) => {
     // right-aligned and the value to its left, so they read naturally
     // right-to-left.
     const COL_W = 215;
+    // Returns the rendered height of one info pair so the caller can advance
+    // y by the taller of the two columns. Long values (long company names,
+    // long emails) wrap inside the column instead of overflowing into the
+    // row beneath — wrap was previously disabled with lineBreak:false and
+    // that's what caused the text to overlap the next row.
     const infoStyle = (label, value, x, yy) => {
       const labelStr = `${label}: `;
       const valueStr = String(value ?? '');
@@ -609,39 +614,60 @@ const generateQuote = async (req, res) => {
       const valIsArabic = isArabic(valueStr);
       setFont(doc, false, labelStr);
       doc.fontSize(8).fillColor(MID);
-      // Measure width on the SHAPED string — it's what actually gets drawn.
       const labelShaped = shapeForVisual(labelStr);
       const labelW = doc.widthOfString(labelShaped);
       const labelYOff = labelIsArabic ? -3 : 0;
+      const valueW = COL_W - labelW - 5;
+      setFont(doc, true, valueStr);
+      doc.fontSize(8);
+      const valShaped = shapeForVisual(valueStr);
+      const valH = doc.heightOfString(valShaped, { width: valueW });
+      setFont(doc, false, labelStr);
+      doc.fontSize(8).fillColor(MID);
       if (isAr) {
         const labelX = x + COL_W - labelW;
         doc.text(labelShaped, labelX, yy + labelYOff, { lineBreak: false });
-        setFont(doc, false, valueStr);
+        setFont(doc, true, valueStr);
         doc.fontSize(8).fillColor(DARK);
         const valYOff = valIsArabic ? -3 : 0;
-        const valueW = COL_W - labelW - 5;
-        doc.text(shapeForVisual(valueStr), x, yy + valYOff, { width: valueW, align: 'right', lineBreak: false });
+        doc.text(valShaped, x, yy + valYOff, { width: valueW, align: 'right' });
       } else {
         doc.text(labelShaped, x, yy + labelYOff, { lineBreak: false });
-        setFont(doc, false, valueStr);
+        setFont(doc, true, valueStr);
         doc.fontSize(8).fillColor(DARK);
         const valYOff = valIsArabic ? -3 : 0;
-        doc.text(shapeForVisual(valueStr), x + labelW, yy + valYOff, { width: COL_W - labelW - 5, lineBreak: false });
+        doc.text(valShaped, x + labelW, yy + valYOff, { width: valueW });
       }
+      return Math.max(11, valH + 2);
     };
 
-    infoStyle(t.reference, ref, quoteColX, y);
-    infoStyle(t.company, companyName || client?.companyName || '-', clientColX, y); y += 13;
-    infoStyle(t.date, formatDate(today), quoteColX, y);
-    infoStyle(t.contact, contactPerson || client?.contactPerson || '-', clientColX, y); y += 13;
-    infoStyle(t.validUntil, formatDate(validUntil), quoteColX, y);
-    infoStyle(t.phone, client?.phone || '-', clientColX, y); y += 13;
+    // Render rows in pairs (left+right) and advance y by the taller side
+    // so a wrapped long value doesn't crash into the row underneath.
+    const drawInfoPair = (leftFn, rightFn) => {
+      const lh = leftFn(y);
+      const rh = rightFn(y);
+      y += Math.max(lh, rh) + 1;
+    };
+    drawInfoPair(
+      (yy) => infoStyle(t.reference, ref, quoteColX, yy),
+      (yy) => infoStyle(t.company, companyName || client?.companyName || '-', clientColX, yy),
+    );
+    drawInfoPair(
+      (yy) => infoStyle(t.date, formatDate(today), quoteColX, yy),
+      (yy) => infoStyle(t.contact, contactPerson || client?.contactPerson || '-', clientColX, yy),
+    );
+    drawInfoPair(
+      (yy) => infoStyle(t.validUntil, formatDate(validUntil), quoteColX, yy),
+      (yy) => infoStyle(t.phone, client?.phone || '-', clientColX, yy),
+    );
     const preparedByName = req._overrideRepName
       ? extractEnglishName(req._overrideRepName, req._overrideRepEmail)
       : extractEnglishName(req.user.name, req.user.email);
-    infoStyle(t.preparedBy, preparedByName, quoteColX, y);
-    infoStyle(t.email, client?.email || '-', clientColX, y);
-    y += 25;
+    drawInfoPair(
+      (yy) => infoStyle(t.preparedBy, preparedByName, quoteColX, yy),
+      (yy) => infoStyle(t.email, client?.email || '-', clientColX, yy),
+    );
+    y += 12;
 
     // Items table — Room Type is its own column now (was glued to the
     // description). Arabic flips the entire column order so reading right

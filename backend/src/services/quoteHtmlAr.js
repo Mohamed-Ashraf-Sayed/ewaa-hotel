@@ -223,17 +223,38 @@ const renderQuoteHtmlAr = ({
     margin: 8px 0 14px;
     font-weight: 700;
   }
-  .info-block { display: flex; gap: 14px; margin-bottom: 12px; }
-  .info-col { flex: 1; }
+  /* Two-column block holding "quote details" + "client details". Each col
+     needs min-width:0 so a long company name can wrap inside its own
+     column instead of pushing the layout out and overlapping the column
+     beside / below it. */
+  .info-block { display: flex; gap: 14px; margin-bottom: 12px; align-items: flex-start; }
+  .info-col { flex: 1; min-width: 0; }
   .info-col h3 {
     color: #0f4c81;
     font-size: 11pt;
     margin: 0 0 6px;
     font-weight: 700;
   }
-  .info-line { display: flex; gap: 6px; margin: 1px 0; font-size: 10pt; }
-  .info-line .lbl { color: #6b7280; min-width: 90px; }
-  .info-line .val { color: #1f2937; font-weight: 600; }
+  .info-line {
+    display: flex;
+    gap: 6px;
+    margin: 2px 0;
+    font-size: 10pt;
+    align-items: baseline;
+    min-width: 0;
+  }
+  .info-line .lbl { color: #6b7280; min-width: 90px; flex-shrink: 0; }
+  /* min-width:0 + overflow-wrap let very long values wrap inside the cell
+     without pushing the row wider than its column. */
+  .info-line .val {
+    color: #1f2937;
+    font-weight: 600;
+    min-width: 0;
+    flex: 1;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.45;
+  }
 
   table.items {
     width: 100%;
