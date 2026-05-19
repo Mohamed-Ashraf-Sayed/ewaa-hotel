@@ -370,19 +370,23 @@ const renderQuoteHtmlAr = ({
     margin: 14px 0;
   }
 
-  /* Wrapper holding the two signature blocks side-by-side. Keeps the pair
-     atomic so they don't drift to a new page that ends up half empty. */
+  /* Wrapper holding the two signature blocks side-by-side. display:table
+     is used instead of flex because wkhtmltopdf (old WebKit fallback on
+     legacy Windows) doesn't render flex reliably and falls back to
+     stacking. Tables are universally supported by every renderer. */
   .signature-row {
-    display: flex;
-    gap: 24px;
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+    border-spacing: 16px 0;
     margin-top: 10px;
     page-break-inside: avoid;
     break-inside: avoid;
-    align-items: flex-start;
   }
   .signature-block {
-    flex: 1;
-    min-width: 0;
+    display: table-cell;
+    vertical-align: top;
+    width: 50%;
     page-break-inside: avoid;
     break-inside: avoid;
   }
