@@ -204,14 +204,20 @@ const QUOTE_T = {
     benefit2: 'The above rates are NET, Non-Commissionable, and quoted in Saudi Riyals.',
     benefit3: 'The above quoted rates are inclusive of WI – Fi internet.',
     benefit4: (meals) => {
-      switch (meals) {
-        case 'lunch':      return 'Above rates include lunch.';
-        case 'dinner':     return 'Above rates include dinner.';
-        case 'full_board': return 'Above rates include breakfast, lunch, and dinner.';
-        case 'none':       return null;
-        case 'breakfast':
-        default:           return 'Above rates are on BB (breakfast included).';
-      }
+      const arr = Array.isArray(meals)
+        ? meals
+        : String(meals || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (arr.length === 0 || arr.includes('none')) return null;
+      if (arr.includes('full_board')) return 'Above rates include breakfast, lunch, and dinner.';
+      const labels = { breakfast: 'breakfast', lunch: 'lunch', dinner: 'dinner' };
+      const picked = ['breakfast','lunch','dinner'].filter(k => arr.includes(k)).map(k => labels[k]);
+      if (picked.length === 0) return null;
+      // Oxford-style join: a / a and b / a, b, and c.
+      let joined;
+      if (picked.length === 1) joined = picked[0];
+      else if (picked.length === 2) joined = `${picked[0]} and ${picked[1]}`;
+      else joined = `${picked.slice(0, -1).join(', ')}, and ${picked[picked.length - 1]}`;
+      return `Above rates include ${joined}.`;
     },
     termsTitle: 'Terms & Conditions:',
     terms1: 'Check in time is 15:00PM and check out time is at 12:00PM. Any late check-out after 16:00 hours will be subject to a 50% of the contracted rate and any check out after 18:00 hours will be subject to an additional full night rate. Early check in and extended check out facilities is subject to availability.',
@@ -249,6 +255,7 @@ const QUOTE_T = {
     welcoming: 'We look forward to welcoming you and your guests at EWAA Express Hotels.',
     confirmOn: 'Confirm on / and or behalf of:',
     name: 'Name', signature: 'Signature', titleField: 'Title', dateField: 'Date', companyStamp: 'Company Stamp',
+    clientApproval: 'Client Approval:',
   },
   ar: {
     title: 'عرض السعر',
@@ -265,14 +272,16 @@ const QUOTE_T = {
     benefit2: 'الأسعار أعلاه صافية وغير قابلة للعمولة وبالريال السعودي.',
     benefit3: 'الأسعار المعروضة شاملة الإنترنت اللاسلكي WI-Fi.',
     benefit4: (meals) => {
-      switch (meals) {
-        case 'lunch':      return 'الأسعار شاملة الغداء.';
-        case 'dinner':     return 'الأسعار شاملة العشاء.';
-        case 'full_board': return 'الأسعار شاملة الإفطار والغداء والعشاء.';
-        case 'none':       return null;
-        case 'breakfast':
-        default:           return 'الأسعار شاملة الإفطار.';
-      }
+      const arr = Array.isArray(meals)
+        ? meals
+        : String(meals || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (arr.length === 0 || arr.includes('none')) return null;
+      if (arr.includes('full_board')) return 'الأسعار شاملة الإفطار والغداء والعشاء.';
+      const labels = { breakfast: 'الإفطار', lunch: 'الغداء', dinner: 'العشاء' };
+      const picked = ['breakfast','lunch','dinner'].filter(k => arr.includes(k)).map(k => labels[k]);
+      if (picked.length === 0) return null;
+      const joined = picked[0] + picked.slice(1).map(p => ' و' + p).join('');
+      return `الأسعار شاملة ${joined}.`;
     },
     termsTitle: 'الشروط والأحكام:',
     terms1: 'موعد تسجيل الدخول الساعة 15:00 ومغادرة الغرفة الساعة 12:00 ظهرًا. أي تأخير في المغادرة بعد الساعة 16:00 يخضع لرسوم 50% من السعر المتفق عليه، وأي تأخير بعد الساعة 18:00 يخضع لرسوم ليلة كاملة إضافية. تسجيل الدخول المبكر أو تمديد المغادرة متاحان حسب التوفر.',
@@ -310,16 +319,45 @@ const QUOTE_T = {
     welcoming: 'نتطلّع لاستقبالكم واستقبال ضيوفكم في فنادق إيواء اكسبريس.',
     confirmOn: 'التأكيد بالنيابة عن:',
     name: 'الاسم', signature: 'التوقيع', titleField: 'المسمى الوظيفي', dateField: 'التاريخ', companyStamp: 'ختم الشركة',
+    clientApproval: 'موافقة العميل:',
   },
 };
 
 const generateQuote = async (req, res) => {
   try {
     const { clientId, hotelId, items, validDays, notes, companyName, contactPerson,
-      municipalityTaxPercent, lang, meals: mealsRaw, preparedByTitle: titleRaw,
+      municipalityTaxPercent, lang, meals: mealsRaw,
       paymentTerms: paymentTermsRaw, arrivalDate: arrivalDateRaw } = req.body;
-    const meals = ['none','breakfast','lunch','dinner','full_board'].includes(mealsRaw) ? mealsRaw : 'breakfast';
-    const preparedByTitle = (titleRaw || '').toString().trim().slice(0, 80) || null;
+
+    // Meals is now multi-select: client can send an array like
+    // ["breakfast","dinner"] or a CSV "breakfast,dinner". Normalize to a
+    // deduped array of valid keys, then store as CSV in DB. Special cases:
+    //   - "none" wins alone (drops everything else)
+    //   - "full_board" wins alone (it's already all three)
+    const validMeals = ['none','breakfast','lunch','dinner','full_board'];
+    const mealsList = (Array.isArray(mealsRaw) ? mealsRaw : String(mealsRaw || '').split(','))
+      .map(m => String(m || '').trim())
+      .filter(m => validMeals.includes(m));
+    const mealsSet = new Set(mealsList);
+    let mealsArr;
+    if (mealsSet.has('none'))            mealsArr = ['none'];
+    else if (mealsSet.has('full_board')) mealsArr = ['full_board'];
+    else if (mealsSet.size === 0)        mealsArr = ['breakfast'];
+    else                                 mealsArr = ['breakfast','lunch','dinner'].filter(m => mealsSet.has(m));
+    const meals = mealsArr.join(',');
+
+    // Job title: pulled from the rep's User row (set once on their profile),
+    // not from a per-quote input. Re-download path can override via
+    // _overrideRepTitle so a manager re-downloading shows the original rep.
+    let preparedByTitle = null;
+    if (req._overrideRepTitle !== undefined) {
+      preparedByTitle = req._overrideRepTitle || null;
+    } else if (req.user?.id) {
+      try {
+        const u = await prisma.user.findUnique({ where: { id: req.user.id }, select: { title: true } });
+        preparedByTitle = u?.title || null;
+      } catch (_) { /* non-fatal */ }
+    }
     const paymentTerms = (paymentTermsRaw || '').toString().trim().slice(0, 2000) || null;
     const arrivalDate = arrivalDateRaw ? new Date(arrivalDateRaw) : null;
     // Pick language: 'ar' uses Cairo font + RTL alignment; everything else stays English.
@@ -337,14 +375,37 @@ const generateQuote = async (req, res) => {
       ? new Date(req._overrideValidUntil)
       : (() => { const d = new Date(today); d.setDate(d.getDate() + (parseInt(validDays) || 30)); return d; })();
 
-    const parsedItems = (items || []).map(item => ({
-      description: item.description || '',
-      roomType: item.roomType || '',
-      nights: parseInt(item.nights) || 0,
-      rooms: parseInt(item.rooms) || 0,
-      rate: parseFloat(item.ratePerNight) || 0,
-    }));
+    // Items can carry an optional per-row hotelId (multi-hotel quote mode).
+    // Resolve hotel names in a single query so the template can render a
+    // "Hotel" column without N+1 round trips.
+    const itemHotelIds = Array.from(new Set(
+      (items || []).map(i => parseInt(i.hotelId)).filter(n => Number.isFinite(n))
+    ));
+    const itemHotelMap = new Map();
+    if (itemHotelIds.length > 0) {
+      const hotelRows = await prisma.hotel.findMany({
+        where: { id: { in: itemHotelIds } },
+        select: { id: true, name: true, nameEn: true },
+      });
+      hotelRows.forEach(h => itemHotelMap.set(h.id, h));
+    }
+    const parsedItems = (items || []).map(item => {
+      const hid = parseInt(item.hotelId);
+      const h = Number.isFinite(hid) ? itemHotelMap.get(hid) : null;
+      return {
+        description: item.description || '',
+        roomType: item.roomType || '',
+        nights: parseInt(item.nights) || 0,
+        rooms: parseInt(item.rooms) || 0,
+        rate: parseFloat(item.ratePerNight) || 0,
+        hotelId: h ? h.id : null,
+        hotelName: h ? (h.name || h.nameEn || '') : '',
+      };
+    });
     parsedItems.forEach(i => { i.total = i.nights * i.rooms * i.rate; });
+    // Multi-hotel mode = at least one item carries its own hotelId. Used by
+    // templates to decide whether to render the extra "Hotel" column.
+    const isMultiHotel = parsedItems.some(i => i.hotelName);
     const subtotal = parsedItems.reduce((s, i) => s + i.total, 0);
     // ZATCA-style compound calculation: municipality fee applies to the
     // subtotal, then VAT applies on (subtotal + municipality). So a 100,000
@@ -441,8 +502,9 @@ const generateQuote = async (req, res) => {
         hotel, client,
         companyName, contactPerson,
         items: parsedItems,
+        isMultiHotel,
         subtotal, munTaxRate, munTax, vat, grandTotal,
-        notes, meals,
+        notes, meals: mealsArr,
         preparedByName: repNameOverride || req.user?.name || '',
         preparedByTitle: preparedByTitle || '',
         preparedByPhone,
@@ -584,21 +646,34 @@ const generateQuote = async (req, res) => {
     // Items table — Room Type is its own column now (was glued to the
     // description). Arabic flips the entire column order so reading right
     // to left gives: Total → Rate → Nights → Rooms → Room Type → Description.
+    // When multi-hotel mode is on, prepend a "Hotel" column so each row
+    // shows which property it's quoted under.
     if (parsedItems.length > 0) {
-      const widthsEn  = [140, 80, 50, 50, 75, 120];
-      const headersEn = [t.descRoom, t.roomType, t.rooms, t.nights, t.rateNight, t.totalCol];
-      const alignsEn  = ['left', 'left', 'center', 'center', 'right', 'right'];
+      const hotelLabel = isAr ? 'الفندق' : 'Hotel';
+      const widthsEn  = isMultiHotel
+        ? [70, 120, 70, 45, 45, 65, 100]
+        : [140, 80, 50, 50, 75, 120];
+      const headersEn = isMultiHotel
+        ? [hotelLabel, t.descRoom, t.roomType, t.rooms, t.nights, t.rateNight, t.totalCol]
+        : [t.descRoom, t.roomType, t.rooms, t.nights, t.rateNight, t.totalCol];
+      const alignsEn  = isMultiHotel
+        ? ['left', 'left', 'left', 'center', 'center', 'right', 'right']
+        : ['left', 'left', 'center', 'center', 'right', 'right'];
       const widths  = isAr ? [...widthsEn].reverse()  : widthsEn;
       const headers = isAr ? [...headersEn].reverse() : headersEn;
-      const headerAligns = isAr ? ['right', 'center', 'center', 'center', 'right', 'right'] : alignsEn;
-      const bodyAligns   = isAr ? ['right', 'center', 'center', 'center', 'right', 'right'] : alignsEn;
+      const arAligns = isMultiHotel
+        ? ['right', 'right', 'center', 'center', 'center', 'right', 'right']
+        : ['right', 'center', 'center', 'center', 'right', 'right'];
+      const headerAligns = isAr ? arAligns : alignsEn;
+      const bodyAligns   = isAr ? arAligns : alignsEn;
       y = drawRow(doc, y, headers, widths, {
         bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24,
         aligns: headerAligns,
       });
 
       parsedItems.forEach((item, i) => {
-        const rowEn = [item.description, item.roomType || '-', item.rooms, item.nights, formatNum(item.rate), formatNum(item.total)];
+        const baseRowEn = [item.description, item.roomType || '-', item.rooms, item.nights, formatNum(item.rate), formatNum(item.total)];
+        const rowEn = isMultiHotel ? [item.hotelName || '-', ...baseRowEn] : baseRowEn;
         const row = isAr ? [...rowEn].reverse() : rowEn;
         y = drawRow(doc, y, row, widths, {
           bg: i % 2 === 0 ? BG : null,
@@ -809,6 +884,21 @@ const generateQuote = async (req, res) => {
     y += 25;
     filledField(t.titleField, repTitle, 40, 80, 280);
     filledField(t.dateField, repDate, 310, 350, 555);
+    y += 25;
+    drawLabel(`${t.companyStamp}:`, 40, y);
+    y += 30;
+
+    // === Client approval block — blank fields for the client to sign and stamp.
+    y = ensureSpace(y, 90);
+    setFont(doc, true, t.clientApproval);
+    doc.fontSize(9).fillColor(NAVY).text(shapeForVisual(t.clientApproval), 40, y, { width: 515, align }); y += 28;
+
+    filledField(t.name, '', 40, 80, 280);
+    drawLabel(`${t.signature}:`, 310, y);
+    doc.moveTo(370, y + 10).lineTo(555, y + 10).strokeColor(LIGHT).lineWidth(0.5).stroke();
+    y += 25;
+    filledField(t.titleField, '', 40, 80, 280);
+    filledField(t.dateField, '', 310, 350, 555);
     y += 25;
     drawLabel(`${t.companyStamp}:`, 40, y);
 

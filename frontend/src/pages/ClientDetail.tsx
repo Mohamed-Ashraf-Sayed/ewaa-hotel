@@ -106,8 +106,9 @@ export default function ClientDetail() {
   const [emailForm, setEmailForm] = useState({ to: '', cc: '', subject: '', body: '' });
   const [emailFiles, setEmailFiles] = useState<File[]>([]);
   const [emailSending, setEmailSending] = useState(false);
-  const [quoteItems, setQuoteItems] = useState([{ description: '', roomType: '', nights: '', rooms: '', ratePerNight: '' }]);
-  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en', meals: 'breakfast' as 'none' | 'breakfast' | 'lunch' | 'dinner' | 'full_board', paymentTerms: '', arrivalDate: '' });
+  const [quoteItems, setQuoteItems] = useState([{ description: '', roomType: '', nights: '', rooms: '', ratePerNight: '', hotelId: '' }]);
+  type MealKey = 'none' | 'breakfast' | 'lunch' | 'dinner' | 'full_board';
+  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en', meals: ['breakfast'] as MealKey[], paymentTerms: '', arrivalDate: '', multiHotel: false });
   const [quoteHotelId, setQuoteHotelId] = useState<number | null>(null);
   const [hotelSearch, setHotelSearch] = useState('');
   const [showHotelDropdown, setShowHotelDropdown] = useState(false);
@@ -1345,11 +1346,15 @@ export default function ClientDetail() {
             const res = await pdfApi.generateQuote({
               clientId: id, hotelId: finalHotelId,
               companyName: client?.companyName, contactPerson: client?.contactPerson,
-              items: quoteItems.filter(i => i.description),
+              // In multi-hotel mode each item carries its own hotelId; otherwise
+              // strip the per-item field so the backend stays in single-hotel mode.
+              items: quoteItems
+                .filter(i => i.description)
+                .map(i => quoteForm.multiHotel ? i : { ...i, hotelId: '' }),
               validDays: quoteForm.validDays, notes: quoteForm.notes,
               municipalityTaxPercent: quoteForm.municipalityTaxPercent,
               lang: quoteForm.lang,
-              meals: quoteForm.meals,
+              meals: quoteForm.meals.join(','),
               paymentTerms: quoteForm.paymentTerms,
               arrivalDate: quoteForm.arrivalDate || null,
             });
@@ -1465,18 +1470,49 @@ export default function ClientDetail() {
             );
           })()}
 
+          {/* Multi-hotel toggle — when on, every item row exposes its own
+              hotel dropdown so a single quote can span more than one
+              property. The primary hotel above stays the source of bank
+              details + the "header" hotel on the PDF. */}
+          <div className={`flex items-center gap-2 ${isAr ? 'flex-row-reverse justify-start' : ''}`}>
+            <input
+              id="multiHotelToggle"
+              type="checkbox"
+              checked={quoteForm.multiHotel}
+              onChange={e => setQuoteForm(p => ({ ...p, multiHotel: e.target.checked }))}
+              className="h-4 w-4"
+            />
+            <label htmlFor="multiHotelToggle" className="text-sm font-semibold text-brand-700 cursor-pointer">
+              {isAr ? 'عرض سعر متعدد الفنادق (فندق مختلف لكل بند)' : 'Multi-hotel quote (different hotel per item)'}
+            </label>
+          </div>
+
           {/* Items */}
           <div>
             <div className={`flex items-center justify-between mb-2 ${isAr ? 'flex-row-reverse' : ''}`}>
               <label className="label mb-0">{isAr ? 'البنود' : 'Items'}</label>
               <button type="button" className="text-xs text-brand-600 hover:text-brand-800 font-semibold"
-                onClick={() => setQuoteItems(p => [...p, { description: '', roomType: '', nights: '', rooms: '', ratePerNight: '' }])}>
+                onClick={() => setQuoteItems(p => [...p, { description: '', roomType: '', nights: '', rooms: '', ratePerNight: '', hotelId: '' }])}>
                 + {isAr ? 'إضافة بند' : 'Add Item'}
               </button>
             </div>
             <div className="space-y-3">
               {quoteItems.map((item, i) => (
                 <div key={i} className="p-3 rounded-lg bg-brand-50/50 border border-brand-100 space-y-2">
+                  {quoteForm.multiHotel && (
+                    <div>
+                      <select
+                        className="input text-sm"
+                        value={item.hotelId || ''}
+                        onChange={e => { const n = [...quoteItems]; n[i].hotelId = e.target.value; setQuoteItems(n); }}
+                      >
+                        <option value="">{isAr ? 'اختر الفندق لهذا البند' : 'Select hotel for this item'}</option>
+                        {hotels.map(h => (
+                          <option key={h.id} value={h.id}>{h.name}{h.city ? ` — ${h.city}` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <input className="input text-sm" placeholder={isAr ? 'الوصف *' : 'Description *'}
                       value={item.description} onChange={e => { const n = [...quoteItems]; n[i].description = e.target.value; setQuoteItems(n); }} />
@@ -1503,36 +1539,54 @@ export default function ClientDetail() {
           </div>
           {/* Language picker — chooses what language the generated PDF is rendered in */}
 
-          {/* Meals — adds a "prices include …" line in the PDF benefits section */}
+          {/* Meals — multi-select. 'none' and 'full_board' are exclusive (they
+              imply the answer all by themselves), so picking either one clears
+              the rest, and picking any of breakfast/lunch/dinner clears them. */}
           <div>
-            <label className="label">{isAr ? 'الوجبات' : 'Meals'}</label>
+            <label className="label">{isAr ? 'الوجبات (يمكن اختيار أكثر من خيار)' : 'Meals (multi-select)'}</label>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               {([
-                { v: 'none',       ar: 'بدون',   en: 'None' },
-                { v: 'breakfast',  ar: 'فطار',   en: 'Breakfast' },
-                { v: 'lunch',      ar: 'غداء',   en: 'Lunch' },
-                { v: 'dinner',     ar: 'عشاء',   en: 'Dinner' },
-                { v: 'full_board', ar: 'الثلاث وجبات', en: 'Full Board' },
-              ] as const).map(opt => (
-                <label
-                  key={opt.v}
-                  className={`cursor-pointer rounded-lg border-2 px-2 py-2 text-center text-sm font-semibold ${
-                    quoteForm.meals === opt.v
-                      ? 'border-brand-500 bg-brand-50 text-brand-900'
-                      : 'border-brand-200 hover:border-brand-300 text-brand-500'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="quoteMeals"
-                    className="sr-only"
-                    value={opt.v}
-                    checked={quoteForm.meals === opt.v}
-                    onChange={() => setQuoteForm(p => ({ ...p, meals: opt.v }))}
-                  />
-                  {isAr ? opt.ar : opt.en}
-                </label>
-              ))}
+                { v: 'none',       ar: 'بدون',         en: 'None' },
+                { v: 'breakfast',  ar: 'فطار',         en: 'Breakfast' },
+                { v: 'lunch',      ar: 'غداء',         en: 'Lunch' },
+                { v: 'dinner',     ar: 'عشاء',         en: 'Dinner' },
+                { v: 'full_board', ar: 'الثلاث وجبات',  en: 'Full Board' },
+              ] as const).map(opt => {
+                const checked = quoteForm.meals.includes(opt.v as MealKey);
+                const toggleMeal = () => {
+                  setQuoteForm(p => {
+                    const isExclusive = opt.v === 'none' || opt.v === 'full_board';
+                    if (checked) {
+                      // Uncheck — don't let the form go totally empty; if you
+                      // unchecked the only choice, default back to breakfast.
+                      const next = p.meals.filter(m => m !== opt.v);
+                      return { ...p, meals: (next.length ? next : ['breakfast']) as MealKey[] };
+                    }
+                    if (isExclusive) return { ...p, meals: [opt.v] as MealKey[] };
+                    // Plain meal — drop any exclusive that was active.
+                    const cleaned = p.meals.filter(m => m !== 'none' && m !== 'full_board');
+                    return { ...p, meals: [...cleaned, opt.v as MealKey] };
+                  });
+                };
+                return (
+                  <label
+                    key={opt.v}
+                    className={`cursor-pointer rounded-lg border-2 px-2 py-2 text-center text-sm font-semibold ${
+                      checked
+                        ? 'border-brand-500 bg-brand-50 text-brand-900'
+                        : 'border-brand-200 hover:border-brand-300 text-brand-500'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={checked}
+                      onChange={toggleMeal}
+                    />
+                    {isAr ? opt.ar : opt.en}
+                  </label>
+                );
+              })}
             </div>
           </div>
 

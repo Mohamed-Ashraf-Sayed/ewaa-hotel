@@ -294,7 +294,6 @@ router.get('/:id/pdf', authenticate, async (req, res) => {
       municipalityTaxPercent: quote.munTaxRate,
       lang: quote.lang,
       meals: quote.meals,
-      preparedByTitle: quote.preparedByTitle,
       paymentTerms: quote.paymentTerms,
       arrivalDate: quote.arrivalDate,
       companyName: quote.client?.companyName,
@@ -307,6 +306,9 @@ router.get('/:id/pdf', authenticate, async (req, res) => {
     req._overrideRepName  = quote.salesRep?.name  || null;
     req._overrideRepEmail = quote.salesRep?.email || null;
     req._overrideRepPhone = quote.salesRep?.phone || '';
+    // Use the title that was frozen on the quote at creation time, not the
+    // rep's current title (in case they were promoted later).
+    req._overrideRepTitle = quote.preparedByTitle || '';
     return generateQuote(req, res);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });

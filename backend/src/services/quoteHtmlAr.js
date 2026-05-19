@@ -49,6 +49,8 @@ const T = {
   company: 'الشركة', contact: 'جهة الاتصال', phone: 'الهاتف', email: 'البريد الإلكتروني',
   descRoom: 'الوصف', roomType: 'نوع الغرفة', rooms: 'الغرف', nights: 'الليالي',
   rateNight: 'السعر / ليلة (ر.س)', totalCol: 'الإجمالي (ر.س)',
+  hotelCol: 'الفندق',
+  clientApproval: 'موافقة العميل',
   subtotal: 'المجموع الفرعي', vat: 'ضريبة القيمة المضافة (15%)', municipalityTax: 'رسوم البلدية', grandTotal: 'الإجمالي النهائي',
   sar: 'ر.س',
   notesTerms: 'ملاحظات وشروط',
@@ -56,15 +58,25 @@ const T = {
   benefit1: (tax) => `الأسعار أعلاه تشمل ضريبة القيمة المضافة 15%${tax > 0 ? ` ورسوم البلدية ${tax}%` : ''} في فنادق إيواء.`,
   benefit2: 'الأسعار أعلاه صافية وغير قابلة للعمولة وبالريال السعودي.',
   benefit3: 'الأسعار المعروضة شاملة الإنترنت اللاسلكي WI-Fi.',
+  // Meals can be one or more of: none / breakfast / lunch / dinner / full_board.
+  // Compose an Arabic line listing every meal the rep selected, joined with "و".
+  // 'none' suppresses the line entirely; 'full_board' expands to all three.
   benefit4: (meals) => {
-    switch (meals) {
-      case 'lunch':      return 'الأسعار شاملة الغداء.';
-      case 'dinner':     return 'الأسعار شاملة العشاء.';
-      case 'full_board': return 'الأسعار شاملة الإفطار والغداء والعشاء.';
-      case 'none':       return null;
-      case 'breakfast':
-      default:           return 'الأسعار شاملة الإفطار.';
+    const arr = Array.isArray(meals)
+      ? meals
+      : String(meals || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (arr.length === 0 || arr.includes('none')) return null;
+    if (arr.includes('full_board')) {
+      return 'الأسعار شاملة الإفطار والغداء والعشاء.';
     }
+    const labels = { breakfast: 'الإفطار', lunch: 'الغداء', dinner: 'العشاء' };
+    const picked = ['breakfast','lunch','dinner'].filter(k => arr.includes(k)).map(k => labels[k]);
+    if (picked.length === 0) return null;
+    if (picked.length === 1) return `الأسعار شاملة ${picked[0]}.`;
+    // For 2+, join with "و" before every element except the first:
+    //   ["الإفطار","الغداء","العشاء"] → "الإفطار والغداء والعشاء"
+    const joined = picked[0] + picked.slice(1).map(p => ' و' + p).join('');
+    return `الأسعار شاملة ${joined}.`;
   },
   termsTitle: 'الشروط والأحكام',
   terms1: 'موعد تسجيل الدخول الساعة 15:00 ومغادرة الغرفة الساعة 12:00 ظهرًا. أي تأخير في المغادرة بعد الساعة 16:00 يخضع لرسوم 50% من السعر المتفق عليه، وأي تأخير بعد الساعة 18:00 يخضع لرسوم ليلة كاملة إضافية. تسجيل الدخول المبكر أو تمديد المغادرة متاحان حسب التوفر.',
@@ -112,6 +124,7 @@ const renderQuoteHtmlAr = ({
   companyName,
   contactPerson,
   items,
+  isMultiHotel,
   subtotal,
   munTaxRate,
   munTax,
@@ -140,6 +153,7 @@ const renderQuoteHtmlAr = ({
 
   const itemRows = items.map((it) => `
       <tr>
+        ${isMultiHotel ? `<td>${escapeHtml(it.hotelName || '-')}</td>` : ''}
         <td class="td-desc">${escapeHtml(it.description || '')}</td>
         <td>${escapeHtml(it.roomType || '-')}</td>
         <td>${it.rooms || 0}</td>
@@ -396,6 +410,7 @@ const renderQuoteHtmlAr = ({
   <table class="items">
     <thead>
       <tr>
+        ${isMultiHotel ? `<th>${T.hotelCol}</th>` : ''}
         <th>${T.descRoom}</th>
         <th>${T.roomType}</th>
         <th>${T.rooms}</th>
@@ -505,6 +520,19 @@ const renderQuoteHtmlAr = ({
       <div class="sig-field"><span class="lbl">${T.signature}:</span><span class="val"></span></div>
       <div class="sig-field"><span class="lbl">${T.dateField}:</span><span class="val">${todayStr}</span></div>
       <div class="sig-field"><span class="lbl">${T.phoneField}:</span><span class="val" dir="ltr" style="text-align:right;">${escapeHtml(repPhone)}</span></div>
+      <div class="sig-field"><span class="lbl">${T.companyStamp}:</span><span class="val"></span></div>
+    </div>
+  </div>
+
+  <!-- Client approval block — empty fields for the client to fill in by hand. -->
+  <div class="signature-block">
+    <h2>${T.clientApproval}</h2>
+    <div class="signature-grid">
+      <div class="sig-field"><span class="lbl">${T.name}:</span><span class="val"></span></div>
+      <div class="sig-field"><span class="lbl">${T.titleField}:</span><span class="val"></span></div>
+      <div class="sig-field"><span class="lbl">${T.signature}:</span><span class="val"></span></div>
+      <div class="sig-field"><span class="lbl">${T.dateField}:</span><span class="val"></span></div>
+      <div class="sig-field"><span class="lbl">${T.phoneField}:</span><span class="val"></span></div>
       <div class="sig-field"><span class="lbl">${T.companyStamp}:</span><span class="val"></span></div>
     </div>
   </div>
