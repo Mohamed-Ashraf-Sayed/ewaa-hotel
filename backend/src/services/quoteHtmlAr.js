@@ -370,12 +370,19 @@ const renderQuoteHtmlAr = ({
     margin: 14px 0;
   }
 
-  .signature-block {
+  /* Wrapper holding the two signature blocks side-by-side. Keeps the pair
+     atomic so they don't drift to a new page that ends up half empty. */
+  .signature-row {
+    display: flex;
+    gap: 24px;
     margin-top: 10px;
-    /* Signature lines should stay together — splitting "Name / Title /
-       Signature / Date / Phone / Stamp" across a page break looks
-       broken. Keep each whole block intact even though regular sections
-       are allowed to split. */
+    page-break-inside: avoid;
+    break-inside: avoid;
+    align-items: flex-start;
+  }
+  .signature-block {
+    flex: 1;
+    min-width: 0;
     page-break-inside: avoid;
     break-inside: avoid;
   }
@@ -388,11 +395,11 @@ const renderQuoteHtmlAr = ({
   .signature-grid {
     display: grid;
     /* Single column — each field sits under the previous one so the rep
-       can sign / stamp without the layout fighting them. */
+       can sign / stamp without the layout fighting them. The side-by-side
+       wrapper already constrains the total width, so no max-width here. */
     grid-template-columns: 1fr;
     gap: 12px;
     margin-top: 6px;
-    max-width: 360px;
   }
   .sig-field {
     border-bottom: 1px solid #9ca3af;
@@ -543,28 +550,32 @@ const renderQuoteHtmlAr = ({
 
   <p class="welcoming">${T.welcoming}</p>
 
-  <div class="signature-block">
-    <h2>${T.confirmOn}</h2>
-    <div class="signature-grid">
-      <div class="sig-field"><span class="lbl">${T.name}:</span><span class="val">${escapeHtml(repName)}</span></div>
-      <div class="sig-field"><span class="lbl">${T.titleField}:</span><span class="val">${escapeHtml(repTitle)}</span></div>
-      <div class="sig-field"><span class="lbl">${T.signature}:</span><span class="val"></span></div>
-      <div class="sig-field"><span class="lbl">${T.dateField}:</span><span class="val">${todayStr}</span></div>
-      <div class="sig-field"><span class="lbl">${T.phoneField}:</span><span class="val" dir="ltr" style="text-align:right;">${escapeHtml(repPhone)}</span></div>
-      <div class="sig-field"><span class="lbl">${T.companyStamp}:</span><span class="val"></span></div>
+  <!-- Both signature blocks side-by-side so 12 rows of fields don't push the
+       layout onto a new page that ends up half-empty. The wrapper itself is
+       page-break-inside: avoid so the pair stays together. -->
+  <div class="signature-row">
+    <div class="signature-block">
+      <h2>${T.confirmOn}</h2>
+      <div class="signature-grid">
+        <div class="sig-field"><span class="lbl">${T.name}:</span><span class="val">${escapeHtml(repName)}</span></div>
+        <div class="sig-field"><span class="lbl">${T.titleField}:</span><span class="val">${escapeHtml(repTitle)}</span></div>
+        <div class="sig-field"><span class="lbl">${T.signature}:</span><span class="val"></span></div>
+        <div class="sig-field"><span class="lbl">${T.dateField}:</span><span class="val">${todayStr}</span></div>
+        <div class="sig-field"><span class="lbl">${T.phoneField}:</span><span class="val" dir="ltr" style="text-align:right;">${escapeHtml(repPhone)}</span></div>
+        <div class="sig-field"><span class="lbl">${T.companyStamp}:</span><span class="val"></span></div>
+      </div>
     </div>
-  </div>
 
-  <!-- Client approval block — empty fields for the client to fill in by hand. -->
-  <div class="signature-block">
-    <h2>${T.clientApproval}</h2>
-    <div class="signature-grid">
-      <div class="sig-field"><span class="lbl">${T.name}:</span><span class="val"></span></div>
-      <div class="sig-field"><span class="lbl">${T.titleField}:</span><span class="val"></span></div>
-      <div class="sig-field"><span class="lbl">${T.signature}:</span><span class="val"></span></div>
-      <div class="sig-field"><span class="lbl">${T.dateField}:</span><span class="val"></span></div>
-      <div class="sig-field"><span class="lbl">${T.phoneField}:</span><span class="val"></span></div>
-      <div class="sig-field"><span class="lbl">${T.companyStamp}:</span><span class="val"></span></div>
+    <div class="signature-block">
+      <h2>${T.clientApproval}</h2>
+      <div class="signature-grid">
+        <div class="sig-field"><span class="lbl">${T.name}:</span><span class="val"></span></div>
+        <div class="sig-field"><span class="lbl">${T.titleField}:</span><span class="val"></span></div>
+        <div class="sig-field"><span class="lbl">${T.signature}:</span><span class="val"></span></div>
+        <div class="sig-field"><span class="lbl">${T.dateField}:</span><span class="val"></span></div>
+        <div class="sig-field"><span class="lbl">${T.phoneField}:</span><span class="val"></span></div>
+        <div class="sig-field"><span class="lbl">${T.companyStamp}:</span><span class="val"></span></div>
+      </div>
     </div>
   </div>
 
