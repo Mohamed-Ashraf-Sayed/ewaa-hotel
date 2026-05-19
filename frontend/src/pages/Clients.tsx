@@ -26,8 +26,8 @@ const SOURCE_OPTS_EN = [
   { value: 'other', label: 'Other' },
 ];
 
-const INDUSTRY_OPTS_AR = ['تكنولوجيا', 'نفط وغاز', 'هندسة', 'طيران', 'رعاية صحية', 'سياحة', 'تجارة', 'شحن بحري', 'أدوية', 'عقارات', 'تمويل', 'حكومي', 'تعليم', 'أخرى'];
-const INDUSTRY_OPTS_EN = ['Technology', 'Oil & Gas', 'Engineering', 'Aviation', 'Healthcare', 'Tourism', 'Trading', 'Shipping', 'Pharmaceutical', 'Real Estate', 'Finance', 'Government', 'Education', 'Other'];
+const INDUSTRY_OPTS_AR = ['تكنولوجيا', 'نفط وغاز', 'هندسة', 'طيران', 'رعاية صحية', 'سياحة', 'تجارة', 'شحن بحري', 'لوجستك', 'أدوية', 'عقارات', 'مقاولات', 'الانشاءات', 'بنية تحتية', 'اندية رياضية', 'التصوير والمديا', 'تمويل', 'حكومي', 'تعليم', 'أخرى'];
+const INDUSTRY_OPTS_EN = ['Technology', 'Oil & Gas', 'Engineering', 'Aviation', 'Healthcare', 'Tourism', 'Trading', 'Shipping', 'Logistics', 'Pharmaceutical', 'Real Estate', 'Contracting', 'Construction', 'Infrastructure', 'Sports Clubs', 'Photography & Media', 'Finance', 'Government', 'Education', 'Other'];
 
 export default function Clients() {
   const { lang } = useLanguage();
