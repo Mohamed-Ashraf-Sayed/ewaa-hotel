@@ -346,16 +346,46 @@ const generateQuote = async (req, res) => {
     else                                 mealsArr = ['breakfast','lunch','dinner'].filter(m => mealsSet.has(m));
     const meals = mealsArr.join(',');
 
-    // Job title: pulled from the rep's User row (set once on their profile),
-    // not from a per-quote input. Re-download path can override via
-    // _overrideRepTitle so a manager re-downloading shows the original rep.
+    // Job title for the PDF signature block: prefer the rep's custom title
+    // (set once on their User profile). If they don't have one, fall back
+    // to the role label so a sales_rep stamps "تنفيذي مبيعات" / "Sales
+    // Executive" automatically without needing an admin to backfill every
+    // user. Re-download path supplies _overrideRepTitle from the saved
+    // quote so historical PDFs render with their original title.
+    const ROLE_LABEL_AR = {
+      admin: 'مدير النظام',
+      general_manager: 'مدير عام',
+      vice_gm: 'نائب المدير العام',
+      sales_director: 'مدير مبيعات',
+      assistant_sales: 'مساعد مدير المبيعات',
+      sales_rep: 'تنفيذي مبيعات',
+      contract_officer: 'مسئول العقود',
+      reservations: 'قسم الحجوزات',
+      credit_manager: 'مدير الائتمان',
+      credit_officer: 'موظف ائتمان',
+      marketing_manager: 'مدير التسويق',
+    };
+    const ROLE_LABEL_EN = {
+      admin: 'IT Admin',
+      general_manager: 'General Manager',
+      vice_gm: 'Vice General Manager',
+      sales_director: 'Sales Director',
+      assistant_sales: 'Assistant Sales Manager',
+      sales_rep: 'Sales Executive',
+      contract_officer: 'Contract Officer',
+      reservations: 'Reservations',
+      credit_manager: 'Credit Manager',
+      credit_officer: 'Credit Officer',
+      marketing_manager: 'Marketing Manager',
+    };
     let preparedByTitle = null;
     if (req._overrideRepTitle !== undefined) {
       preparedByTitle = req._overrideRepTitle || null;
     } else if (req.user?.id) {
       try {
-        const u = await prisma.user.findUnique({ where: { id: req.user.id }, select: { title: true } });
-        preparedByTitle = u?.title || null;
+        const u = await prisma.user.findUnique({ where: { id: req.user.id }, select: { title: true, role: true } });
+        const map = (lang === 'ar') ? ROLE_LABEL_AR : ROLE_LABEL_EN;
+        preparedByTitle = u?.title || map[u?.role] || null;
       } catch (_) { /* non-fatal */ }
     }
     const paymentTerms = (paymentTermsRaw || '').toString().trim().slice(0, 2000) || null;
