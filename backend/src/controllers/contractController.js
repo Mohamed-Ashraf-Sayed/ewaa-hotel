@@ -434,12 +434,19 @@ const recalculatePulse = async (clientId) => {
       prisma.visit.count({ where: { clientId, visitDate: { gte: thirtyDaysAgo } } }),
       prisma.contract.findFirst({ where: { clientId, status: 'approved', endDate: { gte: now } } }),
       prisma.contract.count({ where: { clientId, status: 'approved' } }),
-      prisma.client.findUnique({ where: { id: clientId }, select: { salesRepId: true } })
+      prisma.client.findUnique({ where: { id: clientId }, select: { salesRepId: true, createdAt: true } })
     ]);
 
+    // When the client has no visits yet, fall back to how long they've been
+    // in the system (instead of the old "999 days" placeholder, which made
+    // every freshly-added client look like a 3-year-stale account and
+    // dumped them straight into the "at-risk" widget).
+    const daysSinceCreation = client?.createdAt
+      ? Math.floor((now - new Date(client.createdAt)) / (1000 * 60 * 60 * 24))
+      : 0;
     const daysSince = lastVisit
       ? Math.floor((now - new Date(lastVisit.visitDate)) / (1000 * 60 * 60 * 24))
-      : 999;
+      : daysSinceCreation;
 
     const recencyScore = daysSince <= 7 ? 100 : daysSince <= 14 ? 80 : daysSince <= 30 ? 60 : daysSince <= 60 ? 40 : daysSince <= 90 ? 20 : 0;
     const visitScore = Math.min(visitsLast30 * 25, 100);

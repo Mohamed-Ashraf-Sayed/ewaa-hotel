@@ -130,6 +130,11 @@ const generateNotifications = async (req, res) => {
 
     for (const client of activeClients) {
       const lastVisit = client.visits[0]?.visitDate;
+      // For clients with no visits yet, only flag as inactive if they've
+      // been in the system for >30 days — otherwise a brand-new client
+      // gets a "needs follow-up" alert the same day they were added.
+      const noVisitButFresh = !lastVisit && new Date(client.createdAt) >= thirtyDaysAgo;
+      if (noVisitButFresh) continue;
       if (!lastVisit || new Date(lastVisit) < thirtyDaysAgo) {
         const exists = await prisma.notification.findFirst({
           where: {
@@ -140,13 +145,18 @@ const generateNotifications = async (req, res) => {
           },
         });
         if (!exists) {
-          const days = lastVisit ? Math.ceil((new Date() - new Date(lastVisit)) / (1000 * 60 * 60 * 24)) : 999;
+          // No visits = report how long since they were added; otherwise
+          // how long since the last visit. Avoids the legacy "999 days"
+          // placeholder leaking into user-facing messages.
+          const days = lastVisit
+            ? Math.ceil((new Date() - new Date(lastVisit)) / (1000 * 60 * 60 * 24))
+            : Math.ceil((new Date() - new Date(client.createdAt)) / (1000 * 60 * 60 * 24));
           const n = await prisma.notification.create({
             data: {
               userId: client.salesRepId,
               type: 'client_inactive',
               title: 'عميل يحتاج متابعة',
-              message: `شركة ${client.companyName} لم تتم زيارتها منذ ${days > 900 ? 'فترة طويلة' : days + ' يوم'}`,
+              message: `شركة ${client.companyName} لم تتم زيارتها منذ ${days} يوم`,
               link: `/clients/${client.id}`,
             },
           });
