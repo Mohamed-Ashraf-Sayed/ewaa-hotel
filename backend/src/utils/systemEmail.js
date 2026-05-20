@@ -22,7 +22,7 @@ const buildTransporter = async () => {
   }
 
   const admin = await prisma.user.findFirst({
-    where: { role: { in: ['admin', 'general_manager'] }, smtpHost: { not: null }, smtpPassword: { not: null } },
+    where: { role: { in: ['admin', 'general_manager', 'systems_info'] }, smtpHost: { not: null }, smtpPassword: { not: null } },
     orderBy: { role: 'asc' },
   });
   if (!admin) return null;

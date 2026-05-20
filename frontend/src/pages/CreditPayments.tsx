@@ -62,7 +62,7 @@ export default function CreditPayments() {
   const isAr = lang === 'ar';
   const locale = isAr ? arSA : enUS;
 
-  const canApprove = hasRole('credit_manager', 'admin', 'general_manager', 'vice_gm');
+  const canApprove = hasRole('credit_manager', 'admin', 'general_manager', 'systems_info', 'vice_gm');
   const [tab, setTab] = useState<CredTab>(canApprove ? 'approvals' : 'collect');
 
   const [clients, setClients] = useState<ClientLite[]>([]);

@@ -2,7 +2,7 @@ const { PrismaClient } = require('@prisma/client');
 const { getSubordinateIds } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
-const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
 const CREDIT_RECORD_ROLES = ['credit_officer'];           // can create payments (pending)
 const CREDIT_APPROVE_ROLES = ['credit_manager'];          // can approve / reject
 

@@ -52,7 +52,7 @@ export default function Chat() {
   const { lang } = useLanguage();
   const isAr = lang === 'ar';
   const locale = isAr ? arSA : enUS;
-  const canBroadcast = hasRole('sales_director', 'general_manager', 'vice_gm', 'admin');
+  const canBroadcast = hasRole('sales_director', 'general_manager', 'systems_info', 'vice_gm', 'admin');
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);

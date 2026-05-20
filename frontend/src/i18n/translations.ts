@@ -182,6 +182,7 @@ const translations = {
   // === Roles ===
   role_admin: { ar: 'مدير النظام (IT)', en: 'IT Admin' },
   role_general_manager: { ar: 'مدير عام', en: 'General Manager' },
+  role_systems_info: { ar: 'نظم ومعلومات', en: 'Systems & Information' },
   role_vice_gm: { ar: 'نائب المدير العام', en: 'Vice General Manager' },
   role_sales_director: { ar: 'مدير مبيعات', en: 'Sales Director' },
   role_assistant_sales: { ar: 'مساعد مدير المبيعات', en: 'Assistant Sales Manager' },

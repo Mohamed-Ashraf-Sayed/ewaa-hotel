@@ -24,7 +24,7 @@ export default function Visits() {
   const isAr = lang === 'ar';
   const locale = isAr ? arSA : enUS;
   const VISIT_TYPES = isAr ? VISIT_TYPES_AR : VISIT_TYPES_EN;
-  const isManager = hasRole('admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales');
+  const isManager = hasRole('admin', 'general_manager', 'systems_info', 'vice_gm', 'sales_director', 'assistant_sales');
 
   const [visits, setVisits] = useState<Visit[]>([]);
   const [followUps, setFollowUps] = useState<Visit[]>([]);

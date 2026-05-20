@@ -10,8 +10,8 @@ const upload = require('../middleware/upload');
 router.get('/', authenticate, getPayments);
 router.get('/summary', authenticate, getPaymentSummary);
 router.post('/', authenticate, upload.single('receipt'), createPayment);
-router.post('/:id/approve', authenticate, authorize('admin', 'general_manager', 'vice_gm', 'credit_manager'), approvePayment);
-router.post('/:id/reject', authenticate, authorize('admin', 'general_manager', 'vice_gm', 'credit_manager'), rejectPayment);
-router.delete('/:id', authenticate, authorize('general_manager', 'vice_gm', 'sales_director'), deletePayment);
+router.post('/:id/approve', authenticate, authorize('admin', 'general_manager', 'systems_info', 'vice_gm', 'credit_manager'), approvePayment);
+router.post('/:id/reject', authenticate, authorize('admin', 'general_manager', 'systems_info', 'vice_gm', 'credit_manager'), rejectPayment);
+router.delete('/:id', authenticate, authorize('general_manager', 'systems_info', 'vice_gm', 'sales_director'), deletePayment);
 
 module.exports = router;

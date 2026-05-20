@@ -978,7 +978,7 @@ const generateClientReport = async (req, res) => {
       if (to) where.createdAt.lte = new Date(`${to}T23:59:59`);
     }
 
-    const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+    const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
     if (!ADMIN_ROLES.includes(req.user.role) && req.user.role !== 'contract_officer') {
       if (req.user.role === 'sales_director') {
         const subs = await prisma.user.findMany({ where: { managerId: req.user.id }, select: { id: true } });
@@ -1077,7 +1077,7 @@ const generateClientReport = async (req, res) => {
 // have a `salesRepId` field. Admins / contract officers see everything;
 // directors see their team; reps (including assistant_sales) see only own.
 const applyAccessScope = async (user, where) => {
-  const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+  const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
   if (ADMIN_ROLES.includes(user.role) || user.role === 'contract_officer') return;
   if (user.role === 'sales_director') {
     const subs = await prisma.user.findMany({ where: { managerId: user.id }, select: { id: true } });
@@ -1261,7 +1261,7 @@ const generatePaymentsReport = async (req, res) => {
     if (paymentType) where.paymentType = paymentType;
 
     // Payments scope: collectors are users; for sales scope, look at the contract's salesRepId.
-    const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+    const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
     if (!ADMIN_ROLES.includes(req.user.role) && !['credit_manager', 'credit_officer', 'contract_officer'].includes(req.user.role)) {
       // Restrict by collectedBy or by contract's salesRep
       where.OR = [];
@@ -1345,7 +1345,7 @@ const generatePaymentMethodsReport = async (req, res) => {
     const { salesRepId, from, to } = req.query;
     const where = { ...dateRangeWhere(from, to, 'paymentDate') };
 
-    const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+    const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
     if (!ADMIN_ROLES.includes(req.user.role) && !['credit_manager', 'credit_officer', 'contract_officer'].includes(req.user.role)) {
       if (req.user.role === 'sales_director') {
         const subs = await prisma.user.findMany({ where: { managerId: req.user.id }, select: { id: true } });

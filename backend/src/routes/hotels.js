@@ -16,7 +16,7 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-router.post('/', authenticate, authorize('general_manager', 'vice_gm'), async (req, res) => {
+router.post('/', authenticate, authorize('general_manager', 'systems_info', 'vice_gm'), async (req, res) => {
   try {
     const { name, nameEn, location, city, country, stars, type, group,
             bankName, beneficiaryName, nationalId, accountNumber, iban } = req.body;
@@ -41,7 +41,7 @@ router.post('/', authenticate, authorize('general_manager', 'vice_gm'), async (r
   }
 });
 
-router.put('/:id', authenticate, authorize('general_manager', 'vice_gm'), async (req, res) => {
+router.put('/:id', authenticate, authorize('general_manager', 'systems_info', 'vice_gm'), async (req, res) => {
   try {
     const b = req.body || {};
     const data = {};

@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const prisma = new PrismaClient();
 
-const MANAGE_ROLES = ['admin', 'general_manager', 'vice_gm', 'marketing_manager'];
+const MANAGE_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm', 'marketing_manager'];
 
 const includeAuthor = { createdBy: { select: { id: true, name: true } } };
 
@@ -41,7 +41,7 @@ const getActivePromotions = async (req, res) => {
         if (!p.hotelIds && !p.brands) return true;
 
         // Admin / marketing manager / GM see everything regardless
-        if (['admin', 'general_manager', 'vice_gm', 'marketing_manager'].includes(req.user.role)) return true;
+        if (['admin', 'general_manager', 'systems_info', 'vice_gm', 'marketing_manager'].includes(req.user.role)) return true;
 
         if (p.hotelIds) {
           const ids = p.hotelIds.split(',').map(s => parseInt(s.trim())).filter(Number.isFinite);

@@ -36,7 +36,7 @@ export default function Targets() {
   const { t, lang } = useLanguage();
   const { user, hasRole } = useAuth();
   const isAr = lang === 'ar';
-  const canManage = hasRole('sales_director', 'general_manager', 'vice_gm');
+  const canManage = hasRole('sales_director', 'general_manager', 'systems_info', 'vice_gm');
 
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());

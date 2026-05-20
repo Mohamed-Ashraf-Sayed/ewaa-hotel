@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'general_manager' | 'vice_gm' | 'sales_director' | 'assistant_sales' | 'sales_rep' | 'contract_officer' | 'reservations' | 'credit_manager' | 'credit_officer' | 'marketing_manager';
+export type Role = 'admin' | 'general_manager' | 'systems_info' | 'vice_gm' | 'sales_director' | 'assistant_sales' | 'sales_rep' | 'contract_officer' | 'reservations' | 'credit_manager' | 'credit_officer' | 'marketing_manager';
 
 export interface Promotion {
   id: number;

@@ -3,7 +3,7 @@ const router = express.Router();
 const { list, getOne, create, update, remove, testConnection, pollNow } = require('../controllers/imapAccountController');
 const { authenticate, authorize } = require('../middleware/auth');
 
-const ADMIN = ['admin', 'general_manager', 'vice_gm'];
+const ADMIN = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
 
 router.get('/', authenticate, authorize(...ADMIN), list);
 router.post('/poll-now', authenticate, authorize(...ADMIN, 'reservations'), pollNow);

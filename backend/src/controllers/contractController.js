@@ -53,7 +53,7 @@ const buildEmailTemplate = (title, message, contractRef, clientName, hotelName, 
   </div>
 </div>`;
 
-const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
 
 const buildContractFilter = async (user) => {
   if (ADMIN_ROLES.includes(user.role) || user.role === 'contract_officer' || user.role === 'reservations' || user.role === 'credit_manager' || user.role === 'credit_officer') return {};
@@ -229,7 +229,7 @@ const approveContract = async (req, res) => {
     const isCashContract = current.paymentMethod === 'cash';
 
     if (status === 'approved') {
-      if (role === 'general_manager' || role === 'admin') {
+      if (role === 'general_manager' || role === 'systems_info' || role === 'admin') {
         newStatus = 'approved';
       } else if (role === 'sales_director') {
         if (current.status !== 'pending') {
@@ -530,7 +530,7 @@ const confirmBooking = async (req, res) => {
     // Notify sales rep + management
     const recipients = [contract.salesRepId];
     const managers = await prisma.user.findMany({
-      where: { role: { in: ['general_manager', 'vice_gm', 'sales_director'] }, isActive: true }
+      where: { role: { in: ['general_manager', 'systems_info', 'vice_gm', 'sales_director'] }, isActive: true }
     });
     managers.forEach(m => recipients.push(m.id));
 

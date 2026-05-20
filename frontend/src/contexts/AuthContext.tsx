@@ -64,8 +64,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const hasRole = (...roles: string[]) => !!user && roles.includes(user.role);
-  const canSeeAll = () => hasRole('general_manager', 'vice_gm');
-  const isManager = () => hasRole('general_manager', 'vice_gm', 'sales_director');
+  const canSeeAll = () => hasRole('general_manager', 'systems_info', 'vice_gm');
+  const isManager = () => hasRole('general_manager', 'systems_info', 'vice_gm', 'sales_director');
 
   return (
     <AuthContext.Provider value={{ user, token, login, logout, refreshUser, isLoading, hasRole, canSeeAll, isManager }}>

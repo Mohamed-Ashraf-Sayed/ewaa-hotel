@@ -38,7 +38,7 @@ export default function Quotes() {
 
   // Approve / reject buttons only render for roles that can act on
   // pending quotes. Everyone else sees the same list read-only.
-  const canApprove = hasRole('sales_director', 'admin', 'general_manager', 'vice_gm');
+  const canApprove = hasRole('sales_director', 'admin', 'general_manager', 'systems_info', 'vice_gm');
 
   const [rows, setRows] = useState<QuoteRow[]>([]);
   const [loading, setLoading] = useState(true);

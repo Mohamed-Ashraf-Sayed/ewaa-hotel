@@ -3,7 +3,7 @@ const { getSubordinateIds } = require('../middleware/auth');
 const { recalculatePulse } = require('./contractController');
 const prisma = new PrismaClient();
 
-const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
 
 const getVisits = async (req, res) => {
   try {

@@ -2,7 +2,7 @@ const { PrismaClient } = require('@prisma/client');
 const { getSubordinateIds } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
-const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
 const MANAGER_ROLES = ['sales_director'];
 
 const buildAccessFilter = async (user) => {
@@ -226,7 +226,7 @@ const updateClient = async (req, res) => {
     // Reassigning a client to a different sales rep is restricted to admin /
     // GM / VGM. For everyone else we silently strip the field so the rep
     // assignment can't be tampered with.
-    const REASSIGN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+    const REASSIGN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
     if (data.salesRepId !== undefined && !REASSIGN_ROLES.includes(req.user.role)) {
       delete data.salesRepId;
     }
@@ -237,7 +237,7 @@ const updateClient = async (req, res) => {
     // Once a sales rep has saved a geo location, they cannot change or clear it.
     // Only admins / general managers / vice GMs can override.
     if (data.latitude !== undefined || data.longitude !== undefined) {
-      const ADMIN_OVERRIDE_ROLES = ['admin', 'general_manager', 'vice_gm'];
+      const ADMIN_OVERRIDE_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
       if (!ADMIN_OVERRIDE_ROLES.includes(req.user.role)) {
         const existing = await prisma.client.findUnique({
           where: { id: clientId },
@@ -254,7 +254,7 @@ const updateClient = async (req, res) => {
 
     // Brand-aware conflict check: allow same reg/tax across clients only if brands don't overlap.
     // Admin / GM / VGM can override (skip the check) — they're trusted to fix data manually.
-    const SKIP_DEDUP_ROLES = ['admin', 'general_manager', 'vice_gm'];
+    const SKIP_DEDUP_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
     const skipDedup = SKIP_DEDUP_ROLES.includes(req.user.role);
     if (!skipDedup && (data.commercialRegNo !== undefined || data.taxCardNo !== undefined || data.brands !== undefined)) {
       const current = await prisma.client.findUnique({ where: { id: clientId } });

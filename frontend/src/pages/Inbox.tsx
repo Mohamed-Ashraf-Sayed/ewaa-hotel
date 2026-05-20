@@ -40,8 +40,8 @@ export default function Inbox() {
   const { hasRole } = useAuth();
   const isAr = lang === 'ar';
   const locale = isAr ? arSA : enUS;
-  const canPoll = hasRole('admin', 'general_manager', 'vice_gm', 'reservations');
-  const canManageImap = hasRole('admin', 'general_manager', 'vice_gm');
+  const canPoll = hasRole('admin', 'general_manager', 'systems_info', 'vice_gm', 'reservations');
+  const canManageImap = hasRole('admin', 'general_manager', 'systems_info', 'vice_gm');
 
   const [items, setItems] = useState<InboxItem[]>([]);
   const [unread, setUnread] = useState(0);

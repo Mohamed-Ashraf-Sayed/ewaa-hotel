@@ -20,7 +20,7 @@ export default function Bookings() {
   const isAr = lang === 'ar';
   const locale = isAr ? arSA : enUS;
 
-  const canManage = hasRole('reservations', 'admin', 'general_manager', 'vice_gm');
+  const canManage = hasRole('reservations', 'admin', 'general_manager', 'systems_info', 'vice_gm');
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [hotels, setHotels] = useState<Hotel[]>([]);

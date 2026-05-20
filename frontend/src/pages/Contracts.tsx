@@ -124,7 +124,7 @@ export default function Contracts() {
     s === 'rejected' ? <span className="badge-rejected">{t('contract_rejected')}</span> :
     <span className="badge-pending">{t('contract_pending')}</span>;
 
-  const canApprove = hasRole('sales_director', 'credit_manager', 'contract_officer', 'vice_gm', 'general_manager');
+  const canApprove = hasRole('sales_director', 'credit_manager', 'contract_officer', 'vice_gm', 'general_manager', 'systems_info');
   const isCreditManager = user?.role === 'credit_manager';
   const isContractOfficer = user?.role === 'contract_officer';
   const isSalesDirector = user?.role === 'sales_director';
@@ -278,28 +278,28 @@ export default function Contracts() {
                           <GitBranch className="w-4 h-4" />
                         </button>
                         {/* Sales director reviews pending */}
-                        {(isSalesDirector || hasRole('general_manager')) && c.status === 'pending' && (
+                        {(isSalesDirector || hasRole('general_manager', 'systems_info')) && c.status === 'pending' && (
                           <button onClick={() => { setApprovalModal(c); setApprovalNote(''); setCreditLimitInput(c.client?.creditLimit != null ? String(c.client.creditLimit) : ''); }}
                             className="px-3 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100">
                             {lang === 'ar' ? 'موافقة المبيعات' : 'Sales Approval'}
                           </button>
                         )}
                         {/* Credit manager reviews sales_approved */}
-                        {(isCreditManager || hasRole('general_manager')) && c.status === 'sales_approved' && (
+                        {(isCreditManager || hasRole('general_manager', 'systems_info')) && c.status === 'sales_approved' && (
                           <button onClick={() => { setApprovalModal(c); setApprovalNote(''); setCreditLimitInput(c.client?.creditLimit != null ? String(c.client.creditLimit) : ''); }}
                             className="px-3 py-1 rounded-lg bg-violet-50 text-violet-700 text-xs font-medium hover:bg-violet-100">
                             {lang === 'ar' ? 'موافقة الائتمان' : 'Credit Approval'}
                           </button>
                         )}
                         {/* Contract officer reviews credit_approved */}
-                        {(isContractOfficer || hasRole('general_manager')) && c.status === 'credit_approved' && (
+                        {(isContractOfficer || hasRole('general_manager', 'systems_info')) && c.status === 'credit_approved' && (
                           <button onClick={() => { setApprovalModal(c); setApprovalNote(''); setCreditLimitInput(c.client?.creditLimit != null ? String(c.client.creditLimit) : ''); }}
                             className="px-3 py-1 rounded-lg bg-sky-50 text-sky-700 text-xs font-medium hover:bg-sky-100">
                             {lang === 'ar' ? 'مراجعة العقود' : 'Contract Review'}
                           </button>
                         )}
                         {/* Vice GM reviews contract_approved (final approval) */}
-                        {(isViceGM || hasRole('general_manager')) && c.status === 'contract_approved' && (
+                        {(isViceGM || hasRole('general_manager', 'systems_info')) && c.status === 'contract_approved' && (
                           <button onClick={() => { setApprovalModal(c); setApprovalNote(''); setCreditLimitInput(c.client?.creditLimit != null ? String(c.client.creditLimit) : ''); }}
                             className="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100">
                             {lang === 'ar' ? 'الاعتماد النهائي' : 'Final Approval'}
@@ -470,7 +470,7 @@ export default function Contracts() {
           const salesApproval = findByRole('sales_director');
           const creditApproval = findByRole('credit_manager');
           const contractApproval = findByRole('contract_officer');
-          const finalApproval = findByRole('vice_gm') || findByRole('general_manager');
+          const finalApproval = findByRole('vice_gm') || findByRole('general_manager') || findByRole('systems_info');
           const rejection = timelineData.find((a: any) => a.status === 'rejected');
 
           const currentStatus = timelineModal.status;

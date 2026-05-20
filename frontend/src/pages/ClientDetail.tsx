@@ -208,7 +208,7 @@ export default function ClientDetail() {
     return { countryCode: '+966', number: cleaned };
   };
 
-  const isAdminLevel = hasRole('admin', 'general_manager', 'vice_gm');
+  const isAdminLevel = hasRole('admin', 'general_manager', 'systems_info', 'vice_gm');
 
   const openEditClient = () => {
     if (!client) return;
@@ -370,7 +370,7 @@ export default function ClientDetail() {
                 <h1 className="text-2xl font-bold text-brand-900">{client.companyName}</h1>
                 {/* Assistant sales can only edit clients assigned to them personally;
                     they can still SEE the whole team's clients per access filter. */}
-                {hasRole('sales_rep', 'sales_director', 'general_manager', 'vice_gm', 'admin') ||
+                {hasRole('sales_rep', 'sales_director', 'general_manager', 'systems_info', 'vice_gm', 'admin') ||
                  (hasRole('assistant_sales') && client.salesRepId === user?.id) ? (
                   <button onClick={openEditClient}
                     className="text-xs px-2 py-1 rounded-md bg-brand-50 text-brand-600 hover:bg-brand-100 font-semibold">
@@ -458,7 +458,7 @@ export default function ClientDetail() {
                     {client.latitude.toFixed(5)}, {client.longitude.toFixed(5)}
                     <ExternalLink className="w-3 h-3" />
                   </a>
-                  {hasRole('admin', 'general_manager', 'vice_gm') ? (
+                  {hasRole('admin', 'general_manager', 'systems_info', 'vice_gm') ? (
                     <>
                       <button type="button" className="btn-secondary text-xs" onClick={updateLocation} disabled={locUpdating}>
                         {locUpdating ? (isAr ? 'جاري التحديث...' : 'Updating...') : (isAr ? 'تحديث الموقع' : 'Update location')}
@@ -495,7 +495,7 @@ export default function ClientDetail() {
 
       {/* Action buttons — sales activities. Admin and senior management get
           the same toolbox so they can act on a client when no rep is around. */}
-      {hasRole('sales_rep', 'sales_director', 'assistant_sales', 'admin', 'general_manager', 'vice_gm') && (
+      {hasRole('sales_rep', 'sales_director', 'assistant_sales', 'admin', 'general_manager', 'systems_info', 'vice_gm') && (
         <div className={`flex gap-3 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
           <button className="btn-primary text-sm" onClick={() => setShowContractModal(true)}>
             <FileText className="w-4 h-4" /> {t('upload_contract')}
@@ -506,7 +506,7 @@ export default function ClientDetail() {
           <button className="btn-secondary text-sm" onClick={() => setShowVisitModal(true)}>
             <MapPin className="w-4 h-4" /> {t('log_visit')}
           </button>
-          {approvedContracts.length > 0 && hasRole('credit_officer', 'admin', 'general_manager', 'vice_gm') && (
+          {approvedContracts.length > 0 && hasRole('credit_officer', 'admin', 'general_manager', 'systems_info', 'vice_gm') && (
             <button className="btn-secondary text-sm" onClick={() => setShowPaymentModal(true)}>
               <CreditCard className="w-4 h-4" /> {t('add_payment')}
             </button>
@@ -530,7 +530,7 @@ export default function ClientDetail() {
       )}
 
       {/* Reservations action: New Booking */}
-      {hasRole('reservations', 'admin', 'general_manager', 'vice_gm') && (
+      {hasRole('reservations', 'admin', 'general_manager', 'systems_info', 'vice_gm') && (
         <div className={`flex gap-3 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
           <button className="btn-primary text-sm" onClick={() => { setEditingBooking(null); setShowBookingModal(true); }}>
             <BedDouble className="w-4 h-4" /> {isAr ? 'حجز جديد' : 'New Booking'}
@@ -717,7 +717,7 @@ export default function ClientDetail() {
                     )}
                   </div>
 
-                  {hasRole('reservations', 'admin', 'general_manager', 'vice_gm') && (
+                  {hasRole('reservations', 'admin', 'general_manager', 'systems_info', 'vice_gm') && (
                     <div className={`flex items-center gap-1.5 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
                       <button className="btn-secondary text-xs py-1.5" onClick={() => setHistoryBookingTarget(b)} title={isAr ? 'سجل التغييرات' : 'History'}>
                         <History className="w-3.5 h-3.5" />

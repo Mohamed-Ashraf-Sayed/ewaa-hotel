@@ -9,7 +9,7 @@ const {
 } = require('../controllers/localEventController');
 const { authenticate, authorize } = require('../middleware/auth');
 
-const MANAGER_ROLES = ['general_manager', 'vice_gm', 'sales_director'];
+const MANAGER_ROLES = ['general_manager', 'systems_info', 'vice_gm', 'sales_director'];
 
 router.get('/', authenticate, getEvents);
 router.post('/', authenticate, authorize(...MANAGER_ROLES), createEvent);

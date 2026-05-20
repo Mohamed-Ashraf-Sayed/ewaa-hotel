@@ -15,7 +15,7 @@ const {
 const { authenticate, authorize } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
-const RES_ROLES = ['reservations', 'general_manager', 'vice_gm', 'admin'];
+const RES_ROLES = ['reservations', 'general_manager', 'systems_info', 'vice_gm', 'admin'];
 
 router.get('/', authenticate, getBookings);
 router.get('/client/:clientId', authenticate, getClientBookings);
@@ -27,6 +27,6 @@ router.post('/', authenticate, authorize(...RES_ROLES), upload.single('confirmat
 router.put('/:id', authenticate, authorize(...RES_ROLES), upload.single('confirmationLetter'), updateBooking);
 router.put('/:id/status', authenticate, authorize(...RES_ROLES), updateStatus);
 router.post('/:id/confirm-request', authenticate, authorize(...RES_ROLES), upload.single('confirmationLetter'), confirmPendingRequest);
-router.delete('/:id', authenticate, authorize('admin', 'general_manager'), deleteBooking);
+router.delete('/:id', authenticate, authorize('admin', 'general_manager', 'systems_info'), deleteBooking);
 
 module.exports = router;

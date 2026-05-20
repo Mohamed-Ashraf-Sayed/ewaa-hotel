@@ -5,8 +5,8 @@ const path = require('path');
 const fs = require('fs');
 const prisma = new PrismaClient();
 
-const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
-const RESERVATIONS_ROLES = ['reservations', 'admin', 'general_manager', 'vice_gm'];
+const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
+const RESERVATIONS_ROLES = ['reservations', 'admin', 'general_manager', 'systems_info', 'vice_gm'];
 
 // Filter bookings by user role
 const buildBookingFilter = async (user) => {

@@ -146,7 +146,7 @@ export default function Clients() {
               <Upload className="w-4 h-4" /> {isAr ? 'رفع ملف عملاء' : 'Import Excel/CSV'}
             </button>
           )}
-          {hasRole('general_manager', 'vice_gm', 'sales_director') && (
+          {hasRole('general_manager', 'systems_info', 'vice_gm', 'sales_director') && (
             <button className="btn-secondary" onClick={async () => {
               try {
                 const res = await pdfApi.clientReport({ type: typeFilter || undefined });

@@ -36,8 +36,8 @@ export default function Tasks() {
   const { lang } = useLanguage();
   const { hasRole } = useAuth();
   const isAr = lang === 'ar';
-  const canManage = hasRole('sales_director', 'general_manager', 'vice_gm');
-  const isAdmin = hasRole('general_manager', 'vice_gm');
+  const canManage = hasRole('sales_director', 'general_manager', 'systems_info', 'vice_gm');
+  const isAdmin = hasRole('general_manager', 'systems_info', 'vice_gm');
   const TASK_TYPES = isAr ? TASK_TYPES_AR : TASK_TYPES_EN;
 
   const [tasks, setTasks] = useState<Task[]>([]);

@@ -36,6 +36,7 @@ export default function Users() {
   const ROLES = [
     { value: 'admin', label: t('role_admin') },
     { value: 'general_manager', label: t('role_general_manager') },
+    { value: 'systems_info', label: t('role_systems_info') },
     { value: 'vice_gm', label: t('role_vice_gm') },
     { value: 'sales_director', label: t('role_sales_director') },
     { value: 'assistant_sales', label: t('role_assistant_sales') },
@@ -107,7 +108,7 @@ export default function Users() {
     }));
   };
 
-  const managers = users.filter(u => ['general_manager', 'vice_gm', 'sales_director'].includes(u.role));
+  const managers = users.filter(u => ['general_manager', 'systems_info', 'vice_gm', 'sales_director'].includes(u.role));
   // Only system Admin can add/edit/reset users
   const canAdmin = hasRole('admin');
   const isGM = hasRole('admin');

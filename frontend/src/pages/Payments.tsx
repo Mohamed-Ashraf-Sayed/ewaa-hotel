@@ -74,7 +74,7 @@ export default function Payments() {
   const [payments, setPayments] = useState<PaymentWithDetails[]>([]);
   const [contracts, setContracts] = useState<ContractSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const canApprove = hasRole('credit_manager', 'admin', 'general_manager', 'vice_gm');
+  const canApprove = hasRole('credit_manager', 'admin', 'general_manager', 'systems_info', 'vice_gm');
   const [tab, setTab] = useState<ApprovalTab>(canApprove ? 'pending' : 'all');
   const [busyId, setBusyId] = useState<number | null>(null);
 

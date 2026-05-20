@@ -64,7 +64,7 @@ export default function Calendar() {
   const DAYS = isAr ? DAYS_AR : DAYS_EN;
   const MONTHS = isAr ? MONTHS_AR : MONTHS_EN;
 
-  const canManageEvents = hasRole('admin', 'general_manager', 'vice_gm', 'sales_director');
+  const canManageEvents = hasRole('admin', 'general_manager', 'systems_info', 'vice_gm', 'sales_director');
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [reminders, setReminders] = useState<Reminder[]>([]);

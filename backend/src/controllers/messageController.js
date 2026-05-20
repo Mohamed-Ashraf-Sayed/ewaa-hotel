@@ -33,7 +33,7 @@ const getContacts = async (req, res) => {
       });
       // Compute department: management / credit / reservations / sales-muhaidib / sales-grand-awa / other
       let department = 'other';
-      if (['admin', 'general_manager', 'vice_gm'].includes(c.role)) department = 'management';
+      if (['admin', 'general_manager', 'systems_info', 'vice_gm'].includes(c.role)) department = 'management';
       else if (c.role === 'credit_manager' || c.role === 'credit_officer') department = 'credit';
       else if (c.role === 'reservations') department = 'reservations';
       else if (c.role === 'contract_officer') department = 'contracts';
@@ -134,7 +134,7 @@ const broadcast = async (req, res) => {
     if (req.user.role === 'sales_director') {
       const subIds = await getSubordinateIds(req.user.id);
       recipients = subIds;
-    } else if (['admin', 'general_manager', 'vice_gm'].includes(req.user.role)) {
+    } else if (['admin', 'general_manager', 'systems_info', 'vice_gm'].includes(req.user.role)) {
       const all = await prisma.user.findMany({
         where: { isActive: true, NOT: { id: req.user.id } },
         select: { id: true },

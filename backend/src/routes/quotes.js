@@ -5,7 +5,7 @@ const { authenticate, authorize, getSubordinateIds } = require('../middleware/au
 const { generateQuote } = require('../controllers/pdfController');
 
 const prisma = new PrismaClient();
-const APPROVER_ROLES = ['sales_director', 'general_manager', 'vice_gm', 'admin'];
+const APPROVER_ROLES = ['sales_director', 'general_manager', 'systems_info', 'vice_gm', 'admin'];
 
 // Sweep any approved-but-consumed quotes whose linked booking has departed,
 // flipping them to 'closed'. Called before every quote listing so the team
@@ -136,7 +136,7 @@ router.get('/all', authenticate, async (req, res) => {
 router.get('/pending-approval', authenticate, authorize(...APPROVER_ROLES), async (req, res) => {
   try {
     await closeExpiredQuotes();
-    const isAdmin = ['admin', 'general_manager', 'vice_gm'].includes(req.user.role);
+    const isAdmin = ['admin', 'general_manager', 'systems_info', 'vice_gm'].includes(req.user.role);
     const where = { status: 'pending_manager_approval' };
     if (!isAdmin && req.user.role === 'sales_director') {
       const subIds = await getSubordinateIds(req.user.id);
@@ -171,7 +171,7 @@ router.post('/:id/approve', authenticate, authorize(...APPROVER_ROLES), async (r
     if (q.status !== 'pending_manager_approval') {
       return res.status(400).json({ message: 'العرض ليس بانتظار موافقة' });
     }
-    const isAdmin = ['admin', 'general_manager', 'vice_gm'].includes(req.user.role);
+    const isAdmin = ['admin', 'general_manager', 'systems_info', 'vice_gm'].includes(req.user.role);
     const isManagerOfRep = req.user.role === 'sales_director' && q.salesRep.managerId === req.user.id;
     if (!isAdmin && !isManagerOfRep) return res.status(403).json({ message: 'لا تملك صلاحية الموافقة على هذا العرض' });
 
@@ -223,7 +223,7 @@ router.post('/:id/reject', authenticate, authorize(...APPROVER_ROLES), async (re
     if (q.status !== 'pending_manager_approval') {
       return res.status(400).json({ message: 'العرض ليس بانتظار موافقة' });
     }
-    const isAdmin = ['admin', 'general_manager', 'vice_gm'].includes(req.user.role);
+    const isAdmin = ['admin', 'general_manager', 'systems_info', 'vice_gm'].includes(req.user.role);
     const isManagerOfRep = req.user.role === 'sales_director' && q.salesRep.managerId === req.user.id;
     if (!isAdmin && !isManagerOfRep) return res.status(403).json({ message: 'لا تملك صلاحية رفض هذا العرض' });
 

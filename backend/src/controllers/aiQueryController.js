@@ -28,7 +28,7 @@ const retry = async (fn, attempts = 2, baseDelay = 400) => {
   throw lastErr;
 };
 
-const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
 
 // ---- Access scope helpers ---------------------------------------------------
 const buildClientScope = async (user) => {
@@ -764,7 +764,7 @@ const toolDeclarations = [
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
-        role: { type: SchemaType.STRING, description: 'Filter by role', enum: ['admin', 'general_manager', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer', 'reservations', 'credit_manager', 'credit_officer'] },
+        role: { type: SchemaType.STRING, description: 'Filter by role', enum: ['admin', 'general_manager', 'systems_info', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep', 'contract_officer', 'reservations', 'credit_manager', 'credit_officer'] },
         search: { type: SchemaType.STRING, description: 'Free-text search on name, email, phone' },
         limit: { type: SchemaType.NUMBER },
       },
@@ -828,6 +828,7 @@ const ask = async (req, res) => {
       switch (role) {
         case 'admin':
         case 'general_manager':
+        case 'systems_info':
         case 'vice_gm':
           return 'FULL ACCESS: all clients, contracts, payments, visits, bookings, users, and team data across the company.';
         case 'sales_director':

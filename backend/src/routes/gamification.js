@@ -4,6 +4,6 @@ const { getLeaderboard, ratePerformance } = require('../controllers/gamification
 const { authenticate, authorize } = require('../middleware/auth');
 
 router.get('/leaderboard', authenticate, getLeaderboard);
-router.post('/rate', authenticate, authorize('sales_director', 'general_manager', 'vice_gm'), ratePerformance);
+router.post('/rate', authenticate, authorize('sales_director', 'general_manager', 'systems_info', 'vice_gm'), ratePerformance);
 
 module.exports = router;

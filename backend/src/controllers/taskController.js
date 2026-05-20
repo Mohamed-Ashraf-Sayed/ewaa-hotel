@@ -1,7 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-const ADMIN_ROLES = ['admin', 'general_manager', 'vice_gm'];
+const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
 
 const getSubordinateIds = async (userId) => {
   const subs = await prisma.user.findMany({ where: { managerId: userId }, select: { id: true } });

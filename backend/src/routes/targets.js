@@ -5,7 +5,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 
 router.get('/', authenticate, getTargets);
 router.get('/report', authenticate, getTargetReport);
-router.post('/', authenticate, authorize('sales_director', 'general_manager', 'vice_gm'), upsertTarget);
-router.delete('/:id', authenticate, authorize('sales_director', 'general_manager', 'vice_gm'), deleteTarget);
+router.post('/', authenticate, authorize('sales_director', 'general_manager', 'systems_info', 'vice_gm'), upsertTarget);
+router.delete('/:id', authenticate, authorize('sales_director', 'general_manager', 'systems_info', 'vice_gm'), deleteTarget);
 
 module.exports = router;
