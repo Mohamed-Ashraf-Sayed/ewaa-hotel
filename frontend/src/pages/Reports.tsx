@@ -99,8 +99,14 @@ const REPORTS: ReportCard[] = [
   },
 ];
 
-// === Arabic label maps ===
+// === Label maps ===
+// AR maps are still used in the modal UI (filter dropdowns) so the user
+// picks values in their UI language. EN maps are used in CSV exports — the
+// downloaded file is always English regardless of UI language because reports
+// are shared with hotels/partners that work in English.
 const CLIENT_TYPE_AR: Record<string, string> = { active: 'نشط', lead: 'محتمل', inactive: 'غير نشط' };
+const CLIENT_TYPE_EN: Record<string, string> = { active: 'Active', lead: 'Lead', inactive: 'Inactive' };
+
 const CONTRACT_STATUS_AR: Record<string, string> = {
   pending: 'قيد الانتظار',
   sales_approved: 'بانتظار الائتمان',
@@ -109,22 +115,51 @@ const CONTRACT_STATUS_AR: Record<string, string> = {
   approved: 'معتمد نهائي',
   rejected: 'مرفوض',
 };
+const CONTRACT_STATUS_EN: Record<string, string> = {
+  pending: 'Pending',
+  sales_approved: 'Sales Approved',
+  credit_approved: 'Credit Approved',
+  contract_approved: 'Contract Approved',
+  approved: 'Final Approved',
+  rejected: 'Rejected',
+};
+
 const VISIT_TYPE_AR: Record<string, string> = {
   in_person: 'زيارة شخصية', phone: 'هاتف', online: 'أونلاين', site_visit: 'زيارة الموقع',
 };
+const VISIT_TYPE_EN: Record<string, string> = {
+  in_person: 'In Person', phone: 'Phone', online: 'Online', site_visit: 'Site Visit',
+};
+
 const ROLE_AR: Record<string, string> = {
   admin: 'مسؤول النظام', general_manager: 'المدير العام', vice_gm: 'نائب المدير العام',
   sales_director: 'مدير المبيعات', assistant_sales: 'مساعد مدير المبيعات', sales_rep: 'تنفيذي مبيعات',
   contract_officer: 'مسئول العقود', reservations: 'الحجوزات',
   credit_manager: 'مدير الائتمان', credit_officer: 'موظف الائتمان', systems_info: 'نظم ومعلومات',
 };
+const ROLE_EN: Record<string, string> = {
+  admin: 'Admin', general_manager: 'General Manager', vice_gm: 'Vice GM',
+  sales_director: 'Sales Director', assistant_sales: 'Assistant Sales', sales_rep: 'Sales Rep',
+  contract_officer: 'Contract Officer', reservations: 'Reservations',
+  credit_manager: 'Credit Manager', credit_officer: 'Credit Officer', systems_info: 'Systems & Info',
+};
+
 const PAYMENT_METHOD_AR: Record<string, string> = {
   cash: 'نقدي', bank_transfer: 'تحويل بنكي', cheque: 'شيك', card: 'بطاقة',
 };
+const PAYMENT_METHOD_EN: Record<string, string> = {
+  cash: 'Cash', bank_transfer: 'Bank Transfer', cheque: 'Cheque', card: 'Card',
+};
+
 const SOURCE_AR: Record<string, string> = {
   cold_call: 'اتصال بارد', referral: 'إحالة', exhibition: 'معرض',
   website: 'الموقع الإلكتروني', social_media: 'وسائل التواصل', walk_in: 'زيارة مباشرة', other: 'أخرى',
 };
+const SOURCE_EN: Record<string, string> = {
+  cold_call: 'Cold Call', referral: 'Referral', exhibition: 'Exhibition',
+  website: 'Website', social_media: 'Social Media', walk_in: 'Walk-in', other: 'Other',
+};
+
 const BOOKING_STATUS_AR: Record<string, string> = {
   pending_reservations: 'بانتظار الحجوزات',
   confirmed: 'مؤكد',
@@ -133,11 +168,26 @@ const BOOKING_STATUS_AR: Record<string, string> = {
   cancelled: 'ملغي',
   no_show: 'لم يحضر',
 };
+const BOOKING_STATUS_EN: Record<string, string> = {
+  pending_reservations: 'Pending Reservations',
+  confirmed: 'Confirmed',
+  checked_in: 'Checked-in',
+  checked_out: 'Checked-out',
+  cancelled: 'Cancelled',
+  no_show: 'No-show',
+};
+
 const QUOTE_STATUS_AR: Record<string, string> = {
   pending_manager_approval: 'بانتظار موافقة المدير',
   approved: 'معتمد',
   rejected: 'مرفوض',
   closed: 'مُغلق',
+};
+const QUOTE_STATUS_EN: Record<string, string> = {
+  pending_manager_approval: 'Awaiting Manager',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  closed: 'Closed',
 };
 const AGE_BUCKETS = ['0-30', '31-60', '61-90', '90+'] as const;
 const MONTHS_AR = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
@@ -175,11 +225,13 @@ export default function Reports() {
   };
 
   // === Value translators ===
+  // CSV exports always use Latin digits + English date format so the file
+  // opens cleanly in Excel/Google Sheets regardless of the user's UI lang.
   const fmtDate = (v: any) => {
     if (!v) return '';
-    try { return format(parseISO(String(v)), 'dd/MM/yyyy', { locale }); } catch { return String(v); }
+    try { return format(parseISO(String(v)), 'dd/MM/yyyy', { locale: enUS }); } catch { return String(v); }
   };
-  const fmtNum = (v: any) => v == null || v === '' ? '' : Number(v).toLocaleString(isAr ? 'ar-EG' : 'en');
+  const fmtNum = (v: any) => v == null || v === '' ? '' : Number(v).toLocaleString('en');
 
   const exportToCSV = (
     data: any[],
@@ -231,16 +283,16 @@ export default function Reports() {
             if (f.salesRepId) data = data.filter((c: any) => c.salesRep?.id === parseInt(f.salesRepId));
             data = applyDateRange(data, 'createdAt', f.from, f.to);
             exportToCSV(data, 'Clients.csv', [
-              { key: 'companyName', label: isAr ? 'الشركة' : 'Company' },
-              { key: 'contactPerson', label: isAr ? 'جهة الاتصال' : 'Contact' },
-              { key: 'phone', label: isAr ? 'الهاتف' : 'Phone' },
-              { key: 'email', label: isAr ? 'البريد' : 'Email' },
-              { key: 'industry', label: isAr ? 'القطاع' : 'Industry' },
-              { key: 'clientType', label: isAr ? 'النوع' : 'Type', transform: v => isAr ? (CLIENT_TYPE_AR[v] || v) : v },
-              { key: 'source', label: isAr ? 'المصدر' : 'Source', transform: v => isAr ? (SOURCE_AR[v] || v) : v },
-              { key: 'hotel.name', label: isAr ? 'الفندق' : 'Hotel' },
-              { key: 'salesRep.name', label: isAr ? 'المندوب' : 'Sales Rep' },
-              { key: 'createdAt', label: isAr ? 'تاريخ الإضافة' : 'Added On', transform: fmtDate },
+              { key: 'companyName',   label: 'Company' },
+              { key: 'contactPerson', label: 'Contact' },
+              { key: 'phone',         label: 'Phone' },
+              { key: 'email',         label: 'Email' },
+              { key: 'industry',      label: 'Industry' },
+              { key: 'clientType',    label: 'Type',      transform: v => CLIENT_TYPE_EN[v] || v },
+              { key: 'source',        label: 'Source',    transform: v => SOURCE_EN[v] || v },
+              { key: 'hotel.name',    label: 'Hotel' },
+              { key: 'salesRep.name', label: 'Sales Rep' },
+              { key: 'createdAt',     label: 'Added On',  transform: fmtDate },
             ]);
           }
           break;
@@ -261,18 +313,18 @@ export default function Reports() {
           });
           data = applyDateRange(data, 'createdAt', f.from, f.to);
           exportToCSV(data, 'Contracts.csv', [
-            { key: 'contractRef', label: isAr ? 'رقم العقد' : 'Ref' },
-            { key: 'client.companyName', label: isAr ? 'الشركة' : 'Company' },
-            { key: 'hotel.name', label: isAr ? 'الفندق' : 'Hotel' },
-            { key: 'salesRep.name', label: isAr ? 'المندوب' : 'Rep' },
-            { key: 'roomsCount', label: isAr ? 'الغرف' : 'Rooms' },
-            { key: 'ratePerRoom', label: isAr ? 'السعر/غرفة' : 'Rate', transform: fmtNum },
-            { key: 'totalValue', label: isAr ? 'القيمة' : 'Value', transform: fmtNum },
-            { key: 'collectedAmount', label: isAr ? 'المحصل' : 'Collected', transform: fmtNum },
-            { key: 'status', label: isAr ? 'الحالة' : 'Status', transform: v => isAr ? (CONTRACT_STATUS_AR[v] || v) : v },
-            { key: 'startDate', label: isAr ? 'البداية' : 'Start', transform: fmtDate },
-            { key: 'endDate', label: isAr ? 'النهاية' : 'End', transform: fmtDate },
-            { key: 'createdAt', label: isAr ? 'تاريخ الرفع' : 'Created', transform: fmtDate },
+            { key: 'contractRef',        label: 'Ref' },
+            { key: 'client.companyName', label: 'Company' },
+            { key: 'hotel.name',         label: 'Hotel' },
+            { key: 'salesRep.name',      label: 'Rep' },
+            { key: 'roomsCount',         label: 'Rooms' },
+            { key: 'ratePerRoom',        label: 'Rate',      transform: fmtNum },
+            { key: 'totalValue',         label: 'Value',     transform: fmtNum },
+            { key: 'collectedAmount',    label: 'Collected', transform: fmtNum },
+            { key: 'status',             label: 'Status',    transform: v => CONTRACT_STATUS_EN[v] || v },
+            { key: 'startDate',          label: 'Start',     transform: fmtDate },
+            { key: 'endDate',            label: 'End',       transform: fmtDate },
+            { key: 'createdAt',          label: 'Created',   transform: fmtDate },
           ]);
           break;
         }
@@ -291,14 +343,14 @@ export default function Reports() {
           if (f.visitType) data = data.filter((v: any) => v.visitType === f.visitType);
           data = applyDateRange(data, 'visitDate', f.from, f.to);
           exportToCSV(data, 'Visits.csv', [
-            { key: 'visitDate', label: isAr ? 'التاريخ' : 'Date', transform: fmtDate },
-            { key: 'client.companyName', label: isAr ? 'الشركة' : 'Company' },
-            { key: 'client.contactPerson', label: isAr ? 'جهة الاتصال' : 'Contact' },
-            { key: 'salesRep.name', label: isAr ? 'المندوب' : 'Rep' },
-            { key: 'visitType', label: isAr ? 'النوع' : 'Type', transform: v => isAr ? (VISIT_TYPE_AR[v] || v) : v },
-            { key: 'purpose', label: isAr ? 'الغرض' : 'Purpose' },
-            { key: 'outcome', label: isAr ? 'النتيجة' : 'Outcome' },
-            { key: 'nextFollowUp', label: isAr ? 'المتابعة' : 'Follow-up', transform: fmtDate },
+            { key: 'visitDate',            label: 'Date',      transform: fmtDate },
+            { key: 'client.companyName',   label: 'Company' },
+            { key: 'client.contactPerson', label: 'Contact' },
+            { key: 'salesRep.name',        label: 'Rep' },
+            { key: 'visitType',            label: 'Type',      transform: v => VISIT_TYPE_EN[v] || v },
+            { key: 'purpose',              label: 'Purpose' },
+            { key: 'outcome',              label: 'Outcome' },
+            { key: 'nextFollowUp',         label: 'Follow-up', transform: fmtDate },
           ]);
           break;
         }
@@ -318,13 +370,13 @@ export default function Reports() {
           if (f.paymentMethod) data = data.filter((p: any) => p.paymentType === f.paymentMethod);
           data = applyDateRange(data, 'paymentDate', f.from, f.to);
           exportToCSV(data, 'Payments.csv', [
-            { key: 'paymentDate', label: isAr ? 'التاريخ' : 'Date', transform: fmtDate },
-            { key: 'client.companyName', label: isAr ? 'الشركة' : 'Company' },
-            { key: 'contract.contractRef', label: isAr ? 'العقد' : 'Contract' },
-            { key: 'amount', label: isAr ? 'المبلغ' : 'Amount', transform: fmtNum },
-            { key: 'paymentType', label: isAr ? 'الطريقة' : 'Method', transform: v => isAr ? (PAYMENT_METHOD_AR[v] || v) : v },
-            { key: 'reference', label: isAr ? 'المرجع' : 'Reference' },
-            { key: 'collector.name', label: isAr ? 'المُحصِّل' : 'Collected By' },
+            { key: 'paymentDate',          label: 'Date',         transform: fmtDate },
+            { key: 'client.companyName',   label: 'Company' },
+            { key: 'contract.contractRef', label: 'Contract' },
+            { key: 'amount',               label: 'Amount',       transform: fmtNum },
+            { key: 'paymentType',          label: 'Method',       transform: v => PAYMENT_METHOD_EN[v] || v },
+            { key: 'reference',            label: 'Reference' },
+            { key: 'collector.name',       label: 'Collected By' },
           ]);
           break;
         }
@@ -366,14 +418,14 @@ export default function Reports() {
             break;
           }
           exportToCSV(rows, 'Payment_Methods_By_Contract.csv', [
-            { key: 'contractRef', label: isAr ? 'العقد' : 'Contract' },
-            { key: 'companyName', label: isAr ? 'الشركة' : 'Company' },
-            { key: 'count', label: isAr ? 'عدد الدفعات' : 'Payments #' },
-            { key: 'cash', label: isAr ? 'نقدي' : 'Cash', transform: fmtNum },
-            { key: 'bank_transfer', label: isAr ? 'تحويل بنكي' : 'Bank Transfer', transform: fmtNum },
-            { key: 'cheque', label: isAr ? 'شيك' : 'Cheque', transform: fmtNum },
-            { key: 'card', label: isAr ? 'بطاقة' : 'Card', transform: fmtNum },
-            { key: 'totalCollected', label: isAr ? 'إجمالي المحصل' : 'Total Collected', transform: fmtNum },
+            { key: 'contractRef',    label: 'Contract' },
+            { key: 'companyName',    label: 'Company' },
+            { key: 'count',          label: 'Payments #' },
+            { key: 'cash',           label: 'Cash',            transform: fmtNum },
+            { key: 'bank_transfer',  label: 'Bank Transfer',   transform: fmtNum },
+            { key: 'cheque',         label: 'Cheque',          transform: fmtNum },
+            { key: 'card',           label: 'Card',            transform: fmtNum },
+            { key: 'totalCollected', label: 'Total Collected', transform: fmtNum },
           ]);
           break;
         }
@@ -386,13 +438,13 @@ export default function Reports() {
           const res = await usersApi.getAll();
           const data = res.data.filter((u: any) => ['sales_rep', 'sales_director', 'assistant_sales'].includes(u.role));
           exportToCSV(data, 'Team.csv', [
-            { key: 'name', label: isAr ? 'الاسم' : 'Name' },
-            { key: 'email', label: isAr ? 'البريد' : 'Email' },
-            { key: 'phone', label: isAr ? 'الهاتف' : 'Phone' },
-            { key: 'role', label: isAr ? 'الدور' : 'Role', transform: v => isAr ? (ROLE_AR[v] || v) : v },
-            { key: 'commissionRate', label: isAr ? 'العمولة %' : 'Commission %' },
-            { key: '_count.assignedClients', label: isAr ? 'العملاء' : 'Clients' },
-            { key: '_count.contracts', label: isAr ? 'العقود' : 'Contracts' },
+            { key: 'name',                   label: 'Name' },
+            { key: 'email',                  label: 'Email' },
+            { key: 'phone',                  label: 'Phone' },
+            { key: 'role',                   label: 'Role',         transform: v => ROLE_EN[v] || v },
+            { key: 'commissionRate',         label: 'Commission %' },
+            { key: '_count.assignedClients', label: 'Clients' },
+            { key: '_count.contracts',       label: 'Contracts' },
           ]);
           break;
         }
@@ -411,20 +463,20 @@ export default function Reports() {
             break;
           }
           exportToCSV(data, 'Bookings.csv', [
-            { key: 'operaConfirmationNo', label: isAr ? 'رقم الحجز (Opera)' : 'Confirmation #' },
-            { key: 'client.companyName', label: isAr ? 'الشركة' : 'Company' },
-            { key: 'guestName', label: isAr ? 'الضيف' : 'Guest' },
-            { key: 'hotel.name', label: isAr ? 'الفندق' : 'Hotel' },
-            { key: 'arrivalDate', label: isAr ? 'الوصول' : 'Arrival', transform: fmtDate },
-            { key: 'departureDate', label: isAr ? 'المغادرة' : 'Departure', transform: fmtDate },
-            { key: 'nights', label: isAr ? 'الليالي' : 'Nights' },
-            { key: 'roomsCount', label: isAr ? 'الغرف' : 'Rooms' },
-            { key: 'roomType', label: isAr ? 'نوع الغرفة' : 'Room Type' },
-            { key: 'ratePerNight', label: isAr ? 'سعر الليلة' : 'Rate/Night', transform: fmtNum },
-            { key: 'totalAmount', label: isAr ? 'الإجمالي' : 'Total', transform: fmtNum },
-            { key: 'status', label: isAr ? 'الحالة' : 'Status', transform: v => isAr ? (BOOKING_STATUS_AR[v] || v) : v },
-            { key: 'assignedRep.name', label: isAr ? 'المندوب المسؤول' : 'Assigned Rep' },
-            { key: 'createdAt', label: isAr ? 'تاريخ الإنشاء' : 'Created', transform: fmtDate },
+            { key: 'operaConfirmationNo', label: 'Confirmation #' },
+            { key: 'client.companyName', label: 'Company' },
+            { key: 'guestName',          label: 'Guest' },
+            { key: 'hotel.name',         label: 'Hotel' },
+            { key: 'arrivalDate',        label: 'Arrival',      transform: fmtDate },
+            { key: 'departureDate',      label: 'Departure',    transform: fmtDate },
+            { key: 'nights',             label: 'Nights' },
+            { key: 'roomsCount',         label: 'Rooms' },
+            { key: 'roomType',           label: 'Room Type' },
+            { key: 'ratePerNight',       label: 'Rate/Night',   transform: fmtNum },
+            { key: 'totalAmount',        label: 'Total',        transform: fmtNum },
+            { key: 'status',             label: 'Status',       transform: v => BOOKING_STATUS_EN[v] || v },
+            { key: 'assignedRep.name',   label: 'Assigned Rep' },
+            { key: 'createdAt',          label: 'Created',      transform: fmtDate },
           ]);
           break;
         }
@@ -439,17 +491,17 @@ export default function Reports() {
             break;
           }
           exportToCSV(data, 'Quotes.csv', [
-            { key: 'reference', label: isAr ? 'المرجع' : 'Reference' },
-            { key: 'clientName', label: isAr ? 'الشركة' : 'Company' },
-            { key: 'hotelName', label: isAr ? 'الفندق' : 'Hotel' },
-            { key: 'salesRepName', label: isAr ? 'المندوب' : 'Rep' },
-            { key: 'grandTotal', label: isAr ? 'الإجمالي' : 'Grand Total', transform: fmtNum },
-            { key: 'arrivalDate', label: isAr ? 'تاريخ الوصول' : 'Arrival', transform: fmtDate },
-            { key: 'validUntil', label: isAr ? 'صالح حتى' : 'Valid Until', transform: fmtDate },
-            { key: 'status', label: isAr ? 'الحالة' : 'Status', transform: v => isAr ? (QUOTE_STATUS_AR[v] || v) : v },
-            { key: 'approvedByName', label: isAr ? 'اعتمده/رفضه' : 'Decided By' },
-            { key: 'approvalNote', label: isAr ? 'ملاحظة' : 'Note' },
-            { key: 'createdAt', label: isAr ? 'تاريخ الإنشاء' : 'Created', transform: fmtDate },
+            { key: 'reference',      label: 'Reference' },
+            { key: 'clientName',     label: 'Company' },
+            { key: 'hotelName',      label: 'Hotel' },
+            { key: 'salesRepName',   label: 'Rep' },
+            { key: 'grandTotal',     label: 'Grand Total', transform: fmtNum },
+            { key: 'arrivalDate',    label: 'Arrival',     transform: fmtDate },
+            { key: 'validUntil',     label: 'Valid Until', transform: fmtDate },
+            { key: 'status',         label: 'Status',      transform: v => QUOTE_STATUS_EN[v] || v },
+            { key: 'approvedByName', label: 'Decided By' },
+            { key: 'approvalNote',   label: 'Note' },
+            { key: 'createdAt',      label: 'Created',     transform: fmtDate },
           ]);
           break;
         }
@@ -488,16 +540,16 @@ export default function Reports() {
             break;
           }
           exportToCSV(rows, 'Aging_Report.csv', [
-            { key: 'contractRef',  label: isAr ? 'العقد' : 'Contract' },
-            { key: 'company',      label: isAr ? 'الشركة' : 'Company' },
-            { key: 'hotel',        label: isAr ? 'الفندق' : 'Hotel' },
-            { key: 'rep',          label: isAr ? 'المندوب' : 'Rep' },
-            { key: 'totalValue',   label: isAr ? 'القيمة' : 'Total Value',  transform: fmtNum },
-            { key: 'collected',    label: isAr ? 'المحصل' : 'Collected',    transform: fmtNum },
-            { key: 'outstanding',  label: isAr ? 'المتبقي' : 'Outstanding', transform: fmtNum },
-            { key: 'days',         label: isAr ? 'عمر الدين (يوم)' : 'Age (days)' },
-            { key: 'bucket',       label: isAr ? 'الفترة' : 'Bucket' },
-            { key: 'startDate',    label: isAr ? 'تاريخ البداية' : 'Start Date', transform: fmtDate },
+            { key: 'contractRef', label: 'Contract' },
+            { key: 'company',     label: 'Company' },
+            { key: 'hotel',       label: 'Hotel' },
+            { key: 'rep',         label: 'Rep' },
+            { key: 'totalValue',  label: 'Total Value', transform: fmtNum },
+            { key: 'collected',   label: 'Collected',   transform: fmtNum },
+            { key: 'outstanding', label: 'Outstanding', transform: fmtNum },
+            { key: 'days',        label: 'Age (days)' },
+            { key: 'bucket',      label: 'Bucket' },
+            { key: 'startDate',   label: 'Start Date',  transform: fmtDate },
           ]);
           break;
         }
@@ -536,20 +588,20 @@ export default function Reports() {
             ? `Targets_${year}-${String(month).padStart(2, '0')}.csv`
             : `Targets_${year}-Q${quarter || 1}.csv`;
           exportToCSV(rows, fileName, [
-            { key: 'name',            label: isAr ? 'المندوب' : 'Rep' },
-            { key: 'role',            label: isAr ? 'الدور' : 'Role', transform: v => isAr ? (ROLE_AR[v] || v) : v },
-            { key: 'targetContracts', label: isAr ? 'تارجت عقود' : 'Target Contracts' },
-            { key: 'actualContracts', label: isAr ? 'فعلي عقود' : 'Actual Contracts' },
-            { key: 'contractsPct',    label: isAr ? '% عقود' : 'Contracts %' },
-            { key: 'targetVisits',    label: isAr ? 'تارجت زيارات' : 'Target Visits' },
-            { key: 'actualVisits',    label: isAr ? 'فعلي زيارات' : 'Actual Visits' },
-            { key: 'visitsPct',       label: isAr ? '% زيارات' : 'Visits %' },
-            { key: 'targetClients',   label: isAr ? 'تارجت عملاء' : 'Target Clients' },
-            { key: 'actualClients',   label: isAr ? 'فعلي عملاء' : 'Actual Clients' },
-            { key: 'clientsPct',      label: isAr ? '% عملاء' : 'Clients %' },
-            { key: 'targetRevenue',   label: isAr ? 'تارجت إيرادات' : 'Target Revenue', transform: fmtNum },
-            { key: 'actualRevenue',   label: isAr ? 'فعلي إيرادات' : 'Actual Revenue', transform: fmtNum },
-            { key: 'revenuePct',      label: isAr ? '% إيرادات' : 'Revenue %' },
+            { key: 'name',            label: 'Rep' },
+            { key: 'role',            label: 'Role',             transform: v => ROLE_EN[v] || v },
+            { key: 'targetContracts', label: 'Target Contracts' },
+            { key: 'actualContracts', label: 'Actual Contracts' },
+            { key: 'contractsPct',    label: 'Contracts %' },
+            { key: 'targetVisits',    label: 'Target Visits' },
+            { key: 'actualVisits',    label: 'Actual Visits' },
+            { key: 'visitsPct',       label: 'Visits %' },
+            { key: 'targetClients',   label: 'Target Clients' },
+            { key: 'actualClients',   label: 'Actual Clients' },
+            { key: 'clientsPct',      label: 'Clients %' },
+            { key: 'targetRevenue',   label: 'Target Revenue',   transform: fmtNum },
+            { key: 'actualRevenue',   label: 'Actual Revenue',   transform: fmtNum },
+            { key: 'revenuePct',      label: 'Revenue %' },
           ]);
           break;
         }
