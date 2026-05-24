@@ -103,7 +103,11 @@ export default function Clients() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (form.brands.length === 0) {
+    // Leads are skeleton records — only the company name is mandatory and
+    // every other field (brand, phone, email, CR, tax card, etc.) can stay
+    // empty. Once the lead converts to "active" the full data is captured.
+    const isLead = form.clientType === 'lead';
+    if (!isLead && form.brands.length === 0) {
       alert(isAr ? 'اختر براند واحد على الأقل' : 'Select at least one brand');
       return;
     }
@@ -112,7 +116,10 @@ export default function Clients() {
       const { countryCode, phoneNumber, isInternational: _, ...rest } = form;
       // isInternational is just a UI flag for the required-toggle — the values
       // entered (or left blank) flow through to the backend as-is.
-      const payload = { ...rest, phone: `${countryCode}${phoneNumber.replace(/[^\d]/g, '')}` };
+      // For leads, send phone as empty (instead of bare "+966") when no number was typed.
+      const digits = phoneNumber.replace(/[^\d]/g, '');
+      const phone = digits ? `${countryCode}${digits}` : '';
+      const payload = { ...rest, phone };
       await clientsApi.create(payload);
       setShowModal(false);
       setForm(emptyForm);
@@ -326,6 +333,17 @@ export default function Clients() {
 
       <Modal open={showModal} onClose={() => setShowModal(false)} title={isAr ? 'إضافة عميل جديد' : 'Add New Client'} size="lg">
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Lead-mode banner: when the user picks "Lead" all fields except
+              the company name become optional, so they can be saved as a
+              skeleton record from a referral / business card and filled in
+              later when the lead converts to an active client. */}
+          {form.clientType === 'lead' && (
+            <div className={`p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs ${isAr ? 'text-right' : 'text-left'}`}>
+              {isAr
+                ? '💡 وضع "عميل محتمل": فقط اسم الشركة إلزامي. باقي البيانات (الاتصال، البريد، السجل التجاري، البطاقة الضريبية، ...) كلها اختيارية ويمكن استكمالها لاحقاً عند تحويله لعميل نشط.'
+                : '💡 Lead mode: only the company name is required. Everything else (contact, email, CR, tax card, …) is optional and can be filled in later when the lead converts to active.'}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="label">{isAr ? 'اسم الشركة' : 'Company Name'} *</label>
@@ -334,13 +352,17 @@ export default function Clients() {
                 value={form.companyName} onChange={e => setForm(p => ({ ...p, companyName: e.target.value }))} />
             </div>
             <div>
-              <label className="label">{isAr ? 'جهة الاتصال' : 'Contact Person'} *</label>
-              <input className="input" required minLength={2} maxLength={100} pattern="[^<>{}\[\]\\]+"
+              <label className="label">
+                {isAr ? 'جهة الاتصال' : 'Contact Person'}{form.clientType !== 'lead' && ' *'}
+              </label>
+              <input className="input" required={form.clientType !== 'lead'} minLength={2} maxLength={100} pattern="[^<>{}\[\]\\]+"
                 title={isAr ? 'لا يجب أن يحتوي على رموز خاصة' : 'No special characters'}
                 value={form.contactPerson} onChange={e => setForm(p => ({ ...p, contactPerson: e.target.value }))} />
             </div>
             <div>
-              <label className="label">{isAr ? 'رقم الهاتف' : 'Phone Number'} *</label>
+              <label className="label">
+                {isAr ? 'رقم الهاتف' : 'Phone Number'}{form.clientType !== 'lead' && ' *'}
+              </label>
               <div className="flex gap-2" dir="ltr">
                 <select className="input w-28" value={form.countryCode}
                   onChange={e => setForm(p => ({ ...p, countryCode: e.target.value }))}>
@@ -352,7 +374,9 @@ export default function Clients() {
                   <option value="+973">🇧🇭 +973</option>
                   <option value="+968">🇴🇲 +968</option>
                 </select>
-                <input className="input flex-1" type="tel" required pattern="[\d\s\-]{6,15}"
+                <input className="input flex-1" type="tel"
+                  required={form.clientType !== 'lead'}
+                  pattern={form.clientType === 'lead' ? undefined : '[\\d\\s\\-]{6,15}'}
                   placeholder="5XXXXXXXX"
                   title={isAr ? 'أرقام فقط (بدون كود الدولة)' : 'Numbers only (no country code)'}
                   value={form.phoneNumber}
@@ -360,14 +384,18 @@ export default function Clients() {
               </div>
             </div>
             <div>
-              <label className="label">{isAr ? 'البريد الإلكتروني' : 'Email'} *</label>
-              <input className="input" type="email" required
+              <label className="label">
+                {isAr ? 'البريد الإلكتروني' : 'Email'}{form.clientType !== 'lead' && ' *'}
+              </label>
+              <input className="input" type="email" required={form.clientType !== 'lead'}
                 title={isAr ? 'يجب أن يحتوي على @' : 'Must contain @'}
                 value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} dir="ltr" />
             </div>
             <div>
-              <label className="label">{isAr ? 'القطاع' : 'Industry'} *</label>
-              <select className="input" required value={form.industry} onChange={e => setForm(p => ({ ...p, industry: e.target.value }))}>
+              <label className="label">
+                {isAr ? 'القطاع' : 'Industry'}{form.clientType !== 'lead' && ' *'}
+              </label>
+              <select className="input" required={form.clientType !== 'lead'} value={form.industry} onChange={e => setForm(p => ({ ...p, industry: e.target.value }))}>
                 <option value="">{isAr ? 'اختر...' : 'Select...'}</option>
                 {INDUSTRY_OPTS.map(i => <option key={i} value={i}>{i}</option>)}
               </select>
@@ -380,20 +408,26 @@ export default function Clients() {
               </select>
             </div>
             <div>
-              <label className="label">{isAr ? 'مصدر العميل' : 'Lead Source'} *</label>
-              <select className="input" required value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))}>
+              <label className="label">
+                {isAr ? 'مصدر العميل' : 'Lead Source'}{form.clientType !== 'lead' && ' *'}
+              </label>
+              <select className="input" required={form.clientType !== 'lead'} value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))}>
                 <option value="">{isAr ? 'اختر...' : 'Select...'}</option>
                 {SOURCE_OPTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="label">{isAr ? 'عدد الغرف التقديري / سنة' : 'Estimated rooms / year'} *</label>
-              <input className="input" type="number" required min="1" max="100000"
+              <label className="label">
+                {isAr ? 'عدد الغرف التقديري / سنة' : 'Estimated rooms / year'}{form.clientType !== 'lead' && ' *'}
+              </label>
+              <input className="input" type="number" required={form.clientType !== 'lead'} min="1" max="100000"
                 value={form.estimatedRooms} onChange={e => setForm(p => ({ ...p, estimatedRooms: e.target.value }))} />
             </div>
             <div>
-              <label className="label">{isAr ? 'الميزانية السنوية (ر.س)' : 'Annual Budget (SAR)'} *</label>
-              <input className="input" type="number" required min="1"
+              <label className="label">
+                {isAr ? 'الميزانية السنوية (ر.س)' : 'Annual Budget (SAR)'}{form.clientType !== 'lead' && ' *'}
+              </label>
+              <input className="input" type="number" required={form.clientType !== 'lead'} min="1"
                 value={form.annualBudget} onChange={e => setForm(p => ({ ...p, annualBudget: e.target.value }))} />
             </div>
             {/* International toggle — purely loosens the "required" rule on CR + tax card.
@@ -448,7 +482,9 @@ export default function Clients() {
                 onChange={e => setForm(p => ({ ...p, taxCardNo: e.target.value.replace(/\D/g, '').slice(0, 15) }))} dir="ltr" />
             </div>
             <div className="col-span-2">
-              <label className="label">{isAr ? 'البراندات (يمكن اختيار أكثر من واحد)' : 'Brands (multi-select)'} *</label>
+              <label className="label">
+                {isAr ? 'البراندات (يمكن اختيار أكثر من واحد)' : 'Brands (multi-select)'}{form.clientType !== 'lead' && ' *'}
+              </label>
               <div className="grid grid-cols-3 gap-2">
                 {BRAND_OPTS.map(b => {
                   const checked = form.brands.includes(b.value);
@@ -468,8 +504,10 @@ export default function Clients() {
               </div>
             </div>
             <div className="col-span-2">
-              <label className="label">{isAr ? 'العنوان' : 'Address'} *</label>
-              <input className="input" required minLength={2} maxLength={300} pattern="[^<>{}\[\]\\]+"
+              <label className="label">
+                {isAr ? 'العنوان' : 'Address'}{form.clientType !== 'lead' && ' *'}
+              </label>
+              <input className="input" required={form.clientType !== 'lead'} minLength={2} maxLength={300} pattern="[^<>{}\[\]\\]+"
                 value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} />
             </div>
             <div className="col-span-2">
