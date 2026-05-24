@@ -366,13 +366,51 @@ export default function Clients() {
               <div className="flex gap-2" dir="ltr">
                 <select className="input w-28" value={form.countryCode}
                   onChange={e => setForm(p => ({ ...p, countryCode: e.target.value }))}>
-                  <option value="+966">🇸🇦 +966</option>
-                  <option value="+20">🇪🇬 +20</option>
-                  <option value="+971">🇦🇪 +971</option>
-                  <option value="+965">🇰🇼 +965</option>
-                  <option value="+974">🇶🇦 +974</option>
-                  <option value="+973">🇧🇭 +973</option>
-                  <option value="+968">🇴🇲 +968</option>
+                  {/* GCC first (most common for Ewaa), then MENA, then global. */}
+                  <optgroup label={isAr ? 'دول الخليج' : 'GCC'}>
+                    <option value="+966">🇸🇦 +966</option>
+                    <option value="+971">🇦🇪 +971</option>
+                    <option value="+965">🇰🇼 +965</option>
+                    <option value="+974">🇶🇦 +974</option>
+                    <option value="+973">🇧🇭 +973</option>
+                    <option value="+968">🇴🇲 +968</option>
+                    <option value="+967">🇾🇪 +967</option>
+                  </optgroup>
+                  <optgroup label={isAr ? 'الشرق الأوسط وشمال أفريقيا' : 'MENA'}>
+                    <option value="+20">🇪🇬 +20</option>
+                    <option value="+962">🇯🇴 +962</option>
+                    <option value="+961">🇱🇧 +961</option>
+                    <option value="+963">🇸🇾 +963</option>
+                    <option value="+964">🇮🇶 +964</option>
+                    <option value="+970">🇵🇸 +970</option>
+                    <option value="+249">🇸🇩 +249</option>
+                    <option value="+212">🇲🇦 +212</option>
+                    <option value="+213">🇩🇿 +213</option>
+                    <option value="+216">🇹🇳 +216</option>
+                    <option value="+218">🇱🇾 +218</option>
+                    <option value="+90">🇹🇷 +90</option>
+                  </optgroup>
+                  <optgroup label={isAr ? 'آسيا' : 'Asia'}>
+                    <option value="+92">🇵🇰 +92</option>
+                    <option value="+91">🇮🇳 +91</option>
+                    <option value="+880">🇧🇩 +880</option>
+                    <option value="+63">🇵🇭 +63</option>
+                    <option value="+62">🇮🇩 +62</option>
+                    <option value="+60">🇲🇾 +60</option>
+                    <option value="+86">🇨🇳 +86</option>
+                    <option value="+81">🇯🇵 +81</option>
+                    <option value="+82">🇰🇷 +82</option>
+                  </optgroup>
+                  <optgroup label={isAr ? 'أوروبا والأمريكتين' : 'Europe & Americas'}>
+                    <option value="+44">🇬🇧 +44</option>
+                    <option value="+1">🇺🇸 +1</option>
+                    <option value="+33">🇫🇷 +33</option>
+                    <option value="+49">🇩🇪 +49</option>
+                    <option value="+39">🇮🇹 +39</option>
+                    <option value="+34">🇪🇸 +34</option>
+                    <option value="+31">🇳🇱 +31</option>
+                    <option value="+7">🇷🇺 +7</option>
+                  </optgroup>
                 </select>
                 <input className="input flex-1" type="tel"
                   required={form.clientType !== 'lead'}

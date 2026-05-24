@@ -377,12 +377,33 @@ const generateQuote = async (req, res) => {
     };
     let preparedByTitle = null;
     if (req._overrideRepTitle !== undefined) {
-      preparedByTitle = req._overrideRepTitle || null;
+      // Saved-quote re-download: if we're rendering English and the frozen
+      // title is Arabic (most reps set their title in Arabic on their
+      // profile), fall back to the English role label so the English PDF
+      // doesn't ship a stray Arabic word in the signature block.
+      const t = req._overrideRepTitle || null;
+      preparedByTitle = (t && lang !== 'ar' && isArabic(t)) ? null : t;
     } else if (req.user?.id) {
       try {
         const u = await prisma.user.findUnique({ where: { id: req.user.id }, select: { title: true, role: true } });
         const map = (lang === 'ar') ? ROLE_LABEL_AR : ROLE_LABEL_EN;
-        preparedByTitle = u?.title || map[u?.role] || null;
+        // Drop the user's custom title when it's Arabic but we need an
+        // English PDF — same rationale as above for the re-download path.
+        const customTitle = u?.title || null;
+        const useCustom = customTitle && (lang === 'ar' || !isArabic(customTitle));
+        preparedByTitle = (useCustom ? customTitle : null) || map[u?.role] || null;
+      } catch (_) { /* non-fatal */ }
+    }
+    // Re-download path: if the saved (frozen) title was Arabic and we just
+    // dropped it for an English PDF, look up the original rep's role by
+    // email (unique) and use the English role label instead.
+    if (!preparedByTitle && lang !== 'ar' && req._overrideRepEmail) {
+      try {
+        const overrideUser = await prisma.user.findUnique({
+          where: { email: req._overrideRepEmail },
+          select: { role: true },
+        });
+        if (overrideUser?.role) preparedByTitle = ROLE_LABEL_EN[overrideUser.role] || null;
       } catch (_) { /* non-fatal */ }
     }
     const paymentTerms = (paymentTermsRaw || '').toString().trim().slice(0, 2000) || null;
