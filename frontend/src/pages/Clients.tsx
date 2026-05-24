@@ -421,6 +421,7 @@ export default function Clients() {
                     <option value="+39">🇮🇹 +39</option>
                     <option value="+34">🇪🇸 +34</option>
                     <option value="+31">🇳🇱 +31</option>
+                    <option value="+48">🇵🇱 +48</option>
                     <option value="+7">🇷🇺 +7</option>
                   </optgroup>
                 </select>
