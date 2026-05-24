@@ -1468,7 +1468,7 @@ const generateTeamReport = async (req, res) => {
     const team = await prisma.user.findMany({
       where: { isActive: true, role: { in: ['sales_rep', 'sales_director', 'assistant_sales'] } },
       include: {
-        _count: { select: { assignedClients: true, contracts: true, visits: true } },
+        _count: { select: { assignedClients: { where: { isActive: true } }, contracts: true, visits: true } },
       },
       orderBy: { name: 'asc' },
     });

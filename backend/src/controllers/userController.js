@@ -26,7 +26,7 @@ const getUsers = async (req, res) => {
         isActive: true, createdAt: true, managerId: true, commissionRate: true,
         manager: { select: { id: true, name: true, role: true } },
         hotels: { include: { hotel: { select: { id: true, name: true } } } },
-        _count: { select: { assignedClients: true, contracts: true } }
+        _count: { select: { assignedClients: { where: { isActive: true } }, contracts: true } }
       },
       orderBy: { name: 'asc' }
     });
@@ -141,7 +141,7 @@ const getOrgChart = async (req, res) => {
       where: { isActive: true },
       select: {
         id: true, name: true, role: true, managerId: true,
-        _count: { select: { assignedClients: true } }
+        _count: { select: { assignedClients: { where: { isActive: true } } } }
       },
       orderBy: { name: 'asc' }
     });

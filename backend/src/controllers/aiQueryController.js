@@ -414,7 +414,7 @@ const tools = {
         id: true, name: true, email: true, phone: true, role: true, commissionRate: true,
         manager: { select: { name: true } },
         hotels: { select: { hotel: { select: { name: true, group: true } } } },
-        _count: { select: { assignedClients: true, contracts: true, visits: true } },
+        _count: { select: { assignedClients: { where: { isActive: true } }, contracts: true, visits: true } },
       },
     });
     return { count: users.length, items: users };
@@ -471,7 +471,7 @@ const tools = {
       take: Math.min(Number(args.limit) || 50, 200),
       select: {
         id: true, name: true, role: true, commissionRate: true,
-        _count: { select: { assignedClients: true, contracts: true, visits: true } },
+        _count: { select: { assignedClients: { where: { isActive: true } }, contracts: true, visits: true } },
       },
     });
     return { count: team.length, items: team };

@@ -97,7 +97,7 @@ const getDashboard = async (req, res) => {
             where: { id: { in: teamIds }, role: { in: ['sales_rep', 'assistant_sales'] }, isActive: true },
             select: {
               id: true, name: true,
-              _count: { select: { assignedClients: true, contracts: true, visits: true } }
+              _count: { select: { assignedClients: { where: { isActive: true } }, contracts: true, visits: true } }
             }
           })
         : Promise.resolve([])
