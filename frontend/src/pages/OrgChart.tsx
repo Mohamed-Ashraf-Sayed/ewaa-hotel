@@ -25,7 +25,7 @@ const ROLE_EN: Record<string, string> = {
   general_manager: 'General Manager',
   vice_gm: 'Vice GM',
   sales_director: 'Sales Director',
-  assistant_sales: 'Assistant Sales Manager',
+  assistant_sales: 'Assistant Director of Sales',
   sales_rep: 'Sales Rep',
   contract_officer: 'Contract Officer',
   reservations: 'Reservations',

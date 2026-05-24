@@ -1554,7 +1554,7 @@ export default function ClientDetail() {
                       value={item.rooms} onChange={e => { const n = [...quoteItems]; n[i].rooms = e.target.value; setQuoteItems(n); }} />
                     <input className="input text-sm" type="number" min="0" placeholder={isAr ? 'عدد الليالي' : 'Nights'}
                       value={item.nights} onChange={e => { const n = [...quoteItems]; n[i].nights = e.target.value; setQuoteItems(n); }} />
-                    <input className="input text-sm" type="number" min="0" placeholder={isAr ? 'السعر/ليلة' : 'Rate/Night'}
+                    <input className="input text-sm" type="number" min="0" step="0.01" placeholder={isAr ? 'السعر/ليلة' : 'Rate/Night'}
                       value={item.ratePerNight} onChange={e => { const n = [...quoteItems]; n[i].ratePerNight = e.target.value; setQuoteItems(n); }} />
                   </div>
                   {quoteItems.length > 1 && (

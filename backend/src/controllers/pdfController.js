@@ -64,7 +64,7 @@ const ROLE_TITLE_EN = {
   general_manager: 'General Manager',
   vice_gm: 'Vice General Manager',
   sales_director: 'Sales Director',
-  assistant_sales: 'Assistant Sales',
+  assistant_sales: 'Assistant Director of Sales',
   sales_rep: 'Sales Representative',
   reservations: 'Reservations Officer',
   credit_manager: 'Credit Manager',
@@ -367,7 +367,7 @@ const generateQuote = async (req, res) => {
       general_manager: 'General Manager',
       vice_gm: 'Vice General Manager',
       sales_director: 'Sales Director',
-      assistant_sales: 'Assistant Sales Manager',
+      assistant_sales: 'Assistant Director of Sales',
       sales_rep: 'Sales Executive',
       contract_officer: 'Contract Officer',
       reservations: 'Reservations',
@@ -1134,7 +1134,7 @@ const PAYMENT_METHOD_EN = {
   cash: 'Cash', bank_transfer: 'Bank Transfer', cheque: 'Cheque', check: 'Cheque', card: 'Card', online: 'Online',
 };
 const ROLE_EN = {
-  sales_rep: 'Sales Rep', sales_director: 'Sales Director', assistant_sales: 'Assistant Sales',
+  sales_rep: 'Sales Rep', sales_director: 'Sales Director', assistant_sales: 'Assistant Director of Sales',
 };
 
 const dateRangeWhere = (from, to, field = 'createdAt') => {

@@ -289,7 +289,7 @@ const tools = {
         },
         _sum: { totalAmount: true },
       }),
-      prisma.client.count({ where: { salesRepId: user.id, createdAt: { gte: start, lte: end } } }),
+      prisma.client.count({ where: { salesRepId: user.id, isActive: true, createdAt: { gte: start, lte: end } } }),
     ]);
     return {
       count: targets.length,

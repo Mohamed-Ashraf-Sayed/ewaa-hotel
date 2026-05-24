@@ -172,7 +172,7 @@ const getTargetReport = async (req, res) => {
         }),
         // New clients in period
         prisma.client.count({
-          where: { salesRepId: t.userId, createdAt: { gte: startDate, lte: endDate } },
+          where: { salesRepId: t.userId, isActive: true, createdAt: { gte: startDate, lte: endDate } },
         }),
         // Revenue from Opera-sourced bookings assigned to this rep in the period.
         // (Contract.totalValue was the old source but became null when the

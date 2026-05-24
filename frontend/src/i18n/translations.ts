@@ -185,7 +185,7 @@ const translations = {
   role_systems_info: { ar: 'نظم ومعلومات', en: 'Systems & Information' },
   role_vice_gm: { ar: 'نائب المدير العام', en: 'Vice General Manager' },
   role_sales_director: { ar: 'مدير مبيعات', en: 'Sales Director' },
-  role_assistant_sales: { ar: 'مساعد مدير المبيعات', en: 'Assistant Sales Manager' },
+  role_assistant_sales: { ar: 'مساعد مدير المبيعات', en: 'Assistant Director of Sales' },
   role_sales_rep: { ar: 'تنفيذي مبيعات', en: 'Sales Executive' },
   role_contract_officer: { ar: 'مسئول العقود', en: 'Contract Officer' },
   role_reservations: { ar: 'قسم الحجوزات', en: 'Reservations' },

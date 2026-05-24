@@ -21,7 +21,7 @@ const getLeaderboard = async (req, res) => {
       const [contracts, visits, clients, revenue, perfScore] = await Promise.all([
         prisma.contract.count({ where: { salesRepId: u.id, createdAt: { gte: startDate, lte: endDate } } }),
         prisma.visit.count({ where: { salesRepId: u.id, visitDate: { gte: startDate, lte: endDate } } }),
-        prisma.client.count({ where: { salesRepId: u.id, createdAt: { gte: startDate, lte: endDate } } }),
+        prisma.client.count({ where: { salesRepId: u.id, isActive: true, createdAt: { gte: startDate, lte: endDate } } }),
         // Revenue from Opera-sourced bookings (matches targetController so
         // the leaderboard and the target report always agree).
         prisma.booking.aggregate({

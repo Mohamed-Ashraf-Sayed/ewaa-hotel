@@ -139,7 +139,7 @@ const ROLE_AR: Record<string, string> = {
 };
 const ROLE_EN: Record<string, string> = {
   admin: 'Admin', general_manager: 'General Manager', vice_gm: 'Vice GM',
-  sales_director: 'Sales Director', assistant_sales: 'Assistant Sales', sales_rep: 'Sales Rep',
+  sales_director: 'Sales Director', assistant_sales: 'Assistant Director of Sales', sales_rep: 'Sales Rep',
   contract_officer: 'Contract Officer', reservations: 'Reservations',
   credit_manager: 'Credit Manager', credit_officer: 'Credit Officer', systems_info: 'Systems & Info',
 };
