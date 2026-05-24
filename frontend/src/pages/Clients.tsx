@@ -62,7 +62,8 @@ export default function Clients() {
   const { hasRole } = useAuth();
 
   const emptyForm = {
-    companyName: '', contactPerson: '', countryCode: '+966', phoneNumber: '', email: '', address: '',
+    companyName: '', companyNameEn: '',
+    contactPerson: '', countryCode: '+966', phoneNumber: '', email: '', address: '',
     industry: '', clientType: 'lead', source: '', hotelId: '', brands: [] as string[],
     estimatedRooms: '', annualBudget: '', website: '',
     commercialRegNo: '', taxCardNo: '',
@@ -346,10 +347,21 @@ export default function Clients() {
           )}
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
-              <label className="label">{isAr ? 'اسم الشركة' : 'Company Name'} *</label>
+              <label className="label">{isAr ? 'اسم الشركة (عربي)' : 'Company Name (Arabic)'} *</label>
               <input className="input" required minLength={2} maxLength={200} pattern="[^<>{}\[\]\\]+"
                 title={isAr ? 'لا يجب أن يحتوي على رموز خاصة < > { } [ ] \\' : 'No special characters allowed'}
                 value={form.companyName} onChange={e => setForm(p => ({ ...p, companyName: e.target.value }))} />
+            </div>
+            <div className="col-span-2">
+              <label className="label">
+                {isAr ? 'اسم الشركة (إنجليزي)' : 'Company Name (English)'}
+                <span className="text-[11px] text-brand-400 font-normal ms-1">
+                  {isAr ? '(يُستخدم في عرض السعر الإنجليزي)' : '(used on English price quotes)'}
+                </span>
+              </label>
+              <input className="input" maxLength={200} pattern="[^<>{}\[\]\\]+" dir="ltr"
+                title={isAr ? 'لا يجب أن يحتوي على رموز خاصة' : 'No special characters'}
+                value={form.companyNameEn} onChange={e => setForm(p => ({ ...p, companyNameEn: e.target.value }))} />
             </div>
             <div>
               <label className="label">

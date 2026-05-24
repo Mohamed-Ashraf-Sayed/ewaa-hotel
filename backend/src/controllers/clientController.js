@@ -115,7 +115,7 @@ const brandLabels = (codes) => codes.map(c => BRAND_LABEL_AR[c] || c).join('، '
 
 const createClient = async (req, res) => {
   try {
-    const { companyName, contactPerson, phone, email, address, industry,
+    const { companyName, companyNameEn, contactPerson, phone, email, address, industry,
       clientType, source, hotelId, brands, estimatedRooms, annualBudget, website,
       commercialRegNo, taxCardNo, latitude, longitude, notes } = req.body;
 
@@ -177,7 +177,9 @@ const createClient = async (req, res) => {
 
     const client = await prisma.client.create({
       data: {
-        companyName, contactPerson, phone, email, address, industry,
+        companyName,
+        companyNameEn: companyNameEn?.trim() || null,
+        contactPerson, phone, email, address, industry,
         clientType: clientType || 'lead',
         source,
         salesRepId: req.user.id,

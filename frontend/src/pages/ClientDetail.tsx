@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowRight, FileText, Plus, Clock, MapPin, CreditCard, Receipt, Mail, ExternalLink, BedDouble, Building2, Calendar, Pencil, XCircle, LogIn, LogOut, History } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, FileText, Plus, Clock, MapPin, CreditCard, Receipt, Mail, ExternalLink, BedDouble, Building2, Calendar, Pencil, XCircle, LogIn, LogOut, History, Trash2 } from 'lucide-react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { clientsApi, visitsApi, activitiesApi, contractsApi, hotelsApi, paymentsApi, pdfApi, emailApi, attachmentsApi, bookingsApi, usersApi, quotesApi } from '../services/api';
@@ -22,6 +22,7 @@ const activityIcons: Record<string, string> = {
 
 export default function ClientDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { t, lang } = useLanguage();
   const locale = lang === 'ar' ? arSA : enUS;
   const isAr = lang === 'ar';
@@ -210,6 +211,24 @@ export default function ClientDetail() {
 
   const isAdminLevel = hasRole('admin', 'general_manager', 'systems_info', 'vice_gm');
 
+  // Soft-delete (archive) — admin-level only. Backend route is also gated by
+  // the same roles, so even if someone forced the UI the API would still 403.
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const handleDeleteClient = async () => {
+    if (!client) return;
+    setDeleteBusy(true);
+    try {
+      await clientsApi.delete(client.id);
+      navigate('/clients');
+    } catch (err: any) {
+      alert(err?.response?.data?.message || (isAr ? 'فشل حذف العميل' : 'Failed to delete client'));
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   const openEditClient = () => {
     if (!client) return;
     const { countryCode, number } = parsePhone(client.phone);
@@ -377,6 +396,17 @@ export default function ClientDetail() {
                     ✎ {isAr ? 'تعديل' : 'Edit'}
                   </button>
                 ) : null}
+                {/* Archive (soft-delete) — admin-level only, gated by backend
+                    too. Goes through a confirm modal because it removes the
+                    client from every list view (visits/contracts/etc stay in
+                    the DB but become invisible). */}
+                {isAdminLevel && (
+                  <button onClick={() => { setShowDeleteModal(true); setDeleteConfirmText(''); }}
+                    className="text-xs px-2 py-1 rounded-md bg-red-50 text-red-600 hover:bg-red-100 font-semibold inline-flex items-center gap-1">
+                    <Trash2 className="w-3 h-3" />
+                    {isAr ? 'حذف' : 'Delete'}
+                  </button>
+                )}
               </div>
               {(client as any).companyNameEn && isAr && (
                 <p className="text-sm text-brand-400 mt-0.5">{(client as any).companyNameEn}</p>
@@ -1659,6 +1689,46 @@ export default function ClientDetail() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete (archive) confirmation — type the company name to confirm so
+          an accidental click can't remove a client with linked records. */}
+      <Modal open={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteConfirmText(''); }} title={isAr ? 'حذف العميل' : 'Delete Client'} size="md">
+        {client && (
+          <div className="space-y-4">
+            <div className={`p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm ${isAr ? 'text-right' : 'text-left'}`}>
+              {isAr
+                ? `سيتم أرشفة العميل "${client.companyName}" وإزالته من كل القوائم. السجلات المرتبطة (الزيارات، العقود، الحجوزات، الدفعات) ستبقى مخفية لكن قابلة للاسترجاع لاحقاً بقاعدة البيانات.`
+                : `Client "${client.companyName}" will be archived and removed from all lists. Linked records (visits, contracts, bookings, payments) stay hidden but can be restored later via the database.`}
+            </div>
+            <div className={isAr ? 'text-right' : 'text-left'}>
+              <label className="label">
+                {isAr ? `اكتب اسم الشركة للتأكيد:` : `Type the company name to confirm:`}
+              </label>
+              <p className="text-xs text-brand-500 mb-2 font-mono">{client.companyName}</p>
+              <input
+                className="input"
+                value={deleteConfirmText}
+                onChange={e => setDeleteConfirmText(e.target.value)}
+                placeholder={client.companyName}
+                autoFocus
+              />
+            </div>
+            <div className={`flex gap-2 pt-2 border-t border-brand-100 ${isAr ? 'flex-row-reverse' : ''}`}>
+              <button className="btn-secondary flex-1" onClick={() => { setShowDeleteModal(false); setDeleteConfirmText(''); }}>
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+                disabled={deleteBusy || deleteConfirmText.trim() !== client.companyName.trim()}
+                onClick={handleDeleteClient}
+              >
+                <Trash2 className="w-4 h-4" />
+                {deleteBusy ? (isAr ? 'جاري الحذف...' : 'Deleting...') : (isAr ? 'تأكيد الحذف' : 'Confirm Delete')}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Edit Client Modal */}

@@ -415,6 +415,21 @@ const generateQuote = async (req, res) => {
     const hotel = hotelId ? await prisma.hotel.findUnique({ where: { id: parseInt(hotelId) } }) : null;
     const client = clientId ? await prisma.client.findUnique({ where: { id: parseInt(clientId) } }) : null;
 
+    // Pick the recipient company name for THIS rendering:
+    //   - English PDF: prefer client.companyNameEn (the dedicated English
+    //     field on the client record), then the form-typed companyName,
+    //     then the stored Arabic companyName as a last resort.
+    //   - Arabic PDF: always the Arabic companyName (form value first, then
+    //     the stored value). companyNameEn is ignored.
+    // Reassigned into the existing companyName variable used by both render
+    // paths below so they pick up the language-correct value automatically.
+    let displayCompanyName;
+    if (isAr) {
+      displayCompanyName = companyName || client?.companyName || '-';
+    } else {
+      displayCompanyName = client?.companyNameEn || companyName || client?.companyName || '-';
+    }
+
     // ref/today/validUntil can be overridden by the re-download path so a
     // saved quote re-renders with its original reference and dates.
     const ref = req._overrideRef || `QT-${Date.now().toString().slice(-8)}`;
@@ -548,7 +563,7 @@ const generateQuote = async (req, res) => {
       const html = renderQuoteHtmlAr({
         ref, today, validUntil,
         hotel, client,
-        companyName, contactPerson,
+        companyName: displayCompanyName, contactPerson,
         items: parsedItems,
         isMultiHotel,
         subtotal, munTaxRate, munTax, vat, grandTotal,
@@ -698,7 +713,7 @@ const generateQuote = async (req, res) => {
     };
     drawInfoPair(
       (yy) => infoStyle(t.reference, ref, quoteColX, yy),
-      (yy) => infoStyle(t.company, companyName || client?.companyName || '-', clientColX, yy),
+      (yy) => infoStyle(t.company, displayCompanyName, clientColX, yy),
     );
     drawInfoPair(
       (yy) => infoStyle(t.date, formatDate(today), quoteColX, yy),
