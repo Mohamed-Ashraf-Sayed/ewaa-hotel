@@ -120,6 +120,15 @@ export default function Dashboard() {
   const atRiskCount = data.atRiskClients.length;
   const hotLeadsCount = (data.hotLeads || []).length;
 
+  // Build clients-page URLs that pin the list to ONLY the IDs surfaced by the
+  // widget — clicking "5 At Risk" should land on those 5, not the rep's full
+  // book of 284. Empty ids list collapses to a friendly /clients link so the
+  // page still loads (filter logic in Clients.tsx returns 0 rows).
+  const atRiskIds = data.atRiskClients.map((p: any) => p.client?.id).filter(Boolean).join(',');
+  const hotLeadIds = (data.hotLeads || []).map((p: any) => p.client?.id).filter(Boolean).join(',');
+  const atRiskTo  = atRiskIds  ? `/clients?ids=${atRiskIds}`  : '/clients';
+  const hotLeadsTo = hotLeadIds ? `/clients?ids=${hotLeadIds}` : '/clients?type=lead';
+
   return (
     <div className="space-y-5">
       {/* === Premium hero header === */}
@@ -169,8 +178,8 @@ export default function Dashboard() {
         {[
           { count: overdueFollowUps, label: isAr ? 'متابعات متأخرة' : 'Overdue Follow-ups', sub: isAr ? 'محتاجة تواصل' : 'need contact', to: '/visits', icon: Clock, accent: 'red' },
           { count: expiringSoon, label: isAr ? 'عقود تنتهي خلال أسبوع' : 'Expiring This Week', sub: isAr ? 'جدّد قبل الفوات' : 'renew now', to: '/contracts?status=approved', icon: AlertTriangle, accent: 'amber' },
-          { count: atRiskCount, label: isAr ? 'عملاء في خطر' : 'At-Risk Clients', sub: isAr ? 'تواصل ضروري' : 'reach out', to: '/clients', icon: Flame, accent: 'rose' },
-          { count: hotLeadsCount, label: isAr ? 'عملاء محتملون نشطين' : 'Hot Leads', sub: isAr ? 'جاهزة للإغلاق' : 'ready to close', to: '/clients?type=lead', icon: Sparkles, accent: 'emerald' },
+          { count: atRiskCount, label: isAr ? 'عملاء في خطر' : 'At-Risk Clients', sub: isAr ? 'تواصل ضروري' : 'reach out', to: atRiskTo, icon: Flame, accent: 'rose' },
+          { count: hotLeadsCount, label: isAr ? 'عملاء محتملون نشطين' : 'Hot Leads', sub: isAr ? 'جاهزة للإغلاق' : 'ready to close', to: hotLeadsTo, icon: Sparkles, accent: 'emerald' },
         ].map(card => {
           const ACCENTS: Record<string, { bg: string; bgIcon: string; text: string; ring: string }> = {
             red: { bg: 'bg-red-50/60', bgIcon: 'bg-red-100', text: 'text-red-700', ring: 'hover:ring-red-200' },

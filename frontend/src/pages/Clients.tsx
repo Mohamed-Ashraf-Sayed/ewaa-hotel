@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Plus, Search, ChevronLeft, ChevronRight, User, Download, FileSearch, Upload } from 'lucide-react';
 import { clientsApi, hotelsApi, pdfApi } from '../services/api';
 import { Client, Hotel } from '../types';
@@ -59,7 +59,17 @@ export default function Clients() {
     duplicates: { line: number; companyName: string; existingSalesRep: string }[];
   }>(null);
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { hasRole } = useAuth();
+
+  // When the dashboard opens "/clients?ids=1,2,3" from the at-risk or hot-
+  // leads tiles, we narrow the visible table to exactly those IDs instead of
+  // showing the rep's entire book. Comma-separated list, parsed to a Set so
+  // the filter check is O(1) per row.
+  const idsParam = searchParams.get('ids') || '';
+  const idsFilter = idsParam
+    ? new Set(idsParam.split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isFinite(n)))
+    : null;
 
   const emptyForm = {
     companyName: '', companyNameEn: '',
@@ -140,6 +150,26 @@ export default function Clients() {
 
   return (
     <div className="space-y-5">
+      {/* "Pinned by IDs" banner — shown when the page was opened from a
+          dashboard widget (?ids=...). Tells the user the list is filtered
+          and gives a one-click escape back to the full book. */}
+      {idsFilter && (
+        <div className={`card p-3 bg-amber-50 border-amber-200 flex items-center justify-between flex-wrap gap-2 ${isAr ? 'flex-row-reverse text-right' : ''}`}>
+          <p className="text-sm text-amber-800">
+            {isAr
+              ? `عرض ${idsFilter.size} عميل محدد من لوحة التحكم`
+              : `Showing ${idsFilter.size} clients pinned from the dashboard`}
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/clients')}
+            className="text-xs px-3 py-1.5 rounded-full border border-amber-300 text-amber-800 hover:bg-amber-100 inline-flex items-center gap-1"
+          >
+            ✕ {isAr ? 'عرض كل العملاء' : 'Show all clients'}
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div className={isAr ? 'text-right' : 'text-left'}>
           <h1 className="text-2xl font-bold text-brand-900">{isAr ? 'العملاء والعملاء المحتملون' : 'Clients & Leads'}</h1>
@@ -245,9 +275,9 @@ export default function Clients() {
               {loading ? (
                 <tr><td colSpan={7} className="py-12 text-center text-brand-400">{isAr ? 'جاري التحميل...' : 'Loading...'}</td></tr>
               ) : (() => {
-                const visible = repFilter
-                  ? clients.filter(c => String(c.salesRep?.id) === repFilter)
-                  : clients;
+                let visible = clients;
+                if (idsFilter) visible = visible.filter(c => idsFilter.has(c.id));
+                if (repFilter) visible = visible.filter(c => String(c.salesRep?.id) === repFilter);
                 if (visible.length === 0) {
                   return <tr><td colSpan={7} className="py-12 text-center text-brand-400">{isAr ? 'لا يوجد عملاء' : 'No clients found'}</td></tr>;
                 }
