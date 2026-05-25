@@ -550,13 +550,11 @@ export default function Clients() {
             <div>
               <label className="label">
                 {isAr ? 'رقم البطاقة الضريبية' : 'Tax Card No.'}
-                {!form.isInternational && form.clientType !== 'lead' && ' *'}
                 <span className="text-[11px] text-brand-400 font-normal ms-1">
-                  {isAr ? '(حد أقصى 15 رقم)' : '(max 15 digits)'}
+                  {isAr ? '(اختياري · حد أقصى 15 رقم)' : '(optional · max 15 digits)'}
                 </span>
               </label>
               <input className="input"
-                required={!form.isInternational && form.clientType !== 'lead'}
                 inputMode="numeric"
                 maxLength={15} pattern="[0-9]{1,15}"
                 title={isAr ? 'أرقام فقط، حتى 15 رقم' : 'Digits only, up to 15'}
