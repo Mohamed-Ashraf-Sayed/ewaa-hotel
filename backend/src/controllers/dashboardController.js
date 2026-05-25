@@ -50,19 +50,23 @@ const getDashboard = async (req, res) => {
       prisma.client.count({ where: { ...clientFilter, isActive: true } }),
       prisma.client.count({ where: { ...clientFilter, isActive: true, clientType: 'active' } }),
       prisma.client.count({ where: { ...clientFilter, isActive: true, clientType: 'lead' } }),
-      prisma.contract.count({ where: contractFilter }),
-      prisma.contract.count({ where: { ...contractFilter, status: 'pending' } }),
-      prisma.contract.count({ where: { ...contractFilter, status: 'approved' } }),
-      prisma.contract.count({ where: { ...contractFilter, createdAt: { gte: thisMonthStart } } }),
+      // Contract / visit counts exclude rows tied to archived clients so
+      // bulk-archived spreadsheet imports don't keep inflating the dashboard
+      // after the cleanup. `client.isActive: true` is added relationally on
+      // every count and findMany below.
+      prisma.contract.count({ where: { ...contractFilter, client: { isActive: true } } }),
+      prisma.contract.count({ where: { ...contractFilter, status: 'pending', client: { isActive: true } } }),
+      prisma.contract.count({ where: { ...contractFilter, status: 'approved', client: { isActive: true } } }),
+      prisma.contract.count({ where: { ...contractFilter, createdAt: { gte: thisMonthStart }, client: { isActive: true } } }),
       prisma.contract.findMany({
-        where: { ...contractFilter, status: 'approved', endDate: { gte: now, lte: thirtyDaysFromNow } },
+        where: { ...contractFilter, status: 'approved', endDate: { gte: now, lte: thirtyDaysFromNow }, client: { isActive: true } },
         include: { client: { select: { companyName: true } }, salesRep: { select: { name: true } } },
         orderBy: { endDate: 'asc' }, take: 5
       }),
-      prisma.visit.count({ where: visitFilter }),
-      prisma.visit.count({ where: { ...visitFilter, visitDate: { gte: thisMonthStart } } }),
+      prisma.visit.count({ where: { ...visitFilter, client: { isActive: true } } }),
+      prisma.visit.count({ where: { ...visitFilter, visitDate: { gte: thisMonthStart }, client: { isActive: true } } }),
       prisma.visit.findMany({
-        where: { ...visitFilter, nextFollowUp: { gte: now, lte: sevenDaysFromNow } },
+        where: { ...visitFilter, nextFollowUp: { gte: now, lte: sevenDaysFromNow }, client: { isActive: true } },
         include: { client: { select: { id: true, companyName: true } } },
         orderBy: { nextFollowUp: 'asc' }, take: 5
       }),
@@ -126,11 +130,14 @@ const getDashboard = async (req, res) => {
             engagementScore: Math.max(0, 100 - x.daysSince),
           }));
       })(),
-      // Hot Leads: high score but no active contract
+      // Hot Leads: high score but no active contract. Also skip pulse rows
+      // tied to archived clients — they linger after a soft-delete and would
+      // otherwise leak into the widget.
       prisma.dealPulseScore.findMany({
         where: {
           engagementScore: { gte: 60 },
           contractScore: { lt: 50 },
+          client: { isActive: true },
           ...(role === 'sales_rep' ? { salesRepId: userId } : role === 'sales_director' ? { salesRepId: { in: teamIds } } : {})
         },
         include: { client: { select: { id: true, companyName: true, clientType: true } } },

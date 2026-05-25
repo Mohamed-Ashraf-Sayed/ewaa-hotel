@@ -19,8 +19,10 @@ const getLeaderboard = async (req, res) => {
 
     const leaderboard = await Promise.all(users.map(async (u) => {
       const [contracts, visits, clients, revenue, perfScore] = await Promise.all([
-        prisma.contract.count({ where: { salesRepId: u.id, createdAt: { gte: startDate, lte: endDate } } }),
-        prisma.visit.count({ where: { salesRepId: u.id, visitDate: { gte: startDate, lte: endDate } } }),
+        // Exclude visits/contracts tied to archived clients so the rep's
+        // leaderboard score drops in sync when their bulk imports get purged.
+        prisma.contract.count({ where: { salesRepId: u.id, createdAt: { gte: startDate, lte: endDate }, client: { isActive: true } } }),
+        prisma.visit.count({ where: { salesRepId: u.id, visitDate: { gte: startDate, lte: endDate }, client: { isActive: true } } }),
         prisma.client.count({ where: { salesRepId: u.id, isActive: true, createdAt: { gte: startDate, lte: endDate } } }),
         // Revenue from Opera-sourced bookings (matches targetController so
         // the leaderboard and the target report always agree).

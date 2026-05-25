@@ -162,13 +162,13 @@ const getTargetReport = async (req, res) => {
     // Get actuals for each user
     const report = await Promise.all(targets.map(async (t) => {
       const [contracts, visits, clients, revenue] = await Promise.all([
-        // Contracts created in period
+        // Contracts created in period — exclude rows on archived clients
         prisma.contract.count({
-          where: { salesRepId: t.userId, createdAt: { gte: startDate, lte: endDate } },
+          where: { salesRepId: t.userId, createdAt: { gte: startDate, lte: endDate }, client: { isActive: true } },
         }),
-        // Visits in period
+        // Visits in period — exclude rows on archived clients
         prisma.visit.count({
-          where: { salesRepId: t.userId, visitDate: { gte: startDate, lte: endDate } },
+          where: { salesRepId: t.userId, visitDate: { gte: startDate, lte: endDate }, client: { isActive: true } },
         }),
         // New clients in period
         prisma.client.count({
