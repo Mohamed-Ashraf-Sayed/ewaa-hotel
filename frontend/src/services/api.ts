@@ -82,7 +82,8 @@ export const contractsApi = {
     if (file) fd.append('confirmationLetter', file);
     return api.put(`/contracts/${id}/confirm-booking`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
-  download: (id: number) => api.get(`/contracts/${id}/download`, { responseType: 'blob' })
+  download: (id: number) => api.get(`/contracts/${id}/download`, { responseType: 'blob' }),
+  delete: (id: number) => api.delete(`/contracts/${id}`),
 };
 
 // Visits

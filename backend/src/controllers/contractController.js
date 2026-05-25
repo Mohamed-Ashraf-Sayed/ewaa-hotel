@@ -652,4 +652,36 @@ const confirmBooking = async (req, res) => {
   }
 };
 
-module.exports = { getContracts, getContract, uploadContract, approveContract, confirmBooking, getExpiringContracts, downloadContract, recalculatePulse };
+// Hard-delete a contract — admin-level only. Refuses if the contract has any
+// downstream records (payments, approvals, bookings, tasks) so a careless
+// click can't wipe out a real deal with cash already collected. The route
+// guard restricts this to admin/GM/vice_gm/systems_info on top.
+const deleteContract = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: 'Invalid contract id' });
+    const c = await prisma.contract.findUnique({
+      where: { id },
+      include: {
+        _count: { select: { payments: true, approvals: true, bookings: true, tasks: true } },
+      },
+    });
+    if (!c) return res.status(404).json({ message: 'Contract not found' });
+    const blockers = [];
+    if (c._count.payments > 0)  blockers.push(`${c._count.payments} دفعة`);
+    if (c._count.approvals > 0) blockers.push(`${c._count.approvals} اعتماد`);
+    if (c._count.bookings > 0)  blockers.push(`${c._count.bookings} حجز`);
+    if (c._count.tasks > 0)     blockers.push(`${c._count.tasks} مهمة`);
+    if (blockers.length > 0) {
+      return res.status(409).json({
+        message: `لا يمكن حذف العقد — مرتبط بـ ${blockers.join(' و ')}. ألغِ هذه السجلات أولاً.`,
+      });
+    }
+    await prisma.contract.delete({ where: { id } });
+    res.json({ message: 'Contract deleted', id });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+module.exports = { getContracts, getContract, uploadContract, approveContract, confirmBooking, getExpiringContracts, downloadContract, recalculatePulse, deleteContract };

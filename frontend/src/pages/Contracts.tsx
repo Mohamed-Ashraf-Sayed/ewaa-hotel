@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { FileText, Search, CheckCircle, XCircle, Clock, Download, Percent, Eye, GitBranch } from 'lucide-react';
+import { FileText, Search, CheckCircle, XCircle, Clock, Download, Percent, Eye, GitBranch, Trash2 } from 'lucide-react';
 import { contractsApi, hotelsApi, usersApi } from '../services/api';
 import { Contract, Hotel } from '../types';
 import Modal from '../components/Modal';
@@ -125,6 +125,25 @@ export default function Contracts() {
     <span className="badge-pending">{t('contract_pending')}</span>;
 
   const canApprove = hasRole('sales_director', 'credit_manager', 'contract_officer', 'vice_gm', 'general_manager', 'systems_info');
+  const canDeleteContract = hasRole('admin', 'general_manager', 'systems_info', 'vice_gm');
+  const [deleteTarget, setDeleteTarget] = useState<Contract | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteRefInput, setDeleteRefInput] = useState('');
+  const handleDeleteContract = async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    try {
+      await contractsApi.delete(deleteTarget.id);
+      setDeleteTarget(null);
+      setDeleteRefInput('');
+      load();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || (lang === 'ar' ? 'فشل حذف العقد' : 'Failed to delete contract'));
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   const isCreditManager = user?.role === 'credit_manager';
   const isContractOfficer = user?.role === 'contract_officer';
   const isSalesDirector = user?.role === 'sales_director';
@@ -303,6 +322,17 @@ export default function Contracts() {
                           <button onClick={() => { setApprovalModal(c); setApprovalNote(''); setCreditLimitInput(c.client?.creditLimit != null ? String(c.client.creditLimit) : ''); }}
                             className="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100">
                             {lang === 'ar' ? 'الاعتماد النهائي' : 'Final Approval'}
+                          </button>
+                        )}
+                        {/* Admin-tier delete — backend refuses if any
+                            payment/approval/booking/task is linked to this
+                            contract, so the action is constrained by data
+                            integrity, not just the UI. */}
+                        {canDeleteContract && (
+                          <button onClick={() => { setDeleteTarget(c); setDeleteRefInput(''); }}
+                            className="p-1.5 rounded-lg text-red-500 hover:bg-red-50"
+                            title={lang === 'ar' ? 'حذف العقد' : 'Delete contract'}>
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </div>
@@ -599,6 +629,48 @@ export default function Contracts() {
             </div>
           );
         })()}
+      </Modal>
+
+      {/* Delete contract confirmation — admin-only. Requires typing the
+          contract ref so a misclick doesn't wipe out a real deal. Backend
+          also refuses if any payment / approval / booking / task exists. */}
+      <Modal open={!!deleteTarget} onClose={() => { setDeleteTarget(null); setDeleteRefInput(''); }}
+        title={lang === 'ar' ? 'حذف العقد' : 'Delete Contract'} size="md">
+        {deleteTarget && (
+          <div className="space-y-4">
+            <div className={`p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
+              {lang === 'ar'
+                ? `سيتم حذف العقد "${deleteTarget.contractRef || `#${deleteTarget.id}`}" نهائياً. إذا كان مرتبط بأي دفعات أو موافقات أو حجوزات، الحذف هيرفض من الخلفية.`
+                : `Contract "${deleteTarget.contractRef || `#${deleteTarget.id}`}" will be permanently deleted. If it has any linked payments, approvals or bookings, the backend will refuse.`}
+            </div>
+            <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
+              <label className="label">
+                {lang === 'ar' ? 'اكتب رقم العقد للتأكيد:' : 'Type the contract reference to confirm:'}
+              </label>
+              <p className="text-xs text-brand-500 mb-2 font-mono">{deleteTarget.contractRef || `#${deleteTarget.id}`}</p>
+              <input
+                className="input"
+                value={deleteRefInput}
+                onChange={e => setDeleteRefInput(e.target.value)}
+                placeholder={deleteTarget.contractRef || `#${deleteTarget.id}`}
+                autoFocus
+              />
+            </div>
+            <div className={`flex gap-2 pt-2 border-t border-brand-100 ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
+              <button className="btn-secondary flex-1" onClick={() => { setDeleteTarget(null); setDeleteRefInput(''); }}>
+                {lang === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+                disabled={deleteBusy || deleteRefInput.trim() !== (deleteTarget.contractRef || `#${deleteTarget.id}`).trim()}
+                onClick={handleDeleteContract}
+              >
+                <Trash2 className="w-4 h-4" />
+                {deleteBusy ? (lang === 'ar' ? 'جاري الحذف...' : 'Deleting...') : (lang === 'ar' ? 'تأكيد الحذف' : 'Confirm Delete')}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
