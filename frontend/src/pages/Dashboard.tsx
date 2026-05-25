@@ -397,7 +397,7 @@ export default function Dashboard() {
                   </div>
                   <div className={isAr ? 'text-right' : 'text-left'}>
                     <p className="text-sm font-semibold text-brand-900">{p.client?.companyName}</p>
-                    <p className="text-xs text-brand-400">{p.daysSinceLastVisit} {isAr ? 'يوم منذ آخر زيارة' : 'days since last visit'}</p>
+                    <p className="text-xs text-brand-400">{p.daysSinceLastVisit} {isAr ? 'يوم منذ آخر نشاط' : 'days since last activity'}</p>
                   </div>
                 </Link>
               ))}

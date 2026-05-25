@@ -66,12 +66,66 @@ const getDashboard = async (req, res) => {
         include: { client: { select: { id: true, companyName: true } } },
         orderBy: { nextFollowUp: 'asc' }, take: 5
       }),
-      // At Risk: high risk pulse score
-      prisma.dealPulseScore.findMany({
-        where: { riskLevel: 'high', ...(role === 'sales_rep' ? { salesRepId: userId } : role === 'sales_director' ? { salesRepId: { in: teamIds } } : {}) },
-        include: { client: { select: { id: true, companyName: true, contactPerson: true } }, salesRep: { select: { name: true } } },
-        orderBy: { engagementScore: 'asc' }, take: 5
-      }),
+      // At-Risk = no activity of any kind for more than 60 days. "Activity"
+      // covers everything that signals the client is being worked on: a
+      // visit, an entry in the activity log (note / call / email / meeting
+      // logged manually), a contract, or a payment. We also count the
+      // createdAt timestamp as day-zero activity so a freshly-added lead
+      // doesn't jump straight into the widget. Computed on-the-fly from the
+      // source tables instead of from DealPulseScore — that table is only
+      // refreshed when a visit/contract fires, so freshly-imported clients
+      // with stale scores were wrongly surfacing here.
+      (async () => {
+        const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+        const candidates = await prisma.client.findMany({
+          where: {
+            isActive: true,
+            // Skip clients younger than 60 days entirely — they can't be
+            // "at-risk" yet under the > 60-days rule.
+            createdAt: { lte: sixtyDaysAgo },
+            ...(role === 'sales_rep' ? { salesRepId: userId }
+              : role === 'sales_director' ? { salesRepId: { in: teamIds } }
+              : ADMIN_ROLES.includes(role) ? {}
+              : {}),
+          },
+          select: {
+            id: true, companyName: true, contactPerson: true, createdAt: true,
+            salesRep: { select: { id: true, name: true } },
+            visits:    { orderBy: { visitDate: 'desc' }, take: 1, select: { visitDate: true } },
+            activities:{ orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } },
+            contracts: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } },
+            payments:  { orderBy: { paymentDate: 'desc' }, take: 1, select: { paymentDate: true } },
+          },
+        });
+        const DAY = 1000 * 60 * 60 * 24;
+        return candidates
+          .map(c => {
+            const ts = [
+              c.createdAt,
+              c.visits[0]?.visitDate,
+              c.activities[0]?.createdAt,
+              c.contracts[0]?.createdAt,
+              c.payments[0]?.paymentDate,
+            ].filter(Boolean).map(d => new Date(d).getTime());
+            const lastActivityAt = ts.length ? Math.max(...ts) : new Date(c.createdAt).getTime();
+            const daysSince = Math.floor((now.getTime() - lastActivityAt) / DAY);
+            return { c, daysSince };
+          })
+          .filter(x => x.daysSince > 60)
+          .sort((a, b) => b.daysSince - a.daysSince)
+          .slice(0, 5)
+          .map(x => ({
+            id: x.c.id, // React key
+            client: { id: x.c.id, companyName: x.c.companyName, contactPerson: x.c.contactPerson },
+            salesRep: x.c.salesRep ? { name: x.c.salesRep.name } : null,
+            // Reuse the field name the frontend already reads, so the widget
+            // renders without UI changes — the label still says "since last
+            // visit" but the count is now since the last activity of any
+            // kind (visit / note / contract / payment / etc).
+            daysSinceLastVisit: x.daysSince,
+            engagementScore: Math.max(0, 100 - x.daysSince),
+          }));
+      })(),
       // Hot Leads: high score but no active contract
       prisma.dealPulseScore.findMany({
         where: {
