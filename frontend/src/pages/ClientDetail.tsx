@@ -107,9 +107,11 @@ export default function ClientDetail() {
   const [emailForm, setEmailForm] = useState({ to: '', cc: '', subject: '', body: '' });
   const [emailFiles, setEmailFiles] = useState<File[]>([]);
   const [emailSending, setEmailSending] = useState(false);
-  const [quoteItems, setQuoteItems] = useState([{ description: '', roomType: '', nights: '', rooms: '', ratePerNight: '', hotelId: '' }]);
+  type QuoteItemKind = 'room' | 'meeting';
+  const [quoteItems, setQuoteItems] = useState([{ description: '', roomType: '', nights: '', rooms: '', ratePerNight: '', hotelId: '', kind: 'room' as QuoteItemKind }]);
   type MealKey = 'none' | 'breakfast' | 'lunch' | 'dinner' | 'full_board';
-  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en', meals: ['breakfast'] as MealKey[], paymentTerms: '', arrivalDate: '', multiHotel: false });
+  type QuoteMode = 'rooms' | 'meetings' | 'mixed';
+  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en', meals: ['breakfast'] as MealKey[], paymentTerms: '', arrivalDate: '', multiHotel: false, quoteMode: 'rooms' as QuoteMode });
   const [quoteHotelId, setQuoteHotelId] = useState<number | null>(null);
   const [hotelSearch, setHotelSearch] = useState('');
   const [showHotelDropdown, setShowHotelDropdown] = useState(false);
@@ -1517,54 +1519,126 @@ export default function ClientDetail() {
             </label>
           </div>
 
-          {/* Items */}
+          {/* Quote type selector — controls what kind of items the quote
+              carries. "Mixed" mode lets each item pick room vs meeting on
+              its own; pure modes hide the per-item picker and pin every
+              new row to that kind. Switching to a pure mode also flips any
+              existing items to match, so the user doesn't end up with a
+              "rooms only" mode that still shows a meeting row. */}
+          <div>
+            <label className="label">{isAr ? 'نوع عرض السعر' : 'Quote Type'}</label>
+            <select
+              className="input"
+              value={quoteForm.quoteMode}
+              onChange={e => {
+                const mode = e.target.value as QuoteMode;
+                setQuoteForm(p => ({ ...p, quoteMode: mode }));
+                if (mode !== 'mixed') {
+                  const k: QuoteItemKind = mode === 'meetings' ? 'meeting' : 'room';
+                  setQuoteItems(items => items.map(it => ({ ...it, kind: k })));
+                }
+              }}
+            >
+              <option value="rooms">{isAr ? '🛏️ غرف فندقية فقط' : '🛏️ Hotel Rooms only'}</option>
+              <option value="meetings">{isAr ? '👥 قاعات اجتماعات فقط' : '👥 Meeting Rooms only'}</option>
+              <option value="mixed">{isAr ? '🧩 غرف وقاعات (مختلط)' : '🧩 Rooms & Meeting Rooms (mixed)'}</option>
+            </select>
+          </div>
+
+          {/* Items — input labels swap based on each row's kind:
+                room    → نوع الغرفة / عدد الغرف / عدد الليالي / السعر/ليلة
+                meeting → نوع القاعة / عدد الأشخاص / المدة / السعر/يوم
+              Layout is the same so the form doesn't jump around when the
+              user toggles a row in mixed mode. */}
           <div>
             <div className={`flex items-center justify-between mb-2 ${isAr ? 'flex-row-reverse' : ''}`}>
               <label className="label mb-0">{isAr ? 'البنود' : 'Items'}</label>
               <button type="button" className="text-xs text-brand-600 hover:text-brand-800 font-semibold"
-                onClick={() => setQuoteItems(p => [...p, { description: '', roomType: '', nights: '', rooms: '', ratePerNight: '', hotelId: '' }])}>
+                onClick={() => {
+                  const defaultKind: QuoteItemKind = quoteForm.quoteMode === 'meetings' ? 'meeting' : 'room';
+                  setQuoteItems(p => [...p, { description: '', roomType: '', nights: '', rooms: '', ratePerNight: '', hotelId: '', kind: defaultKind }]);
+                }}>
                 + {isAr ? 'إضافة بند' : 'Add Item'}
               </button>
             </div>
             <div className="space-y-3">
-              {quoteItems.map((item, i) => (
-                <div key={i} className="p-3 rounded-lg bg-brand-50/50 border border-brand-100 space-y-2">
-                  {quoteForm.multiHotel && (
-                    <div>
-                      <select
-                        className="input text-sm"
-                        value={item.hotelId || ''}
-                        onChange={e => { const n = [...quoteItems]; n[i].hotelId = e.target.value; setQuoteItems(n); }}
-                      >
-                        <option value="">{isAr ? 'اختر الفندق لهذا البند' : 'Select hotel for this item'}</option>
-                        {hotels.map(h => (
-                          <option key={h.id} value={h.id}>{h.name}{h.city ? ` — ${h.city}` : ''}</option>
-                        ))}
-                      </select>
+              {quoteItems.map((item, i) => {
+                const isMeeting = item.kind === 'meeting';
+                const labels = isMeeting ? {
+                  type:  isAr ? 'نوع القاعة' : 'Hall Type',
+                  count: isAr ? 'عدد الأشخاص' : 'Persons',
+                  duration: isAr ? 'المدة (أيام)' : 'Duration (days)',
+                  rate:  isAr ? 'السعر/يوم' : 'Rate/Day',
+                } : {
+                  type:  isAr ? 'نوع الغرفة' : 'Room Type',
+                  count: isAr ? 'عدد الغرف' : 'Rooms',
+                  duration: isAr ? 'عدد الليالي' : 'Nights',
+                  rate:  isAr ? 'السعر/ليلة' : 'Rate/Night',
+                };
+                return (
+                  <div key={i} className={`p-3 rounded-lg border space-y-2 ${
+                    isMeeting ? 'bg-violet-50/40 border-violet-100' : 'bg-brand-50/50 border-brand-100'
+                  }`}>
+                    {/* Per-row kind toggle (only in mixed mode) */}
+                    {quoteForm.quoteMode === 'mixed' && (
+                      <div className={`flex items-center gap-1.5 ${isAr ? 'flex-row-reverse' : ''}`}>
+                        <button type="button"
+                          onClick={() => { const n = [...quoteItems]; n[i].kind = 'room'; setQuoteItems(n); }}
+                          className={`text-xs px-3 py-1 rounded-full border ${
+                            item.kind === 'room'
+                              ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
+                              : 'bg-white text-brand-600 border-brand-200 hover:bg-brand-50'
+                          }`}>
+                          🛏️ {isAr ? 'غرف' : 'Rooms'}
+                        </button>
+                        <button type="button"
+                          onClick={() => { const n = [...quoteItems]; n[i].kind = 'meeting'; setQuoteItems(n); }}
+                          className={`text-xs px-3 py-1 rounded-full border ${
+                            item.kind === 'meeting'
+                              ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
+                              : 'bg-white text-violet-600 border-violet-200 hover:bg-violet-50'
+                          }`}>
+                          👥 {isAr ? 'قاعة' : 'Meeting'}
+                        </button>
+                      </div>
+                    )}
+                    {quoteForm.multiHotel && (
+                      <div>
+                        <select
+                          className="input text-sm"
+                          value={item.hotelId || ''}
+                          onChange={e => { const n = [...quoteItems]; n[i].hotelId = e.target.value; setQuoteItems(n); }}
+                        >
+                          <option value="">{isAr ? 'اختر الفندق لهذا البند' : 'Select hotel for this item'}</option>
+                          {hotels.map(h => (
+                            <option key={h.id} value={h.id}>{h.name}{h.city ? ` — ${h.city}` : ''}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                      <input className="input text-sm" placeholder={isAr ? 'الوصف *' : 'Description *'}
+                        value={item.description} onChange={e => { const n = [...quoteItems]; n[i].description = e.target.value; setQuoteItems(n); }} />
+                      <input className="input text-sm" placeholder={labels.type}
+                        value={item.roomType} onChange={e => { const n = [...quoteItems]; n[i].roomType = e.target.value; setQuoteItems(n); }} />
                     </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-2">
-                    <input className="input text-sm" placeholder={isAr ? 'الوصف *' : 'Description *'}
-                      value={item.description} onChange={e => { const n = [...quoteItems]; n[i].description = e.target.value; setQuoteItems(n); }} />
-                    <input className="input text-sm" placeholder={isAr ? 'نوع الغرفة' : 'Room Type'}
-                      value={item.roomType} onChange={e => { const n = [...quoteItems]; n[i].roomType = e.target.value; setQuoteItems(n); }} />
+                    <div className="grid grid-cols-3 gap-2">
+                      <input className="input text-sm" type="number" min="0" placeholder={labels.count}
+                        value={item.rooms} onChange={e => { const n = [...quoteItems]; n[i].rooms = e.target.value; setQuoteItems(n); }} />
+                      <input className="input text-sm" type="number" min="0" placeholder={labels.duration}
+                        value={item.nights} onChange={e => { const n = [...quoteItems]; n[i].nights = e.target.value; setQuoteItems(n); }} />
+                      <input className="input text-sm" type="number" min="0" step="0.01" placeholder={labels.rate}
+                        value={item.ratePerNight} onChange={e => { const n = [...quoteItems]; n[i].ratePerNight = e.target.value; setQuoteItems(n); }} />
+                    </div>
+                    {quoteItems.length > 1 && (
+                      <button type="button" className="text-xs text-red-500 hover:text-red-700"
+                        onClick={() => setQuoteItems(p => p.filter((_, j) => j !== i))}>
+                        {isAr ? 'حذف' : 'Remove'}
+                      </button>
+                    )}
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <input className="input text-sm" type="number" min="0" placeholder={isAr ? 'عدد الغرف' : 'Rooms'}
-                      value={item.rooms} onChange={e => { const n = [...quoteItems]; n[i].rooms = e.target.value; setQuoteItems(n); }} />
-                    <input className="input text-sm" type="number" min="0" placeholder={isAr ? 'عدد الليالي' : 'Nights'}
-                      value={item.nights} onChange={e => { const n = [...quoteItems]; n[i].nights = e.target.value; setQuoteItems(n); }} />
-                    <input className="input text-sm" type="number" min="0" step="0.01" placeholder={isAr ? 'السعر/ليلة' : 'Rate/Night'}
-                      value={item.ratePerNight} onChange={e => { const n = [...quoteItems]; n[i].ratePerNight = e.target.value; setQuoteItems(n); }} />
-                  </div>
-                  {quoteItems.length > 1 && (
-                    <button type="button" className="text-xs text-red-500 hover:text-red-700"
-                      onClick={() => setQuoteItems(p => p.filter((_, j) => j !== i))}>
-                      {isAr ? 'حذف' : 'Remove'}
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
           {/* Language picker — chooses what language the generated PDF is rendered in */}

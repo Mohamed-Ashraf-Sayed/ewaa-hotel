@@ -49,6 +49,8 @@ const T = {
   company: 'الشركة', contact: 'جهة الاتصال', phone: 'الهاتف', email: 'البريد الإلكتروني',
   descRoom: 'الوصف', roomType: 'نوع الغرفة', rooms: 'الغرف', nights: 'الليالي',
   rateNight: 'السعر / ليلة (ر.س)', totalCol: 'الإجمالي (ر.س)',
+  hallType: 'نوع القاعة', persons: 'الأشخاص', duration: 'المدة (يوم)', rateDay: 'السعر / يوم (ر.س)',
+  roomsHeading: 'الغرف الفندقية', meetingsHeading: 'قاعات الاجتماعات',
   hotelCol: 'الفندق',
   clientApproval: 'موافقة العميل',
   subtotal: 'المجموع الفرعي', vat: 'ضريبة القيمة المضافة (15%)', municipalityTax: 'رسوم البلدية', grandTotal: 'الإجمالي النهائي',
@@ -151,7 +153,12 @@ const renderQuoteHtmlAr = ({
 
   const benefit4Text = T.benefit4(meals);
 
-  const itemRows = items.map((it) => `
+  // Split items by kind — same logic as the English renderer. If both kinds
+  // are present we build two table HTML fragments with their own headings;
+  // if only one kind exists we render a single table.
+  const roomItems    = items.filter(it => it.kind !== 'meeting');
+  const meetingItems = items.filter(it => it.kind === 'meeting');
+  const renderRow = (it) => `
       <tr>
         ${isMultiHotel ? `<td>${escapeHtml(it.hotelName || '-')}</td>` : ''}
         <td class="td-desc">${escapeHtml(it.description || '')}</td>
@@ -160,7 +167,9 @@ const renderQuoteHtmlAr = ({
         <td>${it.nights || 0}</td>
         <td>${formatNum(it.rate)}</td>
         <td>${formatNum(it.total)}</td>
-      </tr>`).join('');
+      </tr>`;
+  const roomRows    = roomItems.map(renderRow).join('');
+  const meetingRows = meetingItems.map(renderRow).join('');
 
   // Bank rows — only render rows the hotel actually has data for.
   const bankRows = [
@@ -449,22 +458,29 @@ const renderQuoteHtmlAr = ({
     </div>
   </div>
 
-  <table class="items">
-    <thead>
-      <tr>
-        ${isMultiHotel ? `<th>${T.hotelCol}</th>` : ''}
-        <th>${T.descRoom}</th>
-        <th>${T.roomType}</th>
-        <th>${T.rooms}</th>
-        <th>${T.nights}</th>
-        <th>${T.rateNight}</th>
-        <th>${T.totalCol}</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${itemRows}
-    </tbody>
-  </table>
+  ${(() => {
+    const hasBoth = roomItems.length > 0 && meetingItems.length > 0;
+    const heading = (txt) => hasBoth
+      ? `<h3 style="font-size:13pt;color:#0f172a;margin:8pt 0 4pt 0;font-weight:bold;">${txt}</h3>`
+      : '';
+    const table = (rows, headingTxt, isMeet) => rows ? `
+    ${heading(headingTxt)}
+    <table class="items">
+      <thead>
+        <tr>
+          ${isMultiHotel ? `<th>${T.hotelCol}</th>` : ''}
+          <th>${T.descRoom}</th>
+          <th>${isMeet ? T.hallType : T.roomType}</th>
+          <th>${isMeet ? T.persons  : T.rooms}</th>
+          <th>${isMeet ? T.duration : T.nights}</th>
+          <th>${isMeet ? T.rateDay  : T.rateNight}</th>
+          <th>${T.totalCol}</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>` : '';
+    return table(roomRows, T.roomsHeading, false) + table(meetingRows, T.meetingsHeading, true);
+  })()}
 
   <div class="totals">
     <div class="row"><span class="lbl">${T.subtotal}:</span><span class="val">${formatNum(subtotal)} ${T.sar}</span></div>

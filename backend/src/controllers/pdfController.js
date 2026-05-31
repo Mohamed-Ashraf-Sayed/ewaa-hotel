@@ -194,6 +194,8 @@ const QUOTE_T = {
     company: 'Company', contact: 'Contact', phone: 'Phone', email: 'Email',
     descRoom: 'Description', roomType: 'Room Type', rooms: 'Rooms', nights: 'Nights',
     rateNight: 'Rate/Night (SAR)', totalCol: 'Total (SAR)',
+    hallType: 'Hall Type', persons: 'Persons', duration: 'Duration (days)', rateDay: 'Rate/Day (SAR)',
+    roomsHeading: 'Hotel Rooms', meetingsHeading: 'Meeting Rooms',
     subtotal: 'Subtotal', vat: 'VAT (15%)', municipalityTax: 'Municipality Tax', grandTotal: 'Grand Total',
     sar: 'SAR', notesTerms: 'Notes & Terms',
     benefits: 'Benefits:',
@@ -262,6 +264,8 @@ const QUOTE_T = {
     company: 'الشركة', contact: 'جهة الاتصال', phone: 'الهاتف', email: 'البريد الإلكتروني',
     descRoom: 'الوصف', roomType: 'نوع الغرفة', rooms: 'الغرف', nights: 'الليالي',
     rateNight: 'السعر / ليلة (ر.س)', totalCol: 'الإجمالي (ر.س)',
+    hallType: 'نوع القاعة', persons: 'الأشخاص', duration: 'المدة (يوم)', rateDay: 'السعر / يوم (ر.س)',
+    roomsHeading: 'الغرف الفندقية', meetingsHeading: 'قاعات الاجتماعات',
     subtotal: 'المجموع الفرعي', vat: 'ضريبة القيمة المضافة (15%)', municipalityTax: 'رسوم البلدية', grandTotal: 'الإجمالي النهائي',
     sar: 'ر.س', notesTerms: 'ملاحظات وشروط',
     benefits: 'المزايا:',
@@ -455,17 +459,26 @@ const generateQuote = async (req, res) => {
     const parsedItems = (items || []).map(item => {
       const hid = parseInt(item.hotelId);
       const h = Number.isFinite(hid) ? itemHotelMap.get(hid) : null;
+      const kind = item.kind === 'meeting' ? 'meeting' : 'room';
       return {
         description: item.description || '',
-        roomType: item.roomType || '',
-        nights: parseInt(item.nights) || 0,
-        rooms: parseInt(item.rooms) || 0,
-        rate: parseFloat(item.ratePerNight) || 0,
+        roomType: item.roomType || '',  // also doubles as hall type when kind=meeting
+        nights: parseInt(item.nights) || 0,  // duration in days when kind=meeting
+        rooms: parseInt(item.rooms) || 0,    // persons count when kind=meeting (display only)
+        rate: parseFloat(item.ratePerNight) || 0,  // rate/day when kind=meeting
+        kind,
         hotelId: h ? h.id : null,
         hotelName: h ? (h.name || h.nameEn || '') : '',
       };
     });
-    parsedItems.forEach(i => { i.total = i.nights * i.rooms * i.rate; });
+    // Total formula depends on item kind:
+    //   - room: classic rooms × nights × rate/night
+    //   - meeting: duration × rate/day (persons count is informational, doesn't
+    //     multiply the total — meeting rooms are usually priced per day, not
+    //     per attendee)
+    parsedItems.forEach(i => {
+      i.total = i.kind === 'meeting' ? (i.nights * i.rate) : (i.nights * i.rooms * i.rate);
+    });
     // Multi-hotel mode = at least one item carries its own hotelId. Used by
     // templates to decide whether to render the extra "Hotel" column.
     const isMultiHotel = parsedItems.some(i => i.hotelName);
@@ -739,38 +752,65 @@ const generateQuote = async (req, res) => {
     // shows which property it's quoted under.
     if (parsedItems.length > 0) {
       const hotelLabel = isAr ? 'الفندق' : 'Hotel';
-      const widthsEn  = isMultiHotel
-        ? [70, 120, 70, 45, 45, 65, 100]
-        : [140, 80, 50, 50, 75, 120];
-      const headersEn = isMultiHotel
-        ? [hotelLabel, t.descRoom, t.roomType, t.rooms, t.nights, t.rateNight, t.totalCol]
-        : [t.descRoom, t.roomType, t.rooms, t.nights, t.rateNight, t.totalCol];
-      const alignsEn  = isMultiHotel
-        ? ['left', 'left', 'left', 'center', 'center', 'right', 'right']
-        : ['left', 'left', 'center', 'center', 'right', 'right'];
-      const widths  = isAr ? [...widthsEn].reverse()  : widthsEn;
-      const headers = isAr ? [...headersEn].reverse() : headersEn;
-      const arAligns = isMultiHotel
-        ? ['right', 'right', 'center', 'center', 'center', 'right', 'right']
-        : ['right', 'center', 'center', 'center', 'right', 'right'];
-      const headerAligns = isAr ? arAligns : alignsEn;
-      const bodyAligns   = isAr ? arAligns : alignsEn;
-      y = drawRow(doc, y, headers, widths, {
-        bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24,
-        aligns: headerAligns,
-      });
+      // Split items by kind so we can render one or two tables — meeting
+      // items use different column headers (Hall Type / Persons / Duration /
+      // Rate/Day) than rooms. If both kinds exist we draw two stacked tables
+      // with a section heading on each so the reader knows which is which.
+      const roomItems    = parsedItems.filter(i => i.kind !== 'meeting');
+      const meetingItems = parsedItems.filter(i => i.kind === 'meeting');
+      const hasBoth = roomItems.length > 0 && meetingItems.length > 0;
 
-      parsedItems.forEach((item, i) => {
-        const baseRowEn = [item.description, item.roomType || '-', item.rooms, item.nights, formatNum(item.rate), formatNum(item.total)];
-        const rowEn = isMultiHotel ? [item.hotelName || '-', ...baseRowEn] : baseRowEn;
-        const row = isAr ? [...rowEn].reverse() : rowEn;
-        y = drawRow(doc, y, row, widths, {
-          bg: i % 2 === 0 ? BG : null,
-          aligns: bodyAligns,
+      const drawSection = (sectionItems, sectionKind, heading) => {
+        if (sectionItems.length === 0) return;
+        if (hasBoth && heading) {
+          doc.font(isAr ? CAIRO_BOLD : 'Helvetica-Bold').fontSize(11).fillColor(NAVY);
+          drawText(doc, heading, 30, y, { align: isAr ? 'right' : 'left', width: 555 });
+          y += 16;
+        }
+        const isMeet = sectionKind === 'meeting';
+        const colType  = isMeet ? t.hallType : t.roomType;
+        const colCount = isMeet ? t.persons  : t.rooms;
+        const colDur   = isMeet ? t.duration : t.nights;
+        const colRate  = isMeet ? t.rateDay  : t.rateNight;
+
+        const widthsEn  = isMultiHotel
+          ? [70, 120, 70, 45, 45, 65, 100]
+          : [140, 80, 50, 50, 75, 120];
+        const headersEn = isMultiHotel
+          ? [hotelLabel, t.descRoom, colType, colCount, colDur, colRate, t.totalCol]
+          : [t.descRoom, colType, colCount, colDur, colRate, t.totalCol];
+        const alignsEn  = isMultiHotel
+          ? ['left', 'left', 'left', 'center', 'center', 'right', 'right']
+          : ['left', 'left', 'center', 'center', 'right', 'right'];
+        const widths  = isAr ? [...widthsEn].reverse()  : widthsEn;
+        const headers = isAr ? [...headersEn].reverse() : headersEn;
+        const arAligns = isMultiHotel
+          ? ['right', 'right', 'center', 'center', 'center', 'right', 'right']
+          : ['right', 'center', 'center', 'center', 'right', 'right'];
+        const headerAligns = isAr ? arAligns : alignsEn;
+        const bodyAligns   = isAr ? arAligns : alignsEn;
+
+        y = drawRow(doc, y, headers, widths, {
+          bold: true, bg: NAVY, textColor: WHITE, headerLine: true, height: 24,
+          aligns: headerAligns,
         });
-      });
 
-      y += 10;
+        sectionItems.forEach((item, i) => {
+          const baseRowEn = [item.description, item.roomType || '-', item.rooms, item.nights, formatNum(item.rate), formatNum(item.total)];
+          const rowEn = isMultiHotel ? [item.hotelName || '-', ...baseRowEn] : baseRowEn;
+          const row = isAr ? [...rowEn].reverse() : rowEn;
+          y = drawRow(doc, y, row, widths, {
+            bg: i % 2 === 0 ? BG : null,
+            aligns: bodyAligns,
+          });
+        });
+        y += 6;
+      };
+
+      drawSection(roomItems,    'room',    t.roomsHeading);
+      drawSection(meetingItems, 'meeting', t.meetingsHeading);
+
+      y += 4;
       // Totals block — flipped for Arabic so labels read right-to-left.
       // English: block sits on the right (label left, amount right-aligned).
       // Arabic: block sits on the left, label right-aligned within the
