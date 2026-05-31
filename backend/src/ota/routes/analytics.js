@@ -238,6 +238,16 @@ router.get('/by-hotel-platform-day', async (req, res) => {
         otaShare: inventoryRooms ? +(newCount / inventoryRooms * 100).toFixed(1) : null,
       };
     });
+    // Sort by highest OTA share first so the busiest hotels float to the
+    // top. Rows without inventory match (otaShare = null) sink to the
+    // bottom. Ties broken by raw newCount then most-recent day.
+    result.sort((a, b) => {
+      const av = a.otaShare ?? -1;
+      const bv = b.otaShare ?? -1;
+      if (bv !== av) return bv - av;
+      if (b.newCount !== a.newCount) return b.newCount - a.newCount;
+      return String(b.day).localeCompare(String(a.day));
+    });
     res.json({ range: { from, to }, rows: result });
   } catch (e) {
     res.status(500).json({ error: e.message });
