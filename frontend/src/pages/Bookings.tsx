@@ -42,8 +42,11 @@ export default function Bookings() {
   // Top-level view switcher: corporate (B2B/Opera, default) vs the three
   // OTA-bookings views ported from the standalone ewaa-bookings app —
   // analytics dashboard, reservations list, IMAP settings.
+  // Access limited to the 4 roles the user named explicitly: admin
+  // (مدير النظام), reservations (يوزر الحجوزات), general_manager (المدير العام),
+  // vice_gm (نائب المدير). Systems_info is *not* included by request.
   const [view, setView] = useState<View>('corporate');
-  const canSeeOta = hasRole('admin', 'general_manager', 'systems_info', 'vice_gm', 'reservations');
+  const canSeeOta = hasRole('admin', 'general_manager', 'vice_gm', 'reservations');
 
   const load = async () => {
     setLoading(true);
@@ -144,7 +147,7 @@ export default function Bookings() {
         { id: 'corporate'        as View, ar: 'حجوزات اوبرا',  en: 'Corporate (Opera)', Icon: Building2, show: true },
         { id: 'ota_analytics'    as View, ar: 'تحليلات OTA',    en: 'OTA Analytics',     Icon: BarChart3, show: canSeeOta },
         { id: 'ota_reservations' as View, ar: 'حجوزات OTA',     en: 'OTA Reservations',  Icon: Mail,      show: canSeeOta },
-        { id: 'ota_settings'     as View, ar: 'إعدادات OTA',    en: 'OTA Settings',      Icon: SettingsIcon, show: canSeeOta && hasRole('admin', 'general_manager', 'systems_info', 'vice_gm') },
+        { id: 'ota_settings'     as View, ar: 'إعدادات OTA',    en: 'OTA Settings',      Icon: SettingsIcon, show: canSeeOta },
       ].filter(v => v.show).map(v => {
         const active = view === v.id;
         return (

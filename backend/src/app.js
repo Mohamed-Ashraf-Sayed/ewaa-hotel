@@ -68,13 +68,16 @@ app.use('/api/promotions', require('./routes/promotions'));
 
 // === OTA Bookings (ported from ewaa-bookings) — analytics + email ingest ===
 // Mounted under /api/ota so the existing /api/hotels and /api/bookings routes
-// (corporate / Opera flow) stay untouched. All endpoints sit behind the same
-// JWT auth as the rest of the CRM.
-const { authenticate } = require('./middleware/auth');
-app.use('/api/ota/analytics',    authenticate, require('./ota/routes/analytics'));
-app.use('/api/ota/hotels',       authenticate, require('./ota/routes/hotels'));
-app.use('/api/ota/reservations', authenticate, require('./ota/routes/reservations'));
-app.use('/api/ota/settings',     authenticate, require('./ota/routes/settings'));
+// (corporate / Opera flow) stay untouched. Role-gated to the 4 roles that
+// own the OTA workflow: admin (مدير النظام), reservations (يوزر الحجوزات),
+// general_manager (المدير العام), vice_gm (نائب المدير). Same list is used
+// by the UI tabs in Bookings.tsx so the API matches the visible affordance.
+const { authenticate, authorize } = require('./middleware/auth');
+const otaRoles = ['admin', 'general_manager', 'vice_gm', 'reservations'];
+app.use('/api/ota/analytics',    authenticate, authorize(...otaRoles), require('./ota/routes/analytics'));
+app.use('/api/ota/hotels',       authenticate, authorize(...otaRoles), require('./ota/routes/hotels'));
+app.use('/api/ota/reservations', authenticate, authorize(...otaRoles), require('./ota/routes/reservations'));
+app.use('/api/ota/settings',     authenticate, authorize(...otaRoles), require('./ota/routes/settings'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
 
