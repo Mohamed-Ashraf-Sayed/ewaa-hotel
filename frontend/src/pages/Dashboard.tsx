@@ -463,7 +463,12 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-50">
-                {data.teamPerformance.map(member => {
+                {[...data.teamPerformance]
+                  .sort((a, b) =>
+                    (b._count.assignedClients + b._count.contracts + b._count.visits) -
+                    (a._count.assignedClients + a._count.contracts + a._count.visits)
+                  )
+                  .map(member => {
                   const total = member._count.assignedClients + member._count.contracts + member._count.visits;
                   const maxTotal = Math.max(...data.teamPerformance.map(m => m._count.assignedClients + m._count.contracts + m._count.visits), 1);
                   const pct = Math.round((total / maxTotal) * 100);
