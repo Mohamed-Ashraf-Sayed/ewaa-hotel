@@ -1,0 +1,207 @@
+const express = require('express');
+const { prisma } = require('../lib/db');
+
+const router = express.Router();
+
+function parseRange(req) {
+  const now = new Date();
+  const defaultFrom = new Date(now);
+  defaultFrom.setUTCDate(defaultFrom.getUTCDate() - 30);
+  const from = req.query.from ? new Date(req.query.from) : defaultFrom;
+  const to = req.query.to ? new Date(req.query.to) : now;
+  return { from, to };
+}
+
+router.get('/summary', async (req, res) => {
+  try {
+    const { from, to } = parseRange(req);
+    const where = { occurredAt: { gte: from, lte: to } };
+
+    const grouped = await prisma.bookingEvent.groupBy({
+      by: ['eventType'],
+      where,
+      _count: { _all: true },
+    });
+    const counts = { new: 0, cancellation: 0, modification: 0 };
+    for (const g of grouped) counts[g.eventType] = g._count._all;
+
+    const bySource = await prisma.$queryRaw`
+      SELECT r.source AS source, be.eventType AS eventType, COUNT(*) AS c
+      FROM BookingEvent be
+      JOIN Reservation r ON r.id = be.reservationId
+      WHERE be.occurredAt >= ${from} AND be.occurredAt <= ${to}
+      GROUP BY r.source, be.eventType
+    `;
+    const sourceTotals = {};
+    for (const row of bySource) {
+      const src = row.source;
+      if (!sourceTotals[src]) sourceTotals[src] = { new: 0, cancellation: 0, modification: 0 };
+      sourceTotals[src][row.eventType] = Number(row.c);
+    }
+
+    res.json({
+      range: { from, to },
+      totals: {
+        ...counts,
+        net: counts.new - counts.cancellation,
+        cancellationRate: counts.new ? +(counts.cancellation / counts.new * 100).toFixed(1) : 0,
+      },
+      bySource: sourceTotals,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/by-hotel', async (req, res) => {
+  try {
+    const { from, to } = parseRange(req);
+    const rows = await prisma.$queryRaw`
+      SELECT h.id AS hotelId, h.name AS hotelName, h.nameEn AS hotelNameEn, h.city AS city,
+             be.eventType AS eventType, COUNT(*) AS c
+      FROM BookingEvent be
+      JOIN Hotel h ON h.id = be.hotelId
+      WHERE be.occurredAt >= ${from} AND be.occurredAt <= ${to}
+      GROUP BY h.id, be.eventType
+      ORDER BY h.name
+    `;
+    const byHotel = {};
+    for (const row of rows) {
+      if (!byHotel[row.hotelId]) {
+        byHotel[row.hotelId] = {
+          hotelId: row.hotelId,
+          hotelName: row.hotelName,
+          hotelNameEn: row.hotelNameEn,
+          city: row.city,
+          new: 0, cancellation: 0, modification: 0,
+        };
+      }
+      byHotel[row.hotelId][row.eventType] = Number(row.c);
+    }
+    const result = Object.values(byHotel).map((h) => ({
+      ...h,
+      net: h.new - h.cancellation,
+      cancellationRate: h.new ? +(h.cancellation / h.new * 100).toFixed(1) : 0,
+    }));
+    result.sort((a, b) => b.new - a.new);
+    res.json({ range: { from, to }, hotels: result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/timeline', async (req, res) => {
+  try {
+    const { from, to } = parseRange(req);
+    const granularity = req.query.granularity === 'month' ? 'month' :
+                        req.query.granularity === 'week' ? 'week' : 'day';
+    const hotelId = req.query.hotelId ? parseInt(req.query.hotelId, 10) : null;
+
+    const fmt = granularity === 'month' ? '%Y-%m'
+              : granularity === 'week'  ? '%Y-%W'
+              :                            '%Y-%m-%d';
+
+    let rows;
+    if (hotelId) {
+      rows = await prisma.$queryRawUnsafe(
+        `SELECT strftime('${fmt}', be.occurredAt / 1000, 'unixepoch') AS bucket,
+                be.eventType AS eventType, COUNT(*) AS c
+         FROM BookingEvent be
+         WHERE be.occurredAt >= ? AND be.occurredAt <= ? AND be.hotelId = ?
+         GROUP BY bucket, be.eventType
+         ORDER BY bucket`,
+        from, to, hotelId
+      );
+    } else {
+      rows = await prisma.$queryRawUnsafe(
+        `SELECT strftime('${fmt}', be.occurredAt / 1000, 'unixepoch') AS bucket,
+                be.eventType AS eventType, COUNT(*) AS c
+         FROM BookingEvent be
+         WHERE be.occurredAt >= ? AND be.occurredAt <= ?
+         GROUP BY bucket, be.eventType
+         ORDER BY bucket`,
+        from, to
+      );
+    }
+
+    const buckets = {};
+    for (const row of rows) {
+      if (!buckets[row.bucket]) buckets[row.bucket] = { bucket: row.bucket, new: 0, cancellation: 0, modification: 0 };
+      buckets[row.bucket][row.eventType] = Number(row.c);
+    }
+    res.json({
+      range: { from, to },
+      granularity,
+      hotelId,
+      series: Object.values(buckets),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/by-source', async (req, res) => {
+  try {
+    const { from, to } = parseRange(req);
+    const rows = await prisma.$queryRaw`
+      SELECT r.source AS source, be.eventType AS eventType, COUNT(*) AS c
+      FROM BookingEvent be
+      JOIN Reservation r ON r.id = be.reservationId
+      WHERE be.occurredAt >= ${from} AND be.occurredAt <= ${to}
+      GROUP BY r.source, be.eventType
+    `;
+    const bySource = {};
+    for (const row of rows) {
+      if (!bySource[row.source]) bySource[row.source] = { source: row.source, new: 0, cancellation: 0, modification: 0 };
+      bySource[row.source][row.eventType] = Number(row.c);
+    }
+    const result = Object.values(bySource).map((s) => ({
+      ...s,
+      net: s.new - s.cancellation,
+      cancellationRate: s.new ? +(s.cancellation / s.new * 100).toFixed(1) : 0,
+    }));
+    result.sort((a, b) => b.new - a.new);
+    res.json({ range: { from, to }, sources: result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/by-hotel-platform-day', async (req, res) => {
+  try {
+    const { from, to } = parseRange(req);
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT
+         h.id AS hotelId,
+         h.name AS hotelName,
+         h.nameEn AS hotelNameEn,
+         h.city AS city,
+         h.bookingComId AS bookingComId,
+         h.agodaId AS agodaId,
+         r.source AS source,
+         strftime('%Y-%m-%d', be.occurredAt / 1000, 'unixepoch') AS day,
+         SUM(CASE WHEN be.eventType = 'new' THEN 1 ELSE 0 END) AS newCount,
+         SUM(CASE WHEN be.eventType = 'cancellation' THEN 1 ELSE 0 END) AS cancelCount,
+         SUM(CASE WHEN be.eventType = 'modification' THEN 1 ELSE 0 END) AS modCount
+       FROM BookingEvent be
+       JOIN Reservation r ON r.id = be.reservationId
+       LEFT JOIN Hotel h ON h.id = be.hotelId
+       WHERE be.occurredAt >= ? AND be.occurredAt <= ?
+       GROUP BY h.id, r.source, day
+       ORDER BY day DESC, h.name ASC, r.source ASC`,
+      from, to
+    );
+    const result = rows.map((r) => ({
+      ...r,
+      newCount: Number(r.newCount),
+      cancelCount: Number(r.cancelCount),
+      modCount: Number(r.modCount),
+      net: Number(r.newCount) - Number(r.cancelCount),
+    }));
+    res.json({ range: { from, to }, rows: result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+module.exports = router;

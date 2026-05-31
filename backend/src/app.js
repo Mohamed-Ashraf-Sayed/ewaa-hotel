@@ -66,6 +66,16 @@ app.use('/api/bookings', require('./routes/bookings'));
 app.use('/api/portal', require('./routes/portal'));
 app.use('/api/promotions', require('./routes/promotions'));
 
+// === OTA Bookings (ported from ewaa-bookings) — analytics + email ingest ===
+// Mounted under /api/ota so the existing /api/hotels and /api/bookings routes
+// (corporate / Opera flow) stay untouched. All endpoints sit behind the same
+// JWT auth as the rest of the CRM.
+const { authenticate } = require('./middleware/auth');
+app.use('/api/ota/analytics',    authenticate, require('./ota/routes/analytics'));
+app.use('/api/ota/hotels',       authenticate, require('./ota/routes/hotels'));
+app.use('/api/ota/reservations', authenticate, require('./ota/routes/reservations'));
+app.use('/api/ota/settings',     authenticate, require('./ota/routes/settings'));
+
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
 
 // Serve frontend in production
@@ -91,6 +101,13 @@ const startJobs = () => {
   require('./jobs/taskOverdueChecker').startTaskOverdueChecker();
   require('./jobs/holidaySync').startHolidaySync();
   require('./jobs/inboxPoll').startInboxPoll();
+  // OTA inbox poller — pulls Booking.com / Expedia / Agoda / Almosafer
+  // reservation emails on a configurable interval (default 120s). Reads
+  // the active OtaImapAccount from the DB; if none is configured the
+  // scheduler just no-ops on each tick.
+  require('./ota/worker/scheduler').start().catch((e) => {
+    console.error('[ota-scheduler] failed to start:', e.message);
+  });
 };
 
 if (hasCerts) {

@@ -21,6 +21,15 @@ model Hotel {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
+  // OTA matching keys — used by the OTA inbox poller to attach a parsed
+  // reservation email to the right hotel record. Populated lazily on first
+  // sighting of a hotel id from each platform.
+  bookingComId String? @unique
+  agodaId      String? @unique
+  expediaId    String? @unique
+  almosaferId  String? @unique
+  aliases      String? // JSON array of alternate names seen in OTA emails
+
   // Bank account details — used in quote/offer "بيانات الدفع" section
   bankName        String?
   beneficiaryName String?
@@ -33,6 +42,8 @@ model Hotel {
   bookings   Booking[]
   userHotels UserHotel[]
   quotes     Quote[]
+  reservations    Reservation[]
+  events          BookingEvent[]
 }
 
 model User {
@@ -682,4 +693,103 @@ model PerformanceScore {
   ratedBy User @relation("PerfRatedBy", fields: [ratedById], references: [id])
 
   @@unique([userId, month, year])
+}
+
+// === OTA BOOKINGS (ported from ewaa-bookings) ===
+// Reservations + events parsed from OTA emails (Booking.com / Expedia /
+// Agoda / Almosafer / channel managers). Separate from the existing
+// `Booking` model which represents B2B corporate stays managed via Opera.
+// Source-of-truth is the email — every event is keyed back to the
+// BookingEmail row that produced it for audit.
+model Reservation {
+  id              Int       @id @default(autoincrement())
+  externalId      String
+  source          String    // Booking.com | Expedia | Agoda | Almosafer | Trip.com | channel_manager | Other
+  hotelId         Int?
+  guestName       String?
+  checkIn         DateTime?
+  checkOut        DateTime?
+  nights          Int?
+  rooms           Int?
+  roomType        String?
+  totalPrice      Float?
+  currency        String?
+  currentStatus   String    @default("confirmed") // confirmed | cancelled | modified
+  firstSeenAt     DateTime  @default(now())
+  lastUpdatedAt   DateTime  @updatedAt
+
+  hotel           Hotel?    @relation(fields: [hotelId], references: [id])
+  events          BookingEvent[]
+
+  @@unique([source, externalId])
+  @@index([hotelId])
+  @@index([currentStatus])
+}
+
+model BookingEmail {
+  id            Int       @id @default(autoincrement())
+  messageId     String    @unique
+  uid           Int?
+  mailbox       String?
+  fromAddr      String
+  toAddr        String?
+  subject       String
+  receivedAt    DateTime
+  rawText       String
+  rawHtml       String?
+  parseStatus   String    @default("pending") // pending | parsed | manual_review | skipped | failed
+  parseError    String?
+  parseMethod   String?   // regex:booking.com | ai:expedia | etc.
+  parsedAt      DateTime?
+  createdAt     DateTime  @default(now())
+
+  events        BookingEvent[]
+
+  @@index([receivedAt])
+  @@index([parseStatus])
+}
+
+model BookingEvent {
+  id              Int       @id @default(autoincrement())
+  reservationId   Int
+  emailId         Int
+  hotelId         Int?
+  eventType       String    // new | cancellation | modification
+  snapshot        String    // JSON snapshot of the parsed payload at this event
+  occurredAt      DateTime
+  createdAt       DateTime  @default(now())
+
+  reservation     Reservation  @relation(fields: [reservationId], references: [id])
+  email           BookingEmail @relation(fields: [emailId], references: [id])
+  hotel           Hotel?       @relation(fields: [hotelId], references: [id])
+
+  @@index([hotelId, occurredAt])
+  @@index([eventType, occurredAt])
+  @@index([occurredAt])
+}
+
+// OTA inbox config — separate from the existing ImapAccount which is used
+// to poll incoming client emails. Multiple accounts not needed yet but
+// the schema mirrors the source app's so we can sync any updates back.
+model OtaImapAccount {
+  id              Int       @id @default(autoincrement())
+  name            String    @default("Default")
+  host            String
+  port            Int       @default(993)
+  secure          Boolean   @default(true)
+  user            String
+  password        String
+  mailbox         String    @default("INBOX")
+  pollIntervalSec Int       @default(120)
+  enabled         Boolean   @default(true)
+  lastPollAt      DateTime?
+  lastError       String?
+  lastTestedAt    DateTime?
+  lastTestOk      Boolean?
+  lastSeenUid     Int?
+  oldestSeenUid   Int?
+  serverMessageCount Int?
+  totalFetched    Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }

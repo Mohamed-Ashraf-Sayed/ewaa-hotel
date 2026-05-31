@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, FileText, Pencil, XCircle, LogIn, LogOut, Calendar, Building2, BedDouble, History, CheckCircle, Hourglass } from 'lucide-react';
+import { Plus, Search, FileText, Pencil, XCircle, LogIn, LogOut, Calendar, Building2, BedDouble, History, CheckCircle, Hourglass, BarChart3, Mail, Settings as SettingsIcon } from 'lucide-react';
 import { bookingsApi, hotelsApi } from '../services/api';
 import { Booking, Hotel, BookingStatus } from '../types';
 import BookingFormModal from '../components/BookingFormModal';
@@ -11,6 +11,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { format, parseISO } from 'date-fns';
 import { arSA, enUS } from 'date-fns/locale';
+import OtaDashboard from '../ota/pages/Dashboard';
+import OtaReservations from '../ota/pages/Reservations';
+import OtaSettings from '../ota/pages/Settings';
+
+type View = 'corporate' | 'ota_analytics' | 'ota_reservations' | 'ota_settings';
 
 type Tab = 'pending' | 'all' | 'upcoming' | 'today' | 'in_house' | 'cancelled';
 
@@ -34,6 +39,11 @@ export default function Bookings() {
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
   const [historyTarget, setHistoryTarget] = useState<Booking | null>(null);
   const [confirmRequestTarget, setConfirmRequestTarget] = useState<Booking | null>(null);
+  // Top-level view switcher: corporate (B2B/Opera, default) vs the three
+  // OTA-bookings views ported from the standalone ewaa-bookings app —
+  // analytics dashboard, reservations list, IMAP settings.
+  const [view, setView] = useState<View>('corporate');
+  const canSeeOta = hasRole('admin', 'general_manager', 'systems_info', 'vice_gm', 'reservations');
 
   const load = async () => {
     setLoading(true);
@@ -125,8 +135,40 @@ export default function Bookings() {
     </div>
   );
 
+  // Top-level switcher rendered above all views — keeps the URL unchanged
+  // and just swaps the page body. The "Corporate" branch is the original
+  // Opera/B2B booking list; the OTA branches embed the ported pages.
+  const ViewSwitcher = () => (
+    <div className={`flex flex-wrap gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+      {[
+        { id: 'corporate'        as View, ar: 'حجوزات اوبرا',  en: 'Corporate (Opera)', Icon: Building2, show: true },
+        { id: 'ota_analytics'    as View, ar: 'تحليلات OTA',    en: 'OTA Analytics',     Icon: BarChart3, show: canSeeOta },
+        { id: 'ota_reservations' as View, ar: 'حجوزات OTA',     en: 'OTA Reservations',  Icon: Mail,      show: canSeeOta },
+        { id: 'ota_settings'     as View, ar: 'إعدادات OTA',    en: 'OTA Settings',      Icon: SettingsIcon, show: canSeeOta && hasRole('admin', 'general_manager', 'systems_info', 'vice_gm') },
+      ].filter(v => v.show).map(v => {
+        const active = view === v.id;
+        return (
+          <button key={v.id} type="button"
+            onClick={() => setView(v.id)}
+            className={`text-xs px-3 py-1.5 rounded-full border transition inline-flex items-center gap-1.5 ${
+              active ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
+                     : 'bg-white text-brand-600 border-brand-200 hover:bg-brand-50'
+            }`}>
+            <v.Icon className="w-3.5 h-3.5" />
+            {isAr ? v.ar : v.en}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  if (view === 'ota_analytics')    return <div className="space-y-4"><ViewSwitcher /><OtaDashboard /></div>;
+  if (view === 'ota_reservations') return <div className="space-y-4"><ViewSwitcher /><OtaReservations /></div>;
+  if (view === 'ota_settings')     return <div className="space-y-4"><ViewSwitcher /><OtaSettings /></div>;
+
   return (
     <div className="space-y-6">
+      <ViewSwitcher />
       {/* Header */}
       <div className={`flex items-center justify-between gap-3 ${isAr ? 'flex-row-reverse' : ''}`}>
         <div className={isAr ? 'text-right' : ''}>
