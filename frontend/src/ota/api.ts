@@ -188,3 +188,29 @@ export interface PollProgress {
 
 export const fetchProgress = () =>
   api.get<PollProgress>('/settings/imap/progress').then((r) => r.data);
+
+// === Branch inventory (rooms per branch, used to size OTA bookings) ===
+export interface InventoryItem {
+  id: number;
+  brand: string; // muhaidib_serviced | awa_hotels | grand_plaza
+  name: string;
+  rooms: number;
+  isActive: boolean;
+}
+export interface InventoryByBrand { brand: string; branches: number; rooms: number; }
+export interface InventoryResponse {
+  items: InventoryItem[];
+  byBrand: InventoryByBrand[];
+  totalBranches: number;
+  totalRooms: number;
+}
+
+export const fetchInventory = () => api.get<InventoryResponse>('/inventory').then(r => r.data);
+export const updateInventory = (id: number, data: Partial<InventoryItem>) =>
+  api.put<InventoryItem>(`/inventory/${id}`, data).then(r => r.data);
+
+export const BRAND_AR: Record<string, string> = {
+  muhaidib_serviced: 'شقق المهيدب المخدومة',
+  awa_hotels:        'فنادق إيواء',
+  grand_plaza:       'جراند بلازا',
+};

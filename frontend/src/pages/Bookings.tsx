@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, FileText, Pencil, XCircle, LogIn, LogOut, Calendar, Building2, BedDouble, History, CheckCircle, Hourglass, BarChart3, Mail, Settings as SettingsIcon } from 'lucide-react';
+import { Plus, Search, FileText, Pencil, XCircle, LogIn, LogOut, Calendar, Building2, BedDouble, History, CheckCircle, Hourglass, BarChart3, Mail, Settings as SettingsIcon, Hotel as HotelIcon } from 'lucide-react';
 import { bookingsApi, hotelsApi } from '../services/api';
 import { Booking, Hotel, BookingStatus } from '../types';
 import BookingFormModal from '../components/BookingFormModal';
@@ -14,8 +14,9 @@ import { arSA, enUS } from 'date-fns/locale';
 import OtaDashboard from '../ota/pages/Dashboard';
 import OtaReservations from '../ota/pages/Reservations';
 import OtaSettings from '../ota/pages/Settings';
+import OtaInventory from '../ota/pages/Inventory';
 
-type View = 'corporate' | 'ota_analytics' | 'ota_reservations' | 'ota_settings';
+type View = 'corporate' | 'ota_analytics' | 'ota_reservations' | 'ota_inventory' | 'ota_settings';
 
 type Tab = 'pending' | 'all' | 'upcoming' | 'today' | 'in_house' | 'cancelled';
 
@@ -147,6 +148,7 @@ export default function Bookings() {
         { id: 'corporate'        as View, ar: 'حجوزات اوبرا',  en: 'Corporate (Opera)', Icon: Building2, show: true },
         { id: 'ota_analytics'    as View, ar: 'تحليلات OTA',    en: 'OTA Analytics',     Icon: BarChart3, show: canSeeOta },
         { id: 'ota_reservations' as View, ar: 'حجوزات OTA',     en: 'OTA Reservations',  Icon: Mail,      show: canSeeOta },
+        { id: 'ota_inventory'    as View, ar: 'مخزون الغرف',    en: 'Inventory',         Icon: HotelIcon, show: canSeeOta },
         { id: 'ota_settings'     as View, ar: 'إعدادات OTA',    en: 'OTA Settings',      Icon: SettingsIcon, show: canSeeOta },
       ].filter(v => v.show).map(v => {
         const active = view === v.id;
@@ -167,6 +169,7 @@ export default function Bookings() {
 
   if (view === 'ota_analytics')    return <div className="space-y-4"><ViewSwitcher /><OtaDashboard /></div>;
   if (view === 'ota_reservations') return <div className="space-y-4"><ViewSwitcher /><OtaReservations /></div>;
+  if (view === 'ota_inventory')    return <div className="space-y-4"><ViewSwitcher /><OtaInventory /></div>;
   if (view === 'ota_settings')     return <div className="space-y-4"><ViewSwitcher /><OtaSettings /></div>;
 
   return (

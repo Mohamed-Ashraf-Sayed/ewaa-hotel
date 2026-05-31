@@ -78,6 +78,7 @@ app.use('/api/ota/analytics',    authenticate, authorize(...otaRoles), require('
 app.use('/api/ota/hotels',       authenticate, authorize(...otaRoles), require('./ota/routes/hotels'));
 app.use('/api/ota/reservations', authenticate, authorize(...otaRoles), require('./ota/routes/reservations'));
 app.use('/api/ota/settings',     authenticate, authorize(...otaRoles), require('./ota/routes/settings'));
+app.use('/api/ota/inventory',    authenticate, authorize(...otaRoles), require('./ota/routes/inventory'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
 

@@ -793,3 +793,22 @@ model OtaImapAccount {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }
+
+// === OTA branch inventory ===
+// Independent table for the bookings analytics — lists every Ewaa/Muhaidib/
+// Grand Plaza branch and how many rooms it has. Stored separately from the
+// main Hotel model so the legacy CRM Hotel rows (used by Bookings, Contracts,
+// Quotes, etc.) stay untouched. Used to compute "OTA bookings share of
+// capacity" per branch.
+model OtaBranchInventory {
+  id        Int      @id @default(autoincrement())
+  brand     String   // muhaidib_serviced | awa_hotels | grand_plaza
+  name      String
+  nameAlt   String?  // alternate name if email/UI uses a different spelling
+  rooms     Int
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([brand])
+}
