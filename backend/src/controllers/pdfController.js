@@ -471,14 +471,12 @@ const generateQuote = async (req, res) => {
         hotelName: h ? (h.name || h.nameEn || '') : '',
       };
     });
-    // Total formula depends on item kind:
-    //   - room: classic rooms × nights × rate/night
-    //   - meeting: duration × rate/day (persons count is informational, doesn't
-    //     multiply the total — meeting rooms are usually priced per day, not
-    //     per attendee)
-    parsedItems.forEach(i => {
-      i.total = i.kind === 'meeting' ? (i.nights * i.rate) : (i.nights * i.rooms * i.rate);
-    });
+    // Both kinds use the same A × B × C shape — just the variable names
+    // differ in the UI labels (room: rooms × nights × rate/night,
+    // meeting: persons × duration × rate/day). User specifically asked
+    // the meeting total to factor in persons so a quote for 50 attendees
+    // × 3 days × 200 SAR/day = 30,000 SAR.
+    parsedItems.forEach(i => { i.total = i.nights * i.rooms * i.rate; });
     // Multi-hotel mode = at least one item carries its own hotelId. Used by
     // templates to decide whether to render the extra "Hotel" column.
     const isMultiHotel = parsedItems.some(i => i.hotelName);
