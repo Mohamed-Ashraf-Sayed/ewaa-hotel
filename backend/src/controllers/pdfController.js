@@ -2,7 +2,7 @@ const { PrismaClient } = require('@prisma/client');
 const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs');
-const { shapeArabic, shapeForVisual, isArabic, isPureArabic, ARABIC_FEATURES, arabicTextOpts } = require('../utils/arabicPdf');
+const { shapeArabic, shapeForVisual, reverseArabicForLTR, isArabic, isPureArabic, ARABIC_FEATURES, arabicTextOpts } = require('../utils/arabicPdf');
 const prisma = new PrismaClient();
 
 const logoPath = path.join(__dirname, '../../../frontend/public/logo.png');
@@ -696,7 +696,14 @@ const generateQuote = async (req, res) => {
       const valueW = COL_W - labelW - 5;
       setFont(doc, true, valueStr);
       doc.fontSize(8);
-      const valShaped = shapeForVisual(valueStr);
+      // When an Arabic value lands inside an English PDF, PDFKit places
+      // its words in logical (LTR) order, so a right-to-left reader sees
+      // them backwards (the company name comes out word-reversed). Flip
+      // the word order ourselves before drawing — fontkit still shapes
+      // each individual word correctly because letter-by-letter glyph
+      // selection is independent of word order.
+      const ltrShaped = (!isAr && valIsArabic) ? reverseArabicForLTR(valueStr) : valueStr;
+      const valShaped = shapeForVisual(ltrShaped);
       const valH = doc.heightOfString(valShaped, { width: valueW });
       setFont(doc, false, labelStr);
       doc.fontSize(8).fillColor(MID);
