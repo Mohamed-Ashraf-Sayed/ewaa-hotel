@@ -12,7 +12,7 @@ model Hotel {
   id        Int      @id @default(autoincrement())
   name      String
   nameEn    String?
-  location  String
+  location  String?  // optional — OTA ingest creates hotels with just name + IDs, location backfilled later
   city      String?
   country   String   @default("Saudi Arabia")
   stars     Int?
