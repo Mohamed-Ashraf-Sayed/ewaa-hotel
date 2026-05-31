@@ -121,7 +121,9 @@ export default function HotelPlatformDayTable({ from, to }: Props) {
               <th className="text-right p-3 font-semibold">التاريخ</th>
               <th className="text-right p-3 font-semibold">الفندق</th>
               <th className="text-right p-3 font-semibold">المنصة</th>
+              <th className="text-right p-3 font-semibold">إجمالي الغرف</th>
               <th className="text-right p-3 font-semibold">جديدة</th>
+              <th className="text-right p-3 font-semibold">نسبة الإشغال</th>
               <th className="text-right p-3 font-semibold">إلغاءات</th>
               <th className="text-right p-3 font-semibold">تعديلات</th>
               <th className="text-right p-3 font-semibold">الصافي</th>
@@ -130,15 +132,22 @@ export default function HotelPlatformDayTable({ from, to }: Props) {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={8} className="p-6 text-center text-slate-500">جاري التحميل...</td></tr>
+              <tr><td colSpan={10} className="p-6 text-center text-slate-500">جاري التحميل...</td></tr>
             )}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={8} className="p-6 text-center text-slate-500">
+              <tr><td colSpan={10} className="p-6 text-center text-slate-500">
                 لا توجد بيانات في الفترة المحددة. اضغط "اجلب الإيميلات الآن" في الإعدادات لتحميل الحجوزات.
               </td></tr>
             )}
             {!loading && filtered.map((r, i) => {
               const overThreshold = r.newCount >= threshold;
+              // Color-code occupancy: <30% green (under-utilised), 30-60% amber,
+              // >60% rose (high OTA share — risk of overbooking or thin margin).
+              const shareColor =
+                r.otaShare == null ? 'text-slate-400' :
+                r.otaShare >= 60 ? 'text-rose-700 bg-rose-50' :
+                r.otaShare >= 30 ? 'text-amber-700 bg-amber-50' :
+                'text-emerald-700 bg-emerald-50';
               return (
                 <tr key={i} className={`border-t border-slate-100 ${overThreshold ? 'bg-rose-50 hover:bg-rose-100' : 'hover:bg-slate-50'}`}>
                   <td className="p-3 font-mono text-xs whitespace-nowrap" dir="ltr">{r.day}</td>
@@ -147,9 +156,17 @@ export default function HotelPlatformDayTable({ from, to }: Props) {
                     {r.city && <div className="text-xs text-slate-500">{r.city}</div>}
                   </td>
                   <td className="p-3"><PlatformBadge source={r.source} /></td>
+                  <td className="p-3 font-bold text-slate-700 tabular-nums">
+                    {r.inventoryRooms != null ? r.inventoryRooms : <span className="text-slate-300">—</span>}
+                  </td>
                   <td className={`p-3 font-bold tabular-nums ${overThreshold ? 'text-rose-700' : 'text-emerald-600'}`}>
                     {r.newCount}
                     {overThreshold && <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />}
+                  </td>
+                  <td className="p-3">
+                    {r.otaShare != null
+                      ? <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold tabular-nums ${shareColor}`}>{r.otaShare}%</span>
+                      : <span className="text-slate-300 text-xs">—</span>}
                   </td>
                   <td className="p-3 font-bold text-rose-600 tabular-nums">{r.cancelCount}</td>
                   <td className="p-3 font-bold text-amber-600 tabular-nums">{r.modCount}</td>

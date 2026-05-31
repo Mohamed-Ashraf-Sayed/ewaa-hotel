@@ -26,6 +26,8 @@ export interface HotelRow {
   modification: number;
   net: number;
   cancellationRate: number;
+  inventoryRooms: number | null;
+  bookingsPerRoom: number | null;
 }
 
 export interface TimelinePoint {
@@ -111,6 +113,8 @@ export interface HotelPlatformDayRow {
   cancelCount: number;
   modCount: number;
   net: number;
+  inventoryRooms: number | null;
+  otaShare: number | null;
 }
 
 export const fetchHotelPlatformDay = (from: Date, to: Date) =>

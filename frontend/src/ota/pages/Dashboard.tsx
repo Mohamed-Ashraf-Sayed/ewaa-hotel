@@ -113,14 +113,16 @@ export default function Dashboard() {
         </ResponsiveContainer>
       </Card>
 
-      <Card title="جدول الفنادق" subtitle="ترتيب حسب عدد الحجوزات الجديدة">
+      <Card title="جدول الفنادق" subtitle="ترتيب حسب عدد الحجوزات الجديدة · نسبة OTA من السعة">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-700">
               <tr>
                 <th className="text-right p-3 font-semibold">الفندق</th>
                 <th className="text-right p-3 font-semibold">المدينة</th>
-                <th className="text-right p-3 font-semibold">جديدة</th>
+                <th className="text-right p-3 font-semibold">إجمالي الغرف</th>
+                <th className="text-right p-3 font-semibold">جديدة (OTA)</th>
+                <th className="text-right p-3 font-semibold">نسبة OTA من السعة</th>
                 <th className="text-right p-3 font-semibold">إلغاءات</th>
                 <th className="text-right p-3 font-semibold">تعديلات</th>
                 <th className="text-right p-3 font-semibold">الصافي</th>
@@ -128,17 +130,32 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {hotels.map((h) => (
-                <tr key={h.hotelId} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="p-3 font-medium">{h.hotelNameEn || h.hotelName}</td>
-                  <td className="p-3 text-slate-500">{h.city || '—'}</td>
-                  <td className="p-3 font-bold text-emerald-600 tabular-nums">{h.new}</td>
-                  <td className="p-3 font-bold text-rose-600 tabular-nums">{h.cancellation}</td>
-                  <td className="p-3 font-bold text-amber-600 tabular-nums">{h.modification}</td>
-                  <td className="p-3 font-bold text-slate-700 tabular-nums">{h.net}</td>
-                  <td className="p-3 tabular-nums">{h.cancellationRate}%</td>
-                </tr>
-              ))}
+              {hotels.map((h) => {
+                const share = h.bookingsPerRoom;
+                const shareCls = share == null ? 'text-slate-400'
+                  : share >= 60 ? 'text-rose-700 bg-rose-50'
+                  : share >= 30 ? 'text-amber-700 bg-amber-50'
+                  : 'text-emerald-700 bg-emerald-50';
+                return (
+                  <tr key={h.hotelId} className="border-t border-slate-100 hover:bg-slate-50">
+                    <td className="p-3 font-medium">{h.hotelNameEn || h.hotelName}</td>
+                    <td className="p-3 text-slate-500">{h.city || '—'}</td>
+                    <td className="p-3 font-bold text-slate-700 tabular-nums">
+                      {h.inventoryRooms != null ? h.inventoryRooms : <span className="text-slate-300">—</span>}
+                    </td>
+                    <td className="p-3 font-bold text-emerald-600 tabular-nums">{h.new}</td>
+                    <td className="p-3">
+                      {share != null
+                        ? <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold tabular-nums ${shareCls}`}>{share}%</span>
+                        : <span className="text-slate-300 text-xs">—</span>}
+                    </td>
+                    <td className="p-3 font-bold text-rose-600 tabular-nums">{h.cancellation}</td>
+                    <td className="p-3 font-bold text-amber-600 tabular-nums">{h.modification}</td>
+                    <td className="p-3 font-bold text-slate-700 tabular-nums">{h.net}</td>
+                    <td className="p-3 tabular-nums">{h.cancellationRate}%</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

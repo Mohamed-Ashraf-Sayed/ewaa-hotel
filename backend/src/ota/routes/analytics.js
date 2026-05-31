@@ -1,7 +1,29 @@
 const express = require('express');
 const { prisma } = require('../lib/db');
+const { normalize } = require('../services/hotels');
 
 const router = express.Router();
+
+// Build a fresh "normalized name -> rooms" map on each request. Inventory
+// rarely changes so the lookup is small (under 100 entries) and cached
+// queries would only save microseconds — not worth the staleness risk.
+async function buildInventoryMap() {
+  const inv = await prisma.otaBranchInventory.findMany({ where: { isActive: true } });
+  const map = new Map();
+  for (const r of inv) map.set(normalize(r.name), { rooms: r.rooms, brand: r.brand });
+  return map;
+}
+function lookupRooms(invMap, hotelName, hotelNameEn) {
+  if (hotelName) {
+    const hit = invMap.get(normalize(hotelName));
+    if (hit) return hit.rooms;
+  }
+  if (hotelNameEn) {
+    const hit = invMap.get(normalize(hotelNameEn));
+    if (hit) return hit.rooms;
+  }
+  return null;
+}
 
 function parseRange(req) {
   const now = new Date();
@@ -78,11 +100,19 @@ router.get('/by-hotel', async (req, res) => {
       }
       byHotel[row.hotelId][row.eventType] = Number(row.c);
     }
-    const result = Object.values(byHotel).map((h) => ({
-      ...h,
-      net: h.new - h.cancellation,
-      cancellationRate: h.new ? +(h.cancellation / h.new * 100).toFixed(1) : 0,
-    }));
+    const invMap = await buildInventoryMap();
+    const result = Object.values(byHotel).map((h) => {
+      const inventoryRooms = lookupRooms(invMap, h.hotelName, h.hotelNameEn);
+      return {
+        ...h,
+        net: h.new - h.cancellation,
+        cancellationRate: h.new ? +(h.cancellation / h.new * 100).toFixed(1) : 0,
+        inventoryRooms,
+        // Bookings-per-room ratio — useful as a relative "OTA pressure"
+        // signal across branches. Not true occupancy (no length-of-stay).
+        bookingsPerRoom: inventoryRooms ? +(h.new / inventoryRooms * 100).toFixed(1) : null,
+      };
+    });
     result.sort((a, b) => b.new - a.new);
     res.json({ range: { from, to }, hotels: result });
   } catch (e) {
@@ -191,13 +221,23 @@ router.get('/by-hotel-platform-day', async (req, res) => {
        ORDER BY day DESC, h.name ASC, r.source ASC`,
       from, to
     );
-    const result = rows.map((r) => ({
-      ...r,
-      newCount: Number(r.newCount),
-      cancelCount: Number(r.cancelCount),
-      modCount: Number(r.modCount),
-      net: Number(r.newCount) - Number(r.cancelCount),
-    }));
+    const invMap = await buildInventoryMap();
+    const result = rows.map((r) => {
+      const inventoryRooms = lookupRooms(invMap, r.hotelName, r.hotelNameEn);
+      const newCount = Number(r.newCount);
+      return {
+        ...r,
+        newCount,
+        cancelCount: Number(r.cancelCount),
+        modCount: Number(r.modCount),
+        net: newCount - Number(r.cancelCount),
+        inventoryRooms,
+        // OTA bookings as % of room inventory for the day. Crude proxy for
+        // OTA-driven occupancy — accurate enough to compare branches and
+        // spot anomalies without joining length-of-stay.
+        otaShare: inventoryRooms ? +(newCount / inventoryRooms * 100).toFixed(1) : null,
+      };
+    });
     res.json({ range: { from, to }, rows: result });
   } catch (e) {
     res.status(500).json({ error: e.message });
