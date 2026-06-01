@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { getSubordinateIds } = require('../middleware/auth');
+const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
 const { extractBooking } = require('../utils/bookingExtractor');
 const path = require('path');
 const fs = require('fs');
@@ -11,11 +11,11 @@ const RESERVATIONS_ROLES = ['reservations', 'admin', 'general_manager', 'systems
 // Filter bookings by user role
 const buildBookingFilter = async (user) => {
   if (ADMIN_ROLES.includes(user.role) || user.role === 'reservations' || user.role === 'contract_officer') return {};
-  if (user.role === 'sales_director') {
-    const subIds = await getSubordinateIds(user.id);
-    return { assignedRepId: { in: [user.id, ...subIds] } };
+  if (isManagerScope(user)) {
+    const scopeId = getScopeUserId(user);
+    const subIds = await getSubordinateIds(scopeId);
+    return { assignedRepId: { in: [scopeId, ...subIds] } };
   }
-  // assistant_sales is treated like a regular sales_rep — own bookings only.
   return { assignedRepId: user.id };
 };
 

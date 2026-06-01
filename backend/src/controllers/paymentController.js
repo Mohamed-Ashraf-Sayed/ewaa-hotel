@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { getSubordinateIds } = require('../middleware/auth');
+const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
 const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
@@ -9,16 +9,17 @@ const CREDIT_APPROVE_ROLES = ['credit_manager'];          // can approve / rejec
 const buildPaymentFilter = async (user) => {
   if (ADMIN_ROLES.includes(user.role) || user.role === 'contract_officer'
       || user.role === 'credit_manager' || user.role === 'credit_officer') return {};
-  if (user.role === 'sales_director') {
-    const subIds = await getSubordinateIds(user.id);
+  if (isManagerScope(user)) {
+    const scopeId = getScopeUserId(user);
+    const subIds = await getSubordinateIds(scopeId);
+    const ids = [scopeId, ...subIds];
     return {
       OR: [
-        { collectedBy: { in: [user.id, ...subIds] } },
-        { contract: { salesRepId: { in: [user.id, ...subIds] } } },
+        { collectedBy: { in: ids } },
+        { contract: { salesRepId: { in: ids } } },
       ],
     };
   }
-  // assistant_sales is treated like a regular sales_rep — own payments only.
   return {
     OR: [
       { collectedBy: user.id },

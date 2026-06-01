@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { getSubordinateIds } = require('../middleware/auth');
+const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
 const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
@@ -7,6 +7,7 @@ const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
 const getDashboard = async (req, res) => {
   try {
     const { id: userId, role } = req.user;
+    const managerScope = isManagerScope(req.user);
     let clientFilter = {};
     let contractFilter = {};
     let visitFilter = {};
@@ -17,9 +18,10 @@ const getDashboard = async (req, res) => {
       contractFilter = {};
       visitFilter = {};
       teamIds = (await prisma.user.findMany({ select: { id: true } })).map(u => u.id);
-    } else if (role === 'sales_director') {
-      const subIds = await getSubordinateIds(userId);
-      teamIds = [userId, ...subIds];
+    } else if (managerScope) {
+      const scopeId = getScopeUserId(req.user);
+      const subIds = await getSubordinateIds(scopeId);
+      teamIds = [scopeId, ...subIds];
       clientFilter = { salesRepId: { in: teamIds } };
       contractFilter = { salesRepId: { in: teamIds } };
       visitFilter = { salesRepId: { in: teamIds } };
@@ -28,7 +30,6 @@ const getDashboard = async (req, res) => {
       contractFilter = {};
       visitFilter = {};
     } else {
-      // assistant_sales falls into this branch too — own data only.
       clientFilter = { salesRepId: userId };
       contractFilter = { salesRepId: userId };
       visitFilter = { salesRepId: userId };
@@ -90,10 +91,10 @@ const getDashboard = async (req, res) => {
             // Skip clients younger than 60 days entirely — they can't be
             // "at-risk" yet under the > 60-days rule.
             createdAt: { lte: sixtyDaysAgo },
-            ...(role === 'sales_rep' ? { salesRepId: userId }
-              : role === 'sales_director' ? { salesRepId: { in: teamIds } }
+            ...(managerScope ? { salesRepId: { in: teamIds } }
               : ADMIN_ROLES.includes(role) ? {}
-              : {}),
+              : role === 'contract_officer' || role === 'reservations' || role === 'credit_manager' || role === 'credit_officer' ? {}
+              : { salesRepId: userId }),
           },
           select: {
             id: true, companyName: true, contactPerson: true, createdAt: true,
@@ -141,7 +142,7 @@ const getDashboard = async (req, res) => {
           engagementScore: { gte: 60 },
           contractScore: { lt: 50 },
           client: { isActive: true },
-          ...(role === 'sales_rep' ? { salesRepId: userId } : role === 'sales_director' ? { salesRepId: { in: teamIds } } : {})
+          ...(managerScope ? { salesRepId: { in: teamIds } } : ADMIN_ROLES.includes(role) ? {} : { salesRepId: userId })
         },
         include: { client: { select: { id: true, companyName: true, clientType: true } } },
         orderBy: { engagementScore: 'desc' }, take: 5
@@ -156,7 +157,7 @@ const getDashboard = async (req, res) => {
         orderBy: { createdAt: 'desc' }, take: 10
       }),
       // Team performance (only for managers/admins)
-      (ADMIN_ROLES.includes(role) || role === 'sales_director')
+      (ADMIN_ROLES.includes(role) || managerScope)
         ? prisma.user.findMany({
             where: { id: { in: teamIds }, role: { in: ['sales_rep', 'assistant_sales'] }, isActive: true },
             select: {
@@ -192,10 +193,12 @@ const getPulseReport = async (req, res) => {
   try {
     const { id: userId, role } = req.user;
     let filter = {};
-    if (role === 'sales_rep') filter = { salesRepId: userId };
-    else if (role === 'sales_director') {
-      const subIds = await getSubordinateIds(userId);
-      filter = { salesRepId: { in: [userId, ...subIds] } };
+    if (isManagerScope(req.user)) {
+      const scopeId = getScopeUserId(req.user);
+      const subIds = await getSubordinateIds(scopeId);
+      filter = { salesRepId: { in: [scopeId, ...subIds] } };
+    } else if (role === 'sales_rep' || role === 'assistant_sales') {
+      filter = { salesRepId: userId };
     }
 
     const scores = await prisma.dealPulseScore.findMany({

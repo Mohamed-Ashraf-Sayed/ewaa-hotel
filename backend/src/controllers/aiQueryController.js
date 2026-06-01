@@ -5,7 +5,7 @@
 
 const { PrismaClient } = require('@prisma/client');
 const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
-const { getSubordinateIds } = require('../middleware/auth');
+const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
 
 const prisma = new PrismaClient();
 
@@ -34,11 +34,11 @@ const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
 const buildClientScope = async (user) => {
   if (ADMIN_ROLES.includes(user.role)) return {};
   if (['credit_manager', 'credit_officer', 'contract_officer', 'reservations'].includes(user.role)) return {};
-  if (user.role === 'sales_director') {
-    const subIds = await getSubordinateIds(user.id);
-    return { salesRepId: { in: [user.id, ...subIds] } };
+  if (isManagerScope(user)) {
+    const scopeId = getScopeUserId(user);
+    const subIds = await getSubordinateIds(scopeId);
+    return { salesRepId: { in: [scopeId, ...subIds] } };
   }
-  // assistant_sales is treated like a regular sales_rep here.
   return { salesRepId: user.id };
 };
 
@@ -71,14 +71,14 @@ const resolveSalesRepFilter = async (args, user) => {
   if (!target) return { error: `Sales rep "${args.sales_rep_name || args.sales_rep_id}" not found in the system.` };
 
   if (ADMIN_ROLES.includes(user.role)) return { repId: target.id, repName: target.name };
-  if (user.role === 'sales_director') {
-    const subs = await getSubordinateIds(user.id);
-    if (target.id !== user.id && !subs.includes(target.id)) {
+  if (isManagerScope(user)) {
+    const scopeId = getScopeUserId(user);
+    const subs = await getSubordinateIds(scopeId);
+    if (target.id !== scopeId && target.id !== user.id && !subs.includes(target.id)) {
       return { error: 'You can only filter by sales reps in your own team.' };
     }
     return { repId: target.id, repName: target.name };
   }
-  // assistant_sales falls into the regular sales_rep branch below.
   if (target.id !== user.id) {
     return { error: 'You do not have permission to filter by another sales rep.' };
   }
@@ -163,9 +163,8 @@ const tools = {
   search_payments: async (args, user) => {
     const where = {};
     if (!ADMIN_ROLES.includes(user.role) && !['credit_manager', 'credit_officer', 'contract_officer'].includes(user.role)) {
-      // assistant_sales is treated like a regular sales_rep here.
-      const ids = user.role === 'sales_director'
-        ? [user.id, ...(await getSubordinateIds(user.id))]
+      const ids = isManagerScope(user)
+        ? [getScopeUserId(user), ...(await getSubordinateIds(getScopeUserId(user)))]
         : [user.id];
       where.OR = [
         { collectedBy: { in: ids } },
@@ -224,9 +223,8 @@ const tools = {
   search_bookings: async (args, user) => {
     const where = {};
     if (!ADMIN_ROLES.includes(user.role) && user.role !== 'reservations') {
-      // assistant_sales is treated like a regular sales_rep here.
-      const ids = user.role === 'sales_director'
-        ? [user.id, ...(await getSubordinateIds(user.id))]
+      const ids = isManagerScope(user)
+        ? [getScopeUserId(user), ...(await getSubordinateIds(getScopeUserId(user)))]
         : [user.id];
       where.assignedRepId = { in: ids };
     }
@@ -389,14 +387,15 @@ const tools = {
   },
 
   search_users: async (args, user) => {
-    // Access scope: admins/GM/VGM see all; sales_director sees their team; others restricted
-    if (!ADMIN_ROLES.includes(user.role) && user.role !== 'sales_director') {
+    // Access scope: admins/GM/VGM see all; managers (sales_director / assistant_sales of a sales_director) see their team; others restricted
+    if (!ADMIN_ROLES.includes(user.role) && !isManagerScope(user)) {
       return { count: 0, message: 'You do not have permission to list users.' };
     }
     const where = { isActive: true };
-    if (user.role === 'sales_director') {
-      const subs = await getSubordinateIds(user.id);
-      where.id = { in: [user.id, ...subs] };
+    if (isManagerScope(user)) {
+      const scopeId = getScopeUserId(user);
+      const subs = await getSubordinateIds(scopeId);
+      where.id = { in: [scopeId, ...subs] };
     }
     if (args.role) where.role = args.role;
     if (args.search) {
@@ -457,13 +456,14 @@ const tools = {
   },
 
   get_team_overview: async (args, user) => {
-    if (!ADMIN_ROLES.includes(user.role) && user.role !== 'sales_director') {
+    if (!ADMIN_ROLES.includes(user.role) && !isManagerScope(user)) {
       return { count: 0, message: 'You do not have permission to view team overview.' };
     }
     const teamWhere = { isActive: true, role: { in: ['sales_rep', 'sales_director', 'assistant_sales'] } };
-    if (user.role === 'sales_director') {
-      const subs = await getSubordinateIds(user.id);
-      teamWhere.id = { in: [user.id, ...subs] };
+    if (isManagerScope(user)) {
+      const scopeId = getScopeUserId(user);
+      const subs = await getSubordinateIds(scopeId);
+      teamWhere.id = { in: [scopeId, ...subs] };
     }
     const team = await prisma.user.findMany({
       where: teamWhere,
@@ -479,8 +479,8 @@ const tools = {
 
   get_user_details: async (args, user) => {
     // Comprehensive snapshot of one user — used when caller asks "tell me about X".
-    // Permission: admin/GM/VGM see anyone; sales_director sees own team; others denied.
-    if (!ADMIN_ROLES.includes(user.role) && user.role !== 'sales_director') {
+    // Permission: admin/GM/VGM see anyone; managers see own team; others denied.
+    if (!ADMIN_ROLES.includes(user.role) && !isManagerScope(user)) {
       return { message: 'You do not have permission to view another user\'s details.' };
     }
     let target = null;
@@ -495,10 +495,12 @@ const tools = {
     }
     if (!target) return { message: 'User not found. Please confirm the exact name.' };
 
-    // Sales director can only see themselves + their subordinates
-    if (user.role === 'sales_director') {
-      const subs = await getSubordinateIds(user.id);
-      if (target.id !== user.id && !subs.includes(target.id)) {
+    // Managers can only see themselves + their subordinates (assistant_sales
+    // shares their manager's scope).
+    if (isManagerScope(user)) {
+      const scopeId = getScopeUserId(user);
+      const subs = await getSubordinateIds(scopeId);
+      if (target.id !== scopeId && target.id !== user.id && !subs.includes(target.id)) {
         return { message: 'This user is not in your team. You can only see your own subordinates.' };
       }
     }
@@ -834,7 +836,7 @@ const ask = async (req, res) => {
         case 'sales_director':
           return 'TEAM SCOPE: only own data + direct/indirect subordinates. CANNOT see other directors, other teams, credit/contract/reservations users, or company-wide totals outside own team.';
         case 'assistant_sales':
-          return 'PERSONAL SCOPE: same as sales_rep — only own clients, contracts, visits, payments, bookings, targets. CANNOT see other reps or company-wide totals.';
+          return 'TEAM SCOPE (deputy of manager): can see everything the manager sees — own data + the manager and all reps reporting to the manager. CANNOT see other teams, other directors, or company-wide totals outside the manager\'s team.';
         case 'sales_rep':
           return 'PERSONAL SCOPE: only own clients, contracts, visits, payments, bookings, targets, tasks, reminders, commission, and personal performance. CANNOT see other sales reps, other teams, or company-wide totals.';
         case 'credit_manager':

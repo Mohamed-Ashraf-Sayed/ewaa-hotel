@@ -1,12 +1,8 @@
 const { PrismaClient } = require('@prisma/client');
+const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
 const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
-
-const getSubordinateIds = async (userId) => {
-  const subs = await prisma.user.findMany({ where: { managerId: userId }, select: { id: true } });
-  return subs.map(s => s.id);
-};
 
 // GET /tasks
 const getTasks = async (req, res) => {
@@ -18,14 +14,14 @@ const getTasks = async (req, res) => {
     if (assigneeId) where.assigneeId = parseInt(assigneeId);
 
     if (!ADMIN_ROLES.includes(req.user.role)) {
-      if (req.user.role === 'sales_director') {
-        const subIds = await getSubordinateIds(req.user.id);
+      if (isManagerScope(req.user)) {
+        const scopeId = getScopeUserId(req.user);
+        const subIds = await getSubordinateIds(scopeId);
         where.OR = [
-          { assigneeId: { in: [req.user.id, ...subIds] } },
+          { assigneeId: { in: [scopeId, ...subIds] } },
           { createdById: req.user.id },
         ];
       } else {
-        // assistant_sales is treated like a regular sales_rep here.
         where.assigneeId = req.user.id;
       }
     }

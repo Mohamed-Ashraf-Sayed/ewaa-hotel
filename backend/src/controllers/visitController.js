@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { getSubordinateIds } = require('../middleware/auth');
+const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
 const { recalculatePulse } = require('./contractController');
 const prisma = new PrismaClient();
 
@@ -10,11 +10,11 @@ const getVisits = async (req, res) => {
     const { clientId, upcoming, salesRepId } = req.query;
     let salesRepFilter = {};
     if (!ADMIN_ROLES.includes(req.user.role)) {
-      if (req.user.role === 'sales_director') {
-        const subIds = await getSubordinateIds(req.user.id);
-        salesRepFilter = { salesRepId: { in: [req.user.id, ...subIds] } };
+      if (isManagerScope(req.user)) {
+        const scopeId = getScopeUserId(req.user);
+        const subIds = await getSubordinateIds(scopeId);
+        salesRepFilter = { salesRepId: { in: [scopeId, ...subIds] } };
       } else {
-        // assistant_sales is treated like a regular sales_rep here.
         salesRepFilter = { salesRepId: req.user.id };
       }
     }
@@ -101,11 +101,11 @@ const getUpcomingFollowUps = async (req, res) => {
     const days = parseInt(req.query.days) || 7;
     const future = new Date();
     future.setDate(future.getDate() + days);
-    // assistant_sales is treated like a regular sales_rep — own visits only.
     let salesRepFilter = { salesRepId: req.user.id };
-    if (req.user.role === 'sales_director') {
-      const subIds = await getSubordinateIds(req.user.id);
-      salesRepFilter = { salesRepId: { in: [req.user.id, ...subIds] } };
+    if (isManagerScope(req.user)) {
+      const scopeId = getScopeUserId(req.user);
+      const subIds = await getSubordinateIds(scopeId);
+      salesRepFilter = { salesRepId: { in: [scopeId, ...subIds] } };
     } else if (ADMIN_ROLES.includes(req.user.role)) {
       salesRepFilter = {};
     }

@@ -1,6 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
-const { getSubordinateIds } = require('../middleware/auth');
+const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
 const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
@@ -12,9 +12,10 @@ const getUsers = async (req, res) => {
 
     if (ADMIN_ROLES.includes(userRole)) {
       // sees all
-    } else if (userRole === 'sales_director') {
-      const subIds = await getSubordinateIds(userId);
-      whereClause.id = { in: [userId, ...subIds] };
+    } else if (isManagerScope(req.user)) {
+      const scopeId = getScopeUserId(req.user);
+      const subIds = await getSubordinateIds(scopeId);
+      whereClause.id = { in: [scopeId, ...subIds] };
     } else {
       whereClause.id = userId;
     }

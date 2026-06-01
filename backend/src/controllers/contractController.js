@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { getSubordinateIds } = require('../middleware/auth');
+const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
 const nodemailer = require('nodemailer');
 const path = require('path');
 const fs = require('fs');
@@ -57,11 +57,11 @@ const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
 
 const buildContractFilter = async (user) => {
   if (ADMIN_ROLES.includes(user.role) || user.role === 'contract_officer' || user.role === 'reservations' || user.role === 'credit_manager' || user.role === 'credit_officer') return {};
-  if (user.role === 'sales_director') {
-    const subIds = await getSubordinateIds(user.id);
-    return { salesRepId: { in: [user.id, ...subIds] } };
+  if (isManagerScope(user)) {
+    const scopeId = getScopeUserId(user);
+    const subIds = await getSubordinateIds(scopeId);
+    return { salesRepId: { in: [scopeId, ...subIds] } };
   }
-  // assistant_sales is treated like a regular sales_rep — own contracts only.
   return { salesRepId: user.id };
 };
 
