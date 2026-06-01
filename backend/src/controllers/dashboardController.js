@@ -67,7 +67,10 @@ const getDashboard = async (req, res) => {
       prisma.visit.count({ where: { ...visitFilter, visitDate: { gte: thisMonthStart }, client: { isActive: true } } }),
       prisma.visit.findMany({
         where: { ...visitFilter, nextFollowUp: { gte: now, lte: sevenDaysFromNow }, client: { isActive: true } },
-        include: { client: { select: { id: true, companyName: true } } },
+        include: {
+          client: { select: { id: true, companyName: true } },
+          salesRep: { select: { id: true, name: true } },
+        },
         orderBy: { nextFollowUp: 'asc' }, take: 5
       }),
       // At-Risk = no activity of any kind for more than 60 days. "Activity"

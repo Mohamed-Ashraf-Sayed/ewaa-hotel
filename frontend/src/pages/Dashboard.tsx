@@ -363,7 +363,12 @@ export default function Dashboard() {
                   </div>
                   <div className={`min-w-0 flex-1 ${isAr ? 'text-right' : 'text-left'}`}>
                     <p className="font-semibold text-sm text-brand-900 truncate">{v.client?.companyName}</p>
-                    <p className="text-xs text-brand-400">{v.nextFollowUp ? format(parseISO(v.nextFollowUp), 'dd MMM', { locale }) : '-'}</p>
+                    {v.salesRep?.name && (
+                      <p className={`text-[11px] text-brand-500 truncate flex items-center gap-1 ${isAr ? 'flex-row-reverse justify-end' : ''}`}>
+                        <Users className="w-3 h-3 opacity-60" /> {v.salesRep.name}
+                      </p>
+                    )}
+                    <p className="text-xs text-brand-400 mt-0.5">{v.nextFollowUp ? format(parseISO(v.nextFollowUp), 'dd MMM', { locale }) : '-'}</p>
                   </div>
                 </Link>
               ))}
