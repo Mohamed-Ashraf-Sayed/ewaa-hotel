@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
+const { isManagerScope, getAccessUserIds } = require('../middleware/auth');
 const { extractBooking } = require('../utils/bookingExtractor');
 const path = require('path');
 const fs = require('fs');
@@ -12,9 +12,8 @@ const RESERVATIONS_ROLES = ['reservations', 'admin', 'general_manager', 'systems
 const buildBookingFilter = async (user) => {
   if (ADMIN_ROLES.includes(user.role) || user.role === 'reservations' || user.role === 'contract_officer') return {};
   if (isManagerScope(user)) {
-    const scopeId = getScopeUserId(user);
-    const subIds = await getSubordinateIds(scopeId);
-    return { assignedRepId: { in: [scopeId, ...subIds] } };
+    const ids = await getAccessUserIds(user);
+    return { assignedRepId: { in: ids } };
   }
   return { assignedRepId: user.id };
 };

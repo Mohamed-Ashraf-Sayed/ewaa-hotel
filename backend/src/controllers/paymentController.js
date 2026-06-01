@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
+const { isManagerScope, getAccessUserIds } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
 const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
@@ -10,9 +10,7 @@ const buildPaymentFilter = async (user) => {
   if (ADMIN_ROLES.includes(user.role) || user.role === 'contract_officer'
       || user.role === 'credit_manager' || user.role === 'credit_officer') return {};
   if (isManagerScope(user)) {
-    const scopeId = getScopeUserId(user);
-    const subIds = await getSubordinateIds(scopeId);
-    const ids = [scopeId, ...subIds];
+    const ids = await getAccessUserIds(user);
     return {
       OR: [
         { collectedBy: { in: ids } },

@@ -5,7 +5,7 @@
 
 const { PrismaClient } = require('@prisma/client');
 const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
-const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
+const { isManagerScope, getAccessUserIds } = require('../middleware/auth');
 
 const prisma = new PrismaClient();
 
@@ -35,9 +35,8 @@ const buildClientScope = async (user) => {
   if (ADMIN_ROLES.includes(user.role)) return {};
   if (['credit_manager', 'credit_officer', 'contract_officer', 'reservations'].includes(user.role)) return {};
   if (isManagerScope(user)) {
-    const scopeId = getScopeUserId(user);
-    const subIds = await getSubordinateIds(scopeId);
-    return { salesRepId: { in: [scopeId, ...subIds] } };
+    const ids = await getAccessUserIds(user);
+    return { salesRepId: { in: ids } };
   }
   return { salesRepId: user.id };
 };
@@ -72,9 +71,8 @@ const resolveSalesRepFilter = async (args, user) => {
 
   if (ADMIN_ROLES.includes(user.role)) return { repId: target.id, repName: target.name };
   if (isManagerScope(user)) {
-    const scopeId = getScopeUserId(user);
-    const subs = await getSubordinateIds(scopeId);
-    if (target.id !== scopeId && target.id !== user.id && !subs.includes(target.id)) {
+    const allowed = await getAccessUserIds(user);
+    if (!allowed.includes(target.id)) {
       return { error: 'You can only filter by sales reps in your own team.' };
     }
     return { repId: target.id, repName: target.name };
@@ -164,7 +162,7 @@ const tools = {
     const where = {};
     if (!ADMIN_ROLES.includes(user.role) && !['credit_manager', 'credit_officer', 'contract_officer'].includes(user.role)) {
       const ids = isManagerScope(user)
-        ? [getScopeUserId(user), ...(await getSubordinateIds(getScopeUserId(user)))]
+        ? await getAccessUserIds(user)
         : [user.id];
       where.OR = [
         { collectedBy: { in: ids } },
@@ -224,7 +222,7 @@ const tools = {
     const where = {};
     if (!ADMIN_ROLES.includes(user.role) && user.role !== 'reservations') {
       const ids = isManagerScope(user)
-        ? [getScopeUserId(user), ...(await getSubordinateIds(getScopeUserId(user)))]
+        ? await getAccessUserIds(user)
         : [user.id];
       where.assignedRepId = { in: ids };
     }
@@ -393,9 +391,8 @@ const tools = {
     }
     const where = { isActive: true };
     if (isManagerScope(user)) {
-      const scopeId = getScopeUserId(user);
-      const subs = await getSubordinateIds(scopeId);
-      where.id = { in: [scopeId, ...subs] };
+      const ids = await getAccessUserIds(user);
+      where.id = { in: ids };
     }
     if (args.role) where.role = args.role;
     if (args.search) {
@@ -461,9 +458,8 @@ const tools = {
     }
     const teamWhere = { isActive: true, role: { in: ['sales_rep', 'sales_director', 'assistant_sales'] } };
     if (isManagerScope(user)) {
-      const scopeId = getScopeUserId(user);
-      const subs = await getSubordinateIds(scopeId);
-      teamWhere.id = { in: [scopeId, ...subs] };
+      const ids = await getAccessUserIds(user);
+      teamWhere.id = { in: ids };
     }
     const team = await prisma.user.findMany({
       where: teamWhere,
@@ -496,11 +492,10 @@ const tools = {
     if (!target) return { message: 'User not found. Please confirm the exact name.' };
 
     // Managers can only see themselves + their subordinates (assistant_sales
-    // shares their manager's scope).
+    // shares their manager's scope but cannot view the manager themselves).
     if (isManagerScope(user)) {
-      const scopeId = getScopeUserId(user);
-      const subs = await getSubordinateIds(scopeId);
-      if (target.id !== scopeId && target.id !== user.id && !subs.includes(target.id)) {
+      const allowed = await getAccessUserIds(user);
+      if (!allowed.includes(target.id)) {
         return { message: 'This user is not in your team. You can only see your own subordinates.' };
       }
     }

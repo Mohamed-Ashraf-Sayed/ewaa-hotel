@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
-const { authenticate, authorize, getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
+const { authenticate, authorize, isManagerScope, getAccessUserIds } = require('../middleware/auth');
 const { generateQuote } = require('../controllers/pdfController');
 
 const prisma = new PrismaClient();
@@ -104,9 +104,8 @@ router.get('/all', authenticate, async (req, res) => {
     //   everyone else (credit, contracts, reservations, vp, gm, admin) → all
     const role = req.user.role;
     if (isManagerScope(req.user)) {
-      const scopeId = getScopeUserId(req.user);
-      const subIds = await getSubordinateIds(scopeId);
-      where.salesRepId = { in: [scopeId, ...subIds] };
+      const ids = await getAccessUserIds(req.user);
+      where.salesRepId = { in: ids };
     } else if (role === 'sales_rep' || role === 'assistant_sales') {
       where.salesRepId = req.user.id;
     }
@@ -141,9 +140,8 @@ router.get('/pending-approval', authenticate, authorize(...APPROVER_ROLES), asyn
     const isAdmin = ['admin', 'general_manager', 'systems_info', 'vice_gm'].includes(req.user.role);
     const where = { status: 'pending_manager_approval' };
     if (!isAdmin && isManagerScope(req.user)) {
-      const scopeId = getScopeUserId(req.user);
-      const subIds = await getSubordinateIds(scopeId);
-      where.salesRepId = { in: [scopeId, ...subIds] };
+      const ids = await getAccessUserIds(req.user);
+      where.salesRepId = { in: ids };
     }
     const quotes = await prisma.quote.findMany({
       where,

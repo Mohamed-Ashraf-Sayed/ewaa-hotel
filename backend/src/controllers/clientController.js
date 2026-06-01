@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
+const { isManagerScope, getAccessUserIds } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
 const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
@@ -9,9 +9,8 @@ const buildAccessFilter = async (user) => {
   // Credit team, contract_officer, and reservations need cross-rep visibility
   if (['credit_manager', 'credit_officer', 'contract_officer', 'reservations'].includes(user.role)) return {};
   if (isManagerScope(user)) {
-    const scopeId = getScopeUserId(user);
-    const subIds = await getSubordinateIds(scopeId);
-    return { salesRepId: { in: [scopeId, ...subIds] } };
+    const ids = await getAccessUserIds(user);
+    return { salesRepId: { in: ids } };
   }
   return { salesRepId: user.id };
 };

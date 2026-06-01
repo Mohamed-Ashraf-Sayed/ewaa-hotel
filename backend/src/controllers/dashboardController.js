@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
+const { isManagerScope, getAccessUserIds } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
 const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
@@ -19,9 +19,7 @@ const getDashboard = async (req, res) => {
       visitFilter = {};
       teamIds = (await prisma.user.findMany({ select: { id: true } })).map(u => u.id);
     } else if (managerScope) {
-      const scopeId = getScopeUserId(req.user);
-      const subIds = await getSubordinateIds(scopeId);
-      teamIds = [scopeId, ...subIds];
+      teamIds = await getAccessUserIds(req.user);
       clientFilter = { salesRepId: { in: teamIds } };
       contractFilter = { salesRepId: { in: teamIds } };
       visitFilter = { salesRepId: { in: teamIds } };
@@ -194,9 +192,8 @@ const getPulseReport = async (req, res) => {
     const { id: userId, role } = req.user;
     let filter = {};
     if (isManagerScope(req.user)) {
-      const scopeId = getScopeUserId(req.user);
-      const subIds = await getSubordinateIds(scopeId);
-      filter = { salesRepId: { in: [scopeId, ...subIds] } };
+      const ids = await getAccessUserIds(req.user);
+      filter = { salesRepId: { in: ids } };
     } else if (role === 'sales_rep' || role === 'assistant_sales') {
       filter = { salesRepId: userId };
     }

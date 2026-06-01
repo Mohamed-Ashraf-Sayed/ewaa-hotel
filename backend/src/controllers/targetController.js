@@ -1,13 +1,8 @@
 const { PrismaClient } = require('@prisma/client');
+const { getSubordinateIds, isManagerScope, getAccessUserIds } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
 const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
-
-// Get subordinate IDs for a manager
-const getSubordinateIds = async (userId) => {
-  const subs = await prisma.user.findMany({ where: { managerId: userId }, select: { id: true } });
-  return subs.map(s => s.id);
-};
 
 // GET /targets — list targets (filtered by role)
 const getTargets = async (req, res) => {
@@ -23,11 +18,10 @@ const getTargets = async (req, res) => {
 
     // Role-based filtering
     if (!ADMIN_ROLES.includes(req.user.role)) {
-      if (req.user.role === 'sales_director') {
-        const subIds = await getSubordinateIds(req.user.id);
-        where.userId = { in: [req.user.id, ...subIds] };
+      if (isManagerScope(req.user)) {
+        const ids = await getAccessUserIds(req.user);
+        where.userId = { in: ids };
       } else {
-        // assistant_sales is treated like a regular sales_rep here.
         where.userId = req.user.id;
       }
     }
@@ -132,11 +126,10 @@ const getTargetReport = async (req, res) => {
 
     // Role-based filtering
     if (!ADMIN_ROLES.includes(req.user.role)) {
-      if (req.user.role === 'sales_director') {
-        const subIds = await getSubordinateIds(req.user.id);
-        where.userId = { in: [req.user.id, ...subIds] };
+      if (isManagerScope(req.user)) {
+        const ids = await getAccessUserIds(req.user);
+        where.userId = { in: ids };
       } else {
-        // assistant_sales is treated like a regular sales_rep here.
         where.userId = req.user.id;
       }
     }

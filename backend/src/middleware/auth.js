@@ -46,12 +46,21 @@ const getSubordinateIds = async (userId) => {
 
 // assistant_sales acts as a deputy of their manager: they inherit the
 // manager's team scope (sees the same clients/visits/contracts/etc. the
-// manager sees). Their personal id is still used for ownership of records
-// they create.
+// manager sees) EXCEPT they do not see the manager's own records.
+// Their personal id is still used for ownership of records they create.
 const isManagerScope = (user) =>
   user.role === 'sales_director' || (user.role === 'assistant_sales' && !!user.managerId);
 
 const getScopeUserId = (user) =>
   user.role === 'assistant_sales' && user.managerId ? user.managerId : user.id;
 
-module.exports = { authenticate, authorize, getSubordinateIds, isManagerScope, getScopeUserId };
+// Returns the array of user IDs whose data the caller can see (used for
+// salesRepId-style "in" filters). For assistant_sales the manager themselves
+// is excluded — assistants see the peers but not the boss's own book.
+const getAccessUserIds = async (user) => {
+  const scopeId = getScopeUserId(user);
+  const subIds = await getSubordinateIds(scopeId);
+  return user.role === 'assistant_sales' ? subIds : [scopeId, ...subIds];
+};
+
+module.exports = { authenticate, authorize, getSubordinateIds, isManagerScope, getScopeUserId, getAccessUserIds };

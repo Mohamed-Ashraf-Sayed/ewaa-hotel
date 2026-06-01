@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
+const { isManagerScope, getAccessUserIds } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
 const ADMIN_ROLES = ['admin', 'general_manager', 'systems_info', 'vice_gm'];
@@ -15,10 +15,9 @@ const getTasks = async (req, res) => {
 
     if (!ADMIN_ROLES.includes(req.user.role)) {
       if (isManagerScope(req.user)) {
-        const scopeId = getScopeUserId(req.user);
-        const subIds = await getSubordinateIds(scopeId);
+        const ids = await getAccessUserIds(req.user);
         where.OR = [
-          { assigneeId: { in: [scopeId, ...subIds] } },
+          { assigneeId: { in: ids } },
           { createdById: req.user.id },
         ];
       } else {

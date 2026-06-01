@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { getSubordinateIds, isManagerScope, getScopeUserId } = require('../middleware/auth');
+const { isManagerScope, getAccessUserIds } = require('../middleware/auth');
 const { recalculatePulse } = require('./contractController');
 const prisma = new PrismaClient();
 
@@ -11,9 +11,8 @@ const getVisits = async (req, res) => {
     let salesRepFilter = {};
     if (!ADMIN_ROLES.includes(req.user.role)) {
       if (isManagerScope(req.user)) {
-        const scopeId = getScopeUserId(req.user);
-        const subIds = await getSubordinateIds(scopeId);
-        salesRepFilter = { salesRepId: { in: [scopeId, ...subIds] } };
+        const ids = await getAccessUserIds(req.user);
+        salesRepFilter = { salesRepId: { in: ids } };
       } else {
         salesRepFilter = { salesRepId: req.user.id };
       }
@@ -103,9 +102,8 @@ const getUpcomingFollowUps = async (req, res) => {
     future.setDate(future.getDate() + days);
     let salesRepFilter = { salesRepId: req.user.id };
     if (isManagerScope(req.user)) {
-      const scopeId = getScopeUserId(req.user);
-      const subIds = await getSubordinateIds(scopeId);
-      salesRepFilter = { salesRepId: { in: [scopeId, ...subIds] } };
+      const ids = await getAccessUserIds(req.user);
+      salesRepFilter = { salesRepId: { in: ids } };
     } else if (ADMIN_ROLES.includes(req.user.role)) {
       salesRepFilter = {};
     }
