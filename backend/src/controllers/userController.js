@@ -151,4 +151,51 @@ const getOrgChart = async (req, res) => {
   }
 };
 
-module.exports = { getUsers, createUser, updateUser, resetPassword, getOrgChart, updateCommissionRate };
+// Transfer all active clients from one rep to another. Used when an employee
+// leaves and a replacement takes over their book. Only the salesRepId on the
+// Client record is rewritten — historical visits / contracts / payments keep
+// their original owner so the audit trail isn't lost.
+const transferClients = async (req, res) => {
+  try {
+    const fromId = parseInt(req.params.id);
+    const { toUserId, alsoDeactivate } = req.body;
+    const toId = parseInt(toUserId);
+
+    if (!Number.isFinite(fromId) || !Number.isFinite(toId)) {
+      return res.status(400).json({ message: 'Invalid user IDs' });
+    }
+    if (fromId === toId) {
+      return res.status(400).json({ message: 'لا يمكن نقل العملاء من المندوب لنفسه' });
+    }
+
+    const [fromUser, toUser] = await Promise.all([
+      prisma.user.findUnique({ where: { id: fromId }, select: { id: true, name: true, isActive: true } }),
+      prisma.user.findUnique({ where: { id: toId }, select: { id: true, name: true, isActive: true } }),
+    ]);
+    if (!fromUser) return res.status(404).json({ message: 'المندوب المصدر غير موجود' });
+    if (!toUser) return res.status(404).json({ message: 'المندوب الجديد غير موجود' });
+    if (!toUser.isActive) return res.status(400).json({ message: 'المندوب الجديد غير مفعّل' });
+
+    const { count: transferredClients } = await prisma.client.updateMany({
+      where: { salesRepId: fromId, isActive: true },
+      data: { salesRepId: toId },
+    });
+
+    let deactivated = false;
+    if (alsoDeactivate && fromUser.isActive) {
+      await prisma.user.update({ where: { id: fromId }, data: { isActive: false } });
+      deactivated = true;
+    }
+
+    res.json({
+      transferredClients,
+      deactivated,
+      fromUser: { id: fromUser.id, name: fromUser.name },
+      toUser: { id: toUser.id, name: toUser.name },
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+module.exports = { getUsers, createUser, updateUser, resetPassword, getOrgChart, updateCommissionRate, transferClients };

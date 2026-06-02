@@ -41,7 +41,9 @@ export const usersApi = {
   create: (data: any) => api.post('/users', data),
   update: (id: number, data: any) => api.put(`/users/${id}`, data),
   resetPassword: (id: number, newPassword: string) => api.put(`/users/${id}/reset-password`, { newPassword }),
-  updateCommission: (id: number, commissionRate: number) => api.put(`/users/${id}/commission`, { commissionRate })
+  updateCommission: (id: number, commissionRate: number) => api.put(`/users/${id}/commission`, { commissionRate }),
+  transferClients: (fromId: number, toUserId: number, alsoDeactivate: boolean = false) =>
+    api.post(`/users/${fromId}/transfer-clients`, { toUserId, alsoDeactivate }),
 };
 
 // Hotels
