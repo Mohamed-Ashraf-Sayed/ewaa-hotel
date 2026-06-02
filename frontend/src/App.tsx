@@ -34,6 +34,7 @@ import Bookings from './pages/Bookings';
 import Quotes from './pages/Quotes';
 import Marketing from './pages/Marketing';
 import Permissions from './pages/Permissions';
+import AuditLog from './pages/AuditLog';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -110,6 +111,7 @@ function AppRoutes() {
         <Route path="quotes" element={<Quotes />} />
         <Route path="marketing" element={<Marketing />} />
         <Route path="permissions" element={<Permissions />} />
+        <Route path="audit-log" element={<AuditLog />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

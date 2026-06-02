@@ -38,6 +38,12 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
+// Audit logger — runs before the route handlers but schedules its DB write
+// on res.on('finish'), so by then the per-route authenticate middleware has
+// populated req.user. Non-mutating and unmapped routes are skipped inside.
+const { auditMiddleware } = require('./middleware/audit');
+app.use('/api', auditMiddleware);
+
 // API Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
@@ -65,6 +71,7 @@ app.use('/api/ai', require('./routes/aiQuery'));
 app.use('/api/bookings', require('./routes/bookings'));
 app.use('/api/portal', require('./routes/portal'));
 app.use('/api/promotions', require('./routes/promotions'));
+app.use('/api/audit-log', require('./routes/audit'));
 
 // === OTA Bookings (ported from ewaa-bookings) — analytics + email ingest ===
 // Mounted under /api/ota so the existing /api/hotels and /api/bookings routes

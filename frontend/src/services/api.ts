@@ -35,6 +35,11 @@ export const authApi = {
 };
 
 // Users
+export const auditApi = {
+  getAll: (params?: { userId?: number; from?: string; to?: string; search?: string; limit?: number }) =>
+    api.get('/audit-log', { params }),
+};
+
 export const usersApi = {
   getAll: () => api.get('/users'),
   getOrgChart: () => api.get('/users/org-chart'),

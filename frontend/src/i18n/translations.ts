@@ -22,6 +22,7 @@ const translations = {
   nav_marketing: { ar: 'العروض التسويقية', en: 'Marketing' },
   nav_inbox: { ar: 'الوارد', en: 'Inbox' },
   nav_permissions: { ar: 'الصلاحيات', en: 'Permissions' },
+  nav_audit_log: { ar: 'سجل النشاط', en: 'Audit Log' },
 
   // === Auth ===
   login_title: { ar: 'تسجيل الدخول', en: 'Sign In' },

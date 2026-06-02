@@ -99,6 +99,23 @@ model User {
   promotionsCreated Promotion[]  @relation("PromotionCreator")
   quotes            Quote[]
   quotesApproved    Quote[]      @relation("QuoteApprover")
+  auditLogs         AuditLog[]
+}
+
+// Minimal audit trail: who did what, when. Populated by the audit middleware
+// on every successful mutating request (POST / PUT / DELETE / PATCH). No
+// before/after diff, no resource id — just the human-readable action so the
+// admin can scroll a single feed and see activity across the system.
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  action    String   // Arabic, human-readable. e.g. "تعديل بيانات عميل"
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }
 
 model Message {
