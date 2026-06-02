@@ -212,6 +212,12 @@ export default function ClientDetail() {
   };
 
   const isAdminLevel = hasRole('admin', 'general_manager', 'systems_info', 'vice_gm');
+  // TEMPORARY: open full client-edit access to all sales so they can clean up
+  // imported records (company name, brands, hotel, budgets, etc.). Flip to
+  // false to lock the admin-only section back down. salesRepId stays
+  // admin-only either way — that's an ownership transfer, not data cleanup.
+  const OPEN_CLIENT_EDIT_FOR_SALES = true;
+  const canEditAllFields = isAdminLevel || OPEN_CLIENT_EDIT_FOR_SALES;
 
   // Soft-delete (archive) — admin-level only. Backend route is also gated by
   // the same roles, so even if someone forced the UI the API would still 403.
@@ -277,9 +283,10 @@ export default function ClientDetail() {
         taxCardNo: editForm.taxCardNo,
         notes: editForm.notes,
       };
-      // Admin-only fields — only send when admin/GM/VGM is editing so reps
-      // don't accidentally clobber companyName/brands/etc.
-      if (isAdminLevel) {
+      // Company/identity fields — gated by canEditAllFields. Today that's
+      // open to all sales (temporary); flip OPEN_CLIENT_EDIT_FOR_SALES back
+      // to lock them down to admin only. salesRepId stays admin-only below.
+      if (canEditAllFields) {
         Object.assign(payload, {
           companyName: editForm.companyName,
           companyNameEn: editForm.companyNameEn || null,
@@ -291,8 +298,12 @@ export default function ClientDetail() {
           annualBudget: editForm.annualBudget ? parseFloat(editForm.annualBudget) : null,
           website: editForm.website || null,
           creditLimit: editForm.creditLimit ? parseFloat(editForm.creditLimit) : null,
-          salesRepId: editForm.salesRepId ? parseInt(editForm.salesRepId) : undefined,
         });
+      }
+      // Reassigning the client to another rep stays admin-only — it transfers
+      // ownership and would let any sales steal clients from a peer.
+      if (isAdminLevel && editForm.salesRepId) {
+        payload.salesRepId = parseInt(editForm.salesRepId);
       }
       await clientsApi.update(parseInt(id!), payload);
       setShowEditModal(false);
@@ -1806,19 +1817,23 @@ export default function ClientDetail() {
       </Modal>
 
       {/* Edit Client Modal */}
-      <Modal open={showEditModal} onClose={() => setShowEditModal(false)} title={isAr ? 'تعديل بيانات العميل' : 'Edit Client Info'} size={isAdminLevel ? 'xl' : 'md'}>
+      <Modal open={showEditModal} onClose={() => setShowEditModal(false)} title={isAr ? 'تعديل بيانات العميل' : 'Edit Client Info'} size={canEditAllFields ? 'xl' : 'md'}>
         <form onSubmit={handleSaveEdit} className="space-y-4">
-          <div className={`p-3 rounded-lg ${isAdminLevel ? 'bg-purple-50 border border-purple-200' : 'bg-amber-50 border border-amber-200'} text-xs ${isAr ? 'text-right' : ''}`}>
+          <div className={`p-3 rounded-lg ${isAdminLevel ? 'bg-purple-50 border border-purple-200' : canEditAllFields ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'} text-xs ${isAr ? 'text-right' : ''}`}>
             {isAdminLevel
               ? (isAr ? '👑 وضع الإدارة: تقدر تعدّل في كل بيانات العميل بما فيها الاسم والمندوب والبراندات' : '👑 Admin mode: full edit access to every client field')
-              : (isAr ? 'ℹ️ يمكن تعديل بيانات التواصل والسجل التجاري والبطاقة الضريبية' : 'ℹ️ You can update contact info, commercial reg no, and tax card no')}
+              : canEditAllFields
+                ? (isAr ? '🔓 التعديل مفتوح مؤقتاً: تقدر تعدّل كل بيانات العميل ما عدا تغيير المندوب المسؤول' : '🔓 Edit temporarily open: you can update every client field except sales rep assignment')
+                : (isAr ? 'ℹ️ يمكن تعديل بيانات التواصل والسجل التجاري والبطاقة الضريبية' : 'ℹ️ You can update contact info, commercial reg no, and tax card no')}
           </div>
 
-          {/* === Admin-only: identity, brand, ownership === */}
-          {isAdminLevel && (
-            <div className="rounded-xl border-2 border-purple-200 bg-purple-50/40 p-4 space-y-3">
-              <div className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">
-                {isAr ? '· الإدارة فقط ·' : '· Admin only ·'}
+          {/* === Identity / brand / hotel — admin-level always, sales when OPEN_CLIENT_EDIT_FOR_SALES is on === */}
+          {canEditAllFields && (
+            <div className={`rounded-xl border-2 ${isAdminLevel ? 'border-purple-200 bg-purple-50/40' : 'border-emerald-200 bg-emerald-50/40'} p-4 space-y-3`}>
+              <div className={`text-[11px] font-bold uppercase tracking-wider ${isAdminLevel ? 'text-purple-700' : 'text-emerald-700'}`}>
+                {isAdminLevel
+                  ? (isAr ? '· الإدارة فقط ·' : '· Admin only ·')
+                  : (isAr ? '· بيانات الشركة ·' : '· Company info ·')}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1900,20 +1915,22 @@ export default function ClientDetail() {
                     onChange={e => setEditForm(p => ({ ...p, creditLimit: e.target.value }))} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className={isAdminLevel ? 'grid grid-cols-2 gap-3' : ''}>
                 <div>
                   <label className="label">{isAr ? 'الموقع الإلكتروني' : 'Website'}</label>
                   <input className="input bg-white" value={editForm.website} dir="ltr"
                     onChange={e => setEditForm(p => ({ ...p, website: e.target.value }))} />
                 </div>
-                <div>
-                  <label className="label">{isAr ? 'المندوب المسؤول' : 'Sales Rep'}</label>
-                  <select className="input bg-white" value={editForm.salesRepId}
-                    onChange={e => setEditForm(p => ({ ...p, salesRepId: e.target.value }))}>
-                    <option value="">{isAr ? '— اختر —' : '— select —'}</option>
-                    {salesReps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                  </select>
-                </div>
+                {isAdminLevel && (
+                  <div>
+                    <label className="label">{isAr ? 'المندوب المسؤول' : 'Sales Rep'}</label>
+                    <select className="input bg-white" value={editForm.salesRepId}
+                      onChange={e => setEditForm(p => ({ ...p, salesRepId: e.target.value }))}>
+                      <option value="">{isAr ? '— اختر —' : '— select —'}</option>
+                      {salesReps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
           )}
