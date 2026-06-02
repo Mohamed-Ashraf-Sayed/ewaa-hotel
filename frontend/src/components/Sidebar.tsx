@@ -32,7 +32,7 @@ const navItems: NavItem[] = [
   { to: '/hotels', icon: Hotel, labelKey: 'nav_hotels', roles: ['admin', 'general_manager', 'systems_info', 'vice_gm'] },
   { to: '/marketing', icon: Megaphone, labelKey: 'nav_marketing', roles: ['admin', 'general_manager', 'systems_info', 'vice_gm', 'marketing_manager'] },
   { to: '/permissions', icon: Shield, labelKey: 'nav_permissions', roles: ['admin', 'general_manager', 'systems_info', 'vice_gm'] },
-  { to: '/audit-log',   icon: History, labelKey: 'nav_audit_log',   roles: ['admin', 'general_manager', 'systems_info', 'vice_gm'] },
+  { to: '/audit-log',   icon: History, labelKey: 'nav_audit_log',   roles: ['admin'] },
 ];
 
 interface SidebarProps { open: boolean; isMobile?: boolean; onClose?: () => void }

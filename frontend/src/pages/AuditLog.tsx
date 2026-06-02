@@ -29,7 +29,10 @@ export default function AuditLog() {
   const isAr = lang === 'ar';
   const locale = isAr ? arSA : enUS;
 
-  const isAdminLevel = hasRole('admin', 'general_manager', 'systems_info', 'vice_gm');
+  // Audit log is the IT-admin's window into every user's activity, so the
+  // page is intentionally locked to the `admin` role only — GM / VGM /
+  // systems_info can't see it even though they're admin-level elsewhere.
+  const canViewAudit = hasRole('admin');
 
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [users, setUsers] = useState<UserLite[]>([]);
@@ -57,13 +60,13 @@ export default function AuditLog() {
   };
 
   useEffect(() => {
-    if (!isAdminLevel) return;
+    if (!canViewAudit) return;
     usersApi.getAll().then(r => setUsers(r.data as UserLite[])).catch(() => {});
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdminLevel]);
+  }, [canViewAudit]);
 
-  if (!isAdminLevel) {
+  if (!canViewAudit) {
     return <Navigate to="/" replace />;
   }
 
