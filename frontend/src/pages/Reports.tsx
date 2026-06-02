@@ -1,12 +1,12 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Navigate } from 'react-router-dom';
 import {
-  Eye, Building2, FileText, TrendingUp, Users, MapPin, Target as TargetIcon,
+  Eye, Download, Building2, FileText, TrendingUp, Users, MapPin, Target as TargetIcon,
   Filter, CreditCard, Search, BedDouble, Receipt, AlertCircle,
   Sparkles, BarChart3,
 } from 'lucide-react';
 import {
-  contractsApi, clientsApi, visitsApi, paymentsApi, usersApi,
+  pdfApi, contractsApi, clientsApi, visitsApi, paymentsApi, usersApi,
   bookingsApi, quotesApi, hotelsApi, targetsApi,
 } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -204,6 +204,10 @@ export default function Reports() {
   // someone with that role types /reports directly they get bounced back to
   // the dashboard. Sidebar already hides the entry.
   if (hasRole('assistant_sales')) return <Navigate to="/" replace />;
+  // Only managers can pull a PDF copy of a report — everyone else gets the
+  // in-browser viewer. Keeps the data inside the browser for regular reps
+  // and credit/contract/reservation users.
+  const canDownloadPdf = hasRole('admin', 'general_manager', 'systems_info', 'vice_gm', 'sales_director');
   const [generating, setGenerating] = useState<string | null>(null);
   const [openModal, setOpenModal] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, any>>({});
@@ -241,9 +245,8 @@ export default function Reports() {
   };
   const fmtNum = (v: any) => v == null || v === '' ? '' : Number(v).toLocaleString('en');
 
-  // Open the in-browser viewer with the given dataset. Replaces the old
-  // exportToCSV/downloadFile pipeline so the report data stays inside the
-  // browser session.
+  // Open the in-browser viewer with the given dataset. Default action for
+  // every role — keeps the report data inside the browser session.
   const showInViewer = (
     title: string,
     data: any[],
@@ -251,6 +254,73 @@ export default function Reports() {
   ) => {
     setViewerData({ title, headers, data });
     setOpenModal(null);
+  };
+
+  // Manager-only escape hatch: download a server-rendered PDF copy. Used by
+  // the "PDF" button in the filter modal so managers can keep an offline /
+  // shareable record of a report.
+  const downloadPdf = async (key: string) => {
+    setGenerating(`${key}-pdf`);
+    const f = filters[key] || {};
+    try {
+      let blob: BlobPart | null = null;
+      let filename = 'Report.pdf';
+      switch (key) {
+        case 'clients':
+          blob = (await pdfApi.clientReport({
+            type: f.type || undefined, salesRepId: f.salesRepId || undefined,
+            from: f.from || undefined, to: f.to || undefined,
+          })).data;
+          filename = 'Clients_Report.pdf';
+          break;
+        case 'contracts':
+          blob = (await pdfApi.contractsReport({
+            status: f.status || undefined, salesRepId: f.salesRepId || undefined,
+            from: f.from || undefined, to: f.to || undefined,
+          })).data;
+          filename = 'Contracts_Report.pdf';
+          break;
+        case 'visits':
+          blob = (await pdfApi.visitsReport({
+            salesRepId: f.salesRepId || undefined, visitType: f.visitType || undefined,
+            from: f.from || undefined, to: f.to || undefined,
+          })).data;
+          filename = 'Visits_Report.pdf';
+          break;
+        case 'payments':
+          blob = (await pdfApi.paymentsReport({
+            salesRepId: f.salesRepId || undefined, paymentType: f.paymentMethod || undefined,
+            from: f.from || undefined, to: f.to || undefined,
+          })).data;
+          filename = 'Payments_Report.pdf';
+          break;
+        case 'paymentMethods':
+          blob = (await pdfApi.paymentMethodsReport({
+            salesRepId: f.salesRepId || undefined,
+            from: f.from || undefined, to: f.to || undefined,
+          })).data;
+          filename = 'Payment_Methods.pdf';
+          break;
+        case 'team':
+          blob = (await pdfApi.teamReport()).data;
+          filename = 'Team_Performance.pdf';
+          break;
+      }
+      if (!blob) {
+        alert(isAr ? 'لا يوجد PDF متاح لهذا التقرير' : 'No PDF available for this report');
+        return;
+      }
+      const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setOpenModal(null);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || (isAr ? 'فشل تنزيل التقرير' : 'PDF download failed'));
+    } finally {
+      setGenerating(null);
+    }
   };
 
   // Filter helpers — apply client-side date range + rep filters on already-fetched arrays
@@ -696,9 +766,13 @@ export default function Reports() {
       {/* Info */}
       <div className="card p-4 bg-brand-50/30 border-brand-200">
         <p className={`text-xs text-brand-600 ${isAr ? 'text-right' : 'text-left'}`}>
-          🔒 {isAr
-            ? 'تم تعطيل تنزيل التقارير. العرض داخل المتصفح فقط للحفاظ على سرية البيانات.'
-            : 'Report downloads are disabled. Reports are view-only inside the browser to keep the data inside the company.'}
+          {canDownloadPdf
+            ? (isAr
+                ? '🔒 العرض داخل المتصفح هو الافتراضي. كمدير يمكنك تنزيل نسخة PDF لكل تقرير من شاشة الفلاتر.'
+                : '🔒 In-browser view by default. As a manager you can also download a PDF copy from the filter modal.')
+            : (isAr
+                ? '🔒 تم تعطيل تنزيل التقارير. العرض داخل المتصفح فقط للحفاظ على سرية البيانات.'
+                : '🔒 Downloads disabled. Reports are view-only inside the browser to keep the data inside the company.')}
         </p>
       </div>
 
@@ -888,6 +962,14 @@ export default function Reports() {
                   ? (isAr ? 'جاري التحميل...' : 'Loading...')
                   : <><Eye className="w-4 h-4" /> {isAr ? 'عرض التقرير' : 'View Report'}</>}
               </button>
+              {canDownloadPdf && current.hasPdf && (
+                <button onClick={() => downloadPdf(current.key)} disabled={generating === `${current.key}-pdf`}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+                  {generating === `${current.key}-pdf`
+                    ? (isAr ? 'جاري التنزيل...' : 'Downloading...')
+                    : <><Download className="w-4 h-4" /> {isAr ? 'تنزيل PDF' : 'Download PDF'}</>}
+                </button>
+              )}
             </div>
           </div>
         )}
