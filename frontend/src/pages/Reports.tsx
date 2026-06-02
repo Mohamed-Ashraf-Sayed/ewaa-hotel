@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Navigate } from 'react-router-dom';
 import {
   Eye, Download, Building2, FileText, TrendingUp, Users, MapPin, Target as TargetIcon,
   Filter, CreditCard, Search, BedDouble, Receipt, AlertCircle,
@@ -200,13 +199,9 @@ export default function Reports() {
   const { lang } = useLanguage();
   const isAr = lang === 'ar';
   const locale = isAr ? arSA : enUS;
-  // assistant_sales is intentionally blocked from the reports module — if
-  // someone with that role types /reports directly they get bounced back to
-  // the dashboard. Sidebar already hides the entry.
-  if (hasRole('assistant_sales')) return <Navigate to="/" replace />;
-  // Only managers can pull a PDF copy of a report — everyone else gets the
-  // in-browser viewer. Keeps the data inside the browser for regular reps
-  // and credit/contract/reservation users.
+  // Only managers can pull a PDF copy of a report — everyone else (sales rep,
+  // assistant_sales, credit/contracts/reservations users) gets the in-browser
+  // viewer. Keeps the data inside the browser for non-management roles.
   const canDownloadPdf = hasRole('admin', 'general_manager', 'systems_info', 'vice_gm', 'sales_director');
   const [generating, setGenerating] = useState<string | null>(null);
   const [openModal, setOpenModal] = useState<string | null>(null);

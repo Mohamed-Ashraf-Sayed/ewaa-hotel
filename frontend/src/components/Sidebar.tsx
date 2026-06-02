@@ -26,7 +26,7 @@ const navItems: NavItem[] = [
   { to: '/inbox', icon: InboxIcon, labelKey: 'nav_inbox', roles: ['admin', 'general_manager', 'systems_info', 'vice_gm', 'reservations', 'sales_director', 'assistant_sales', 'sales_rep'] },
   { to: '/tasks', icon: CheckSquare, labelKey: 'nav_tasks', roles: ['admin', 'general_manager', 'systems_info', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep'] },
   { to: '/leaderboard', icon: Trophy, labelKey: 'nav_leaderboard', roles: ['admin', 'general_manager', 'systems_info', 'vice_gm', 'sales_director', 'assistant_sales', 'sales_rep'] },
-  { to: '/reports', icon: BarChart3, labelKey: 'nav_reports', roles: ['admin', 'general_manager', 'systems_info', 'vice_gm', 'sales_director'] },
+  { to: '/reports', icon: BarChart3, labelKey: 'nav_reports', roles: ['admin', 'general_manager', 'systems_info', 'vice_gm', 'sales_director', 'assistant_sales'] },
   { to: '/users', icon: Users, labelKey: 'nav_users', roles: ['admin', 'general_manager', 'systems_info', 'vice_gm', 'sales_director', 'assistant_sales'] },
   { to: '/org-chart', icon: Network, labelKey: 'nav_org_chart', roles: ['admin', 'general_manager', 'systems_info', 'vice_gm'] },
   { to: '/hotels', icon: Hotel, labelKey: 'nav_hotels', roles: ['admin', 'general_manager', 'systems_info', 'vice_gm'] },
