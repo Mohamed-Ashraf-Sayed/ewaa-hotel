@@ -1,12 +1,12 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Navigate } from 'react-router-dom';
 import {
-  Download, Building2, FileText, TrendingUp, Users, MapPin, Target as TargetIcon,
-  FileSpreadsheet, Filter, CreditCard, Search, BedDouble, Receipt, AlertCircle,
+  Eye, Building2, FileText, TrendingUp, Users, MapPin, Target as TargetIcon,
+  Filter, CreditCard, Search, BedDouble, Receipt, AlertCircle,
   Sparkles, BarChart3,
 } from 'lucide-react';
 import {
-  pdfApi, contractsApi, clientsApi, visitsApi, paymentsApi, usersApi,
+  contractsApi, clientsApi, visitsApi, paymentsApi, usersApi,
   bookingsApi, quotesApi, hotelsApi, targetsApi,
 } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -211,6 +211,14 @@ export default function Reports() {
   const [hotels, setHotels] = useState<{ id: number; name: string }[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<Category | 'all'>('all');
+  // In-browser viewer state — replaces the old PDF/CSV download path. Reports
+  // now render straight into a modal table instead of being shipped as files,
+  // so the data can't be casually downloaded or forwarded.
+  const [viewerData, setViewerData] = useState<{
+    title: string;
+    headers: { key: string; label: string; transform?: (v: any, row: any) => any }[];
+    data: any[];
+  } | null>(null);
 
   useEffect(() => {
     usersApi.getAll().then(r => {
@@ -224,38 +232,25 @@ export default function Reports() {
     }).catch(() => setHotels([]));
   }, []);
 
-  const downloadFile = (data: BlobPart, filename: string, mimeType = 'application/pdf') => {
-    const url = URL.createObjectURL(new Blob([data], { type: mimeType }));
-    const a = document.createElement('a'); a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   // === Value translators ===
-  // CSV exports always use Latin digits + English date format so the file
-  // opens cleanly in Excel/Google Sheets regardless of the user's UI lang.
+  // Dates/numbers in the viewer use a single fixed format so the table layout
+  // doesn't shift around when the UI language flips.
   const fmtDate = (v: any) => {
     if (!v) return '';
     try { return format(parseISO(String(v)), 'dd/MM/yyyy', { locale: enUS }); } catch { return String(v); }
   };
   const fmtNum = (v: any) => v == null || v === '' ? '' : Number(v).toLocaleString('en');
 
-  const exportToCSV = (
+  // Open the in-browser viewer with the given dataset. Replaces the old
+  // exportToCSV/downloadFile pipeline so the report data stays inside the
+  // browser session.
+  const showInViewer = (
+    title: string,
     data: any[],
-    filename: string,
     headers: { key: string; label: string; transform?: (v: any, row: any) => any }[],
   ) => {
-    const BOM = '﻿';
-    const headerRow = headers.map(h => `"${h.label}"`).join(',');
-    const dataRows = data.map(row =>
-      headers.map(h => {
-        const raw = h.key.split('.').reduce((acc, k) => acc?.[k], row);
-        const val = h.transform ? h.transform(raw, row) : raw;
-        return `"${(val ?? '').toString().replace(/"/g, '""')}"`;
-      }).join(',')
-    );
-    const csv = BOM + [headerRow, ...dataRows].join('\n');
-    downloadFile(csv, filename, 'text/csv;charset=utf-8;');
+    setViewerData({ title, headers, data });
+    setOpenModal(null);
   };
 
   // Filter helpers — apply client-side date range + rep filters on already-fetched arrays
@@ -271,55 +266,38 @@ export default function Reports() {
     });
   };
 
-  const generate = async (key: string, fmt: 'pdf' | 'csv' = 'pdf') => {
-    setGenerating(`${key}-${fmt}`);
+  const generate = async (key: string) => {
+    setGenerating(key);
     const f = filters[key] || {};
+    const reportDef = REPORTS.find(r => r.key === key);
+    const reportTitle = reportDef ? (isAr ? reportDef.title.ar : reportDef.title.en) : '';
     try {
       switch (key) {
-        case 'clients':
-          if (fmt === 'pdf') {
-            const res = await pdfApi.clientReport({
-              type: f.type || undefined,
-              salesRepId: f.salesRepId || undefined,
-              from: f.from || undefined,
-              to: f.to || undefined,
-            });
-            downloadFile(res.data, 'Clients_Report.pdf');
-          } else {
-            let { data } = await clientsApi.getAll({ type: f.type || undefined });
-            if (f.salesRepId) data = data.filter((c: any) => c.salesRep?.id === parseInt(f.salesRepId));
-            data = applyDateRange(data, 'createdAt', f.from, f.to);
-            exportToCSV(data, 'Clients.csv', [
-              { key: 'companyName',   label: 'Company' },
-              { key: 'contactPerson', label: 'Contact' },
-              { key: 'phone',         label: 'Phone' },
-              { key: 'email',         label: 'Email' },
-              { key: 'industry',      label: 'Industry' },
-              { key: 'clientType',    label: 'Type',      transform: v => CLIENT_TYPE_EN[v] || v },
-              { key: 'source',        label: 'Source',    transform: v => SOURCE_EN[v] || v },
-              { key: 'hotel.name',    label: 'Hotel' },
-              { key: 'salesRep.name', label: 'Sales Rep' },
-              { key: 'createdAt',     label: 'Added On',  transform: fmtDate },
-            ]);
-          }
+        case 'clients': {
+          let { data } = await clientsApi.getAll({ type: f.type || undefined });
+          if (f.salesRepId) data = data.filter((c: any) => c.salesRep?.id === parseInt(f.salesRepId));
+          data = applyDateRange(data, 'createdAt', f.from, f.to);
+          showInViewer(reportTitle, data, [
+            { key: 'companyName',   label: 'Company' },
+            { key: 'contactPerson', label: 'Contact' },
+            { key: 'phone',         label: 'Phone' },
+            { key: 'email',         label: 'Email' },
+            { key: 'industry',      label: 'Industry' },
+            { key: 'clientType',    label: 'Type',      transform: v => CLIENT_TYPE_EN[v] || v },
+            { key: 'source',        label: 'Source',    transform: v => SOURCE_EN[v] || v },
+            { key: 'hotel.name',    label: 'Hotel' },
+            { key: 'salesRep.name', label: 'Sales Rep' },
+            { key: 'createdAt',     label: 'Added On',  transform: fmtDate },
+          ]);
           break;
+        }
         case 'contracts': {
-          if (fmt === 'pdf') {
-            const res = await pdfApi.contractsReport({
-              status: f.status || undefined,
-              salesRepId: f.salesRepId || undefined,
-              from: f.from || undefined,
-              to: f.to || undefined,
-            });
-            downloadFile(res.data, 'Contracts_Report.pdf');
-            break;
-          }
           let { data } = await contractsApi.getAll({
             status: f.status || undefined,
             salesRepId: f.salesRepId ? parseInt(f.salesRepId) : undefined,
           });
           data = applyDateRange(data, 'createdAt', f.from, f.to);
-          exportToCSV(data, 'Contracts.csv', [
+          showInViewer(reportTitle, data, [
             { key: 'contractRef',        label: 'Ref' },
             { key: 'client.companyName', label: 'Company' },
             { key: 'hotel.name',         label: 'Hotel' },
@@ -336,20 +314,10 @@ export default function Reports() {
           break;
         }
         case 'visits': {
-          if (fmt === 'pdf') {
-            const res = await pdfApi.visitsReport({
-              salesRepId: f.salesRepId || undefined,
-              visitType: f.visitType || undefined,
-              from: f.from || undefined,
-              to: f.to || undefined,
-            });
-            downloadFile(res.data, 'Visits_Report.pdf');
-            break;
-          }
           let { data } = await visitsApi.getAll({ salesRepId: f.salesRepId ? parseInt(f.salesRepId) : undefined });
           if (f.visitType) data = data.filter((v: any) => v.visitType === f.visitType);
           data = applyDateRange(data, 'visitDate', f.from, f.to);
-          exportToCSV(data, 'Visits.csv', [
+          showInViewer(reportTitle, data, [
             { key: 'visitDate',            label: 'Date',      transform: fmtDate },
             { key: 'client.companyName',   label: 'Company' },
             { key: 'client.contactPerson', label: 'Contact' },
@@ -362,21 +330,11 @@ export default function Reports() {
           break;
         }
         case 'payments': {
-          if (fmt === 'pdf') {
-            const res = await pdfApi.paymentsReport({
-              salesRepId: f.salesRepId || undefined,
-              paymentType: f.paymentMethod || undefined,
-              from: f.from || undefined,
-              to: f.to || undefined,
-            });
-            downloadFile(res.data, 'Payments_Report.pdf');
-            break;
-          }
           let { data } = await paymentsApi.getAll();
           if (f.salesRepId) data = data.filter((p: any) => p.collector?.id === parseInt(f.salesRepId));
           if (f.paymentMethod) data = data.filter((p: any) => p.paymentType === f.paymentMethod);
           data = applyDateRange(data, 'paymentDate', f.from, f.to);
-          exportToCSV(data, 'Payments.csv', [
+          showInViewer(reportTitle, data, [
             { key: 'paymentDate',          label: 'Date',         transform: fmtDate },
             { key: 'client.companyName',   label: 'Company' },
             { key: 'contract.contractRef', label: 'Contract' },
@@ -388,15 +346,6 @@ export default function Reports() {
           break;
         }
         case 'paymentMethods': {
-          if (fmt === 'pdf') {
-            const res = await pdfApi.paymentMethodsReport({
-              salesRepId: f.salesRepId || undefined,
-              from: f.from || undefined,
-              to: f.to || undefined,
-            });
-            downloadFile(res.data, 'Payment_Methods.pdf');
-            break;
-          }
           let { data: payments } = await paymentsApi.getAll();
           if (f.salesRepId) payments = payments.filter((p: any) => p.collector?.id === parseInt(f.salesRepId));
           payments = applyDateRange(payments, 'paymentDate', f.from, f.to);
@@ -424,7 +373,7 @@ export default function Reports() {
             alert(isAr ? 'لا توجد مدفوعات مطابقة للفلاتر' : 'No payments match filters');
             break;
           }
-          exportToCSV(rows, 'Payment_Methods_By_Contract.csv', [
+          showInViewer(reportTitle, rows, [
             { key: 'contractRef',    label: 'Contract' },
             { key: 'companyName',    label: 'Company' },
             { key: 'count',          label: 'Payments #' },
@@ -437,14 +386,9 @@ export default function Reports() {
           break;
         }
         case 'team': {
-          if (fmt === 'pdf') {
-            const res = await pdfApi.teamReport();
-            downloadFile(res.data, 'Team_Performance.pdf');
-            break;
-          }
           const res = await usersApi.getAll();
           const data = res.data.filter((u: any) => ['sales_rep', 'sales_director', 'assistant_sales'].includes(u.role));
-          exportToCSV(data, 'Team.csv', [
+          showInViewer(reportTitle, data, [
             { key: 'name',                   label: 'Name' },
             { key: 'email',                  label: 'Email' },
             { key: 'phone',                  label: 'Phone' },
@@ -469,7 +413,7 @@ export default function Reports() {
             alert(isAr ? 'لا توجد حجوزات مطابقة' : 'No bookings match');
             break;
           }
-          exportToCSV(data, 'Bookings.csv', [
+          showInViewer(reportTitle, data, [
             { key: 'operaConfirmationNo', label: 'Confirmation #' },
             { key: 'client.companyName', label: 'Company' },
             { key: 'guestName',          label: 'Guest' },
@@ -497,7 +441,7 @@ export default function Reports() {
             alert(isAr ? 'لا توجد عروض أسعار مطابقة' : 'No quotes match');
             break;
           }
-          exportToCSV(data, 'Quotes.csv', [
+          showInViewer(reportTitle, data, [
             { key: 'reference',      label: 'Reference' },
             { key: 'clientName',     label: 'Company' },
             { key: 'hotelName',      label: 'Hotel' },
@@ -546,7 +490,7 @@ export default function Reports() {
             alert(isAr ? 'لا توجد متأخرات مطابقة' : 'No outstanding amounts match');
             break;
           }
-          exportToCSV(rows, 'Aging_Report.csv', [
+          showInViewer(reportTitle, rows, [
             { key: 'contractRef', label: 'Contract' },
             { key: 'company',     label: 'Company' },
             { key: 'hotel',       label: 'Hotel' },
@@ -591,10 +535,7 @@ export default function Reports() {
             actualRevenue: t.actual?.revenue || 0,
             revenuePct: t.progress?.revenue || 0,
           }));
-          const fileName = period === 'monthly'
-            ? `Targets_${year}-${String(month).padStart(2, '0')}.csv`
-            : `Targets_${year}-Q${quarter || 1}.csv`;
-          exportToCSV(rows, fileName, [
+          showInViewer(reportTitle, rows, [
             { key: 'name',            label: 'Rep' },
             { key: 'role',            label: 'Role',             transform: v => ROLE_EN[v] || v },
             { key: 'targetContracts', label: 'Target Contracts' },
@@ -652,8 +593,8 @@ export default function Reports() {
         <h1 className="text-2xl font-bold text-brand-900">{isAr ? 'التقارير' : 'Reports'}</h1>
         <p className="text-brand-400 text-sm mt-0.5">
           {isAr
-            ? `${REPORTS.length} تقرير متاح • اضغط على أي بطاقة لاختيار الفلاتر والتنزيل`
-            : `${REPORTS.length} reports available • Click a card to pick filters and download`}
+            ? `${REPORTS.length} تقرير متاح • اضغط على أي بطاقة لاختيار الفلاتر وعرض التقرير`
+            : `${REPORTS.length} reports available • Click a card to pick filters and view the report`}
         </p>
       </div>
 
@@ -736,19 +677,14 @@ export default function Reports() {
                   <p className="text-xs text-brand-400 mt-1 leading-relaxed">{isAr ? r.description.ar : r.description.en}</p>
                 </div>
 
-                {/* Format badges — small chips telling users which formats this
-                    report supports so they don't have to open the modal to find out. */}
+                {/* View-only badge — reports no longer download, they open in
+                    an in-browser table viewer. */}
                 <div className={`mt-4 pt-3 border-t border-brand-100 flex items-center gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
-                  {r.hasPdf && (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 inline-flex items-center gap-1">
-                      <FileText className="w-2.5 h-2.5" /> PDF
-                    </span>
-                  )}
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1">
-                    <FileSpreadsheet className="w-2.5 h-2.5" /> Excel
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200 inline-flex items-center gap-1">
+                    <Eye className="w-2.5 h-2.5" /> {isAr ? 'عرض داخل المتصفح' : 'In-browser view'}
                   </span>
                   <span className={`text-[10px] text-brand-400 ${isAr ? 'mr-auto' : 'ml-auto'}`}>
-                    {isAr ? 'اضغط للتنزيل' : 'Click to download'}
+                    {isAr ? 'اضغط للعرض' : 'Click to view'}
                   </span>
                 </div>
               </button>
@@ -760,9 +696,9 @@ export default function Reports() {
       {/* Info */}
       <div className="card p-4 bg-brand-50/30 border-brand-200">
         <p className={`text-xs text-brand-600 ${isAr ? 'text-right' : 'text-left'}`}>
-          💡 {isAr
-            ? 'ملفات Excel/CSV يمكن فتحها في Microsoft Excel أو Google Sheets. ملفات PDF جاهزة للطباعة والمشاركة.'
-            : 'Excel/CSV files can be opened in Microsoft Excel or Google Sheets. PDF files are ready to print and share.'}
+          🔒 {isAr
+            ? 'تم تعطيل تنزيل التقارير. العرض داخل المتصفح فقط للحفاظ على سرية البيانات.'
+            : 'Report downloads are disabled. Reports are view-only inside the browser to keep the data inside the company.'}
         </p>
       </div>
 
@@ -946,16 +882,66 @@ export default function Reports() {
             )}
 
             <div className={`flex gap-2 pt-2 border-t border-brand-100 ${isAr ? 'flex-row-reverse' : ''}`}>
-              {current.hasPdf && (
-                <button onClick={() => generate(current.key, 'pdf')} disabled={generating === `${current.key}-pdf`}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-sm font-semibold transition-colors disabled:opacity-50">
-                  {generating === `${current.key}-pdf` ? (isAr ? 'جاري الإنشاء...' : 'Generating...') : <><Download className="w-4 h-4" /> PDF</>}
-                </button>
-              )}
-              <button onClick={() => generate(current.key, 'csv')} disabled={generating === `${current.key}-csv`}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50">
-                {generating === `${current.key}-csv` ? (isAr ? 'جاري الإنشاء...' : 'Generating...') : <><FileSpreadsheet className="w-4 h-4" /> Excel/CSV</>}
+              <button onClick={() => generate(current.key)} disabled={generating === current.key}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+                {generating === current.key
+                  ? (isAr ? 'جاري التحميل...' : 'Loading...')
+                  : <><Eye className="w-4 h-4" /> {isAr ? 'عرض التقرير' : 'View Report'}</>}
               </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* === Viewer Modal === */}
+      {/* In-browser table viewer. No download, no print stylesheet, text
+          selection disabled to discourage casual copy-paste. Not a real
+          DRM — a determined user can still inspect the DOM. */}
+      <Modal open={!!viewerData} onClose={() => setViewerData(null)}
+        title={viewerData?.title || ''} size="xl">
+        {viewerData && (
+          <div className="space-y-3 print:hidden" onContextMenu={e => e.preventDefault()}
+               style={{ userSelect: 'none', WebkitUserSelect: 'none' }}>
+            <div className="flex items-center justify-between text-xs text-brand-500 flex-wrap gap-2">
+              <span>{isAr ? 'عدد الصفوف' : 'Rows'}: <strong className="text-brand-900">{viewerData.data.length}</strong></span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[11px]">
+                🔒 {isAr ? 'العرض داخل المتصفح فقط' : 'view-only'}
+              </span>
+            </div>
+
+            <div className="overflow-auto rounded-lg border border-brand-100 max-h-[70vh]">
+              <table className="w-full text-xs">
+                <thead className="bg-brand-50 sticky top-0">
+                  <tr>
+                    {viewerData.headers.map(h => (
+                      <th key={h.key} className="px-3 py-2 text-start font-bold text-brand-700 whitespace-nowrap border-b border-brand-100">
+                        {h.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {viewerData.data.length === 0 ? (
+                    <tr><td colSpan={viewerData.headers.length} className="px-3 py-6 text-center text-brand-400">
+                      {isAr ? 'لا توجد بيانات مطابقة' : 'No matching data'}
+                    </td></tr>
+                  ) : (
+                    viewerData.data.map((row, i) => (
+                      <tr key={i} className="hover:bg-brand-50/30 border-b border-brand-50">
+                        {viewerData.headers.map(h => {
+                          const raw = h.key.split('.').reduce((acc: any, k: string) => acc?.[k], row);
+                          const val = h.transform ? h.transform(raw, row) : raw;
+                          return (
+                            <td key={h.key} className="px-3 py-1.5 text-brand-700 whitespace-nowrap">
+                              {val == null || val === '' ? '—' : String(val)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
