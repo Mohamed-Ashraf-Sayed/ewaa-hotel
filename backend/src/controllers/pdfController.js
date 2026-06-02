@@ -481,11 +481,11 @@ const generateQuote = async (req, res) => {
     // templates to decide whether to render the extra "Hotel" column.
     const isMultiHotel = parsedItems.some(i => i.hotelName);
     const subtotal = parsedItems.reduce((s, i) => s + i.total, 0);
-    // ZATCA-style compound calculation: municipality fee applies to the
-    // subtotal, then VAT applies on (subtotal + municipality). So a 100,000
-    // subtotal with 2.5% muni and 15% VAT settles at 117,875 (not 117,500).
+    // Municipality fee only applies to hotel rooms — meeting halls are exempt.
+    // VAT still applies on the full subtotal + munTax (ZATCA-style compound).
+    const roomsSubtotal = parsedItems.reduce((s, i) => s + (i.kind === 'meeting' ? 0 : i.total), 0);
     const munTaxRate = Math.max(0, parseFloat(municipalityTaxPercent) || 0);
-    const munTax = Math.round(subtotal * munTaxRate / 100);
+    const munTax = Math.round(roomsSubtotal * munTaxRate / 100);
     const vat = Math.round((subtotal + munTax) * 0.15);
     const grandTotal = subtotal + munTax + vat;
 
