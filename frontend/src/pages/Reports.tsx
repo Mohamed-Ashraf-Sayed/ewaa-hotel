@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { Navigate } from 'react-router-dom';
 import {
   Download, Building2, FileText, TrendingUp, Users, MapPin, Target as TargetIcon,
   FileSpreadsheet, Filter, CreditCard, Search, BedDouble, Receipt, AlertCircle,
@@ -8,6 +9,7 @@ import {
   pdfApi, contractsApi, clientsApi, visitsApi, paymentsApi, usersApi,
   bookingsApi, quotesApi, hotelsApi, targetsApi,
 } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import Modal from '../components/Modal';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -194,9 +196,14 @@ const MONTHS_AR = ['يناير','فبراير','مارس','أبريل','مايو
 const MONTHS_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 export default function Reports() {
+  const { hasRole } = useAuth();
   const { lang } = useLanguage();
   const isAr = lang === 'ar';
   const locale = isAr ? arSA : enUS;
+  // assistant_sales is intentionally blocked from the reports module — if
+  // someone with that role types /reports directly they get bounced back to
+  // the dashboard. Sidebar already hides the entry.
+  if (hasRole('assistant_sales')) return <Navigate to="/" replace />;
   const [generating, setGenerating] = useState<string | null>(null);
   const [openModal, setOpenModal] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, any>>({});
