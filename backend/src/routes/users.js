@@ -17,12 +17,13 @@ const passwordRules = {
 
 router.get('/', authenticate, getUsers);
 router.get('/org-chart', authenticate, getOrgChart);
-// User management is admin-only. The authorize() middleware lets `admin` bypass automatically;
-// listing 'admin' here makes the intent explicit and blocks GM / VGM.
-router.post('/', authenticate, authorize('admin'), sanitizeBody(['password']), validateFields(userRules), createUser);
-router.put('/:id', authenticate, authorize('admin'), sanitizeBody(['password']), updateUser);
-router.put('/:id/reset-password', authenticate, authorize('admin'), sanitizeBody(['newPassword']), validateFields(passwordRules), resetPassword);
-router.put('/:id/commission', authenticate, authorize('admin'), updateCommissionRate);
+// User management is open to admin + systems_info (IT). Both are IT-side
+// roles, so they can add/edit/disable team accounts. GM and VGM are
+// intentionally NOT included — they manage people, not system accounts.
+router.post('/', authenticate, authorize('admin', 'systems_info'), sanitizeBody(['password']), validateFields(userRules), createUser);
+router.put('/:id', authenticate, authorize('admin', 'systems_info'), sanitizeBody(['password']), updateUser);
+router.put('/:id/reset-password', authenticate, authorize('admin', 'systems_info'), sanitizeBody(['newPassword']), validateFields(passwordRules), resetPassword);
+router.put('/:id/commission', authenticate, authorize('admin', 'systems_info'), updateCommissionRate);
 // Transfer all active clients from one rep to another (handover when an
 // employee leaves). Admin-only — same auth tier as user management.
 router.post('/:id/transfer-clients', authenticate, authorize('admin', 'general_manager', 'systems_info', 'vice_gm'), transferClients);

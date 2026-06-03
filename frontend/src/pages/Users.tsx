@@ -109,9 +109,10 @@ export default function Users() {
   };
 
   const managers = users.filter(u => ['general_manager', 'systems_info', 'vice_gm', 'sales_director'].includes(u.role));
-  // Only system Admin can add/edit/reset users
-  const canAdmin = hasRole('admin');
-  const isGM = hasRole('admin');
+  // User management is open to admin + systems_info (IT). Backend gates the
+  // mutating routes the same way, so the UI only needs to match.
+  const canAdmin = hasRole('admin', 'systems_info');
+  const isGM = hasRole('admin', 'systems_info');
   const grouped = ROLES.map(r => ({ ...r, members: users.filter(u => u.role === r.value) })).filter(g => g.members.length > 0);
   const isAr = lang === 'ar';
 
