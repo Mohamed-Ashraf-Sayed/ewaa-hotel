@@ -465,6 +465,14 @@ const importClients = async (req, res) => {
         const commercialRegNo = pick(row, COL.commercialRegNo);
         const taxCardNo = pick(row, COL.taxCardNo);
 
+        // Phone is required for every imported client, same rule as the
+        // create form. Anything that doesn't have a usable number gets
+        // skipped with a clear error so the user can fix the spreadsheet.
+        if (!phone || phone.replace(/\D/g, '').length < 6) {
+          summary.errors.push({ line: lineNo, message: `سطر ${lineNo} (${companyName}): رقم الهاتف مطلوب` });
+          continue;
+        }
+
         // Duplicate detection (mirrors createClient logic with brand-overlap rule)
         const normalizedCompany = normalizeName(companyName);
         const normalizedPhone = (phone || '').replace(/\D/g, '');
@@ -507,7 +515,7 @@ const importClients = async (req, res) => {
             companyName,
             companyNameEn: pick(row, COL.companyNameEn) || null,
             contactPerson,
-            phone: phone || null,
+            phone,
             email: email || null,
             address: pick(row, COL.address) || null,
             industry: pick(row, COL.industry) || null,

@@ -16,10 +16,11 @@ const importUpload = multer({
   },
 });
 
-// Lead clients are skeleton records — only the company name and clientType
-// itself are required, everything else is optional. Active clients still need
-// the full set (phone/email/industry/source) so the corporate account record
-// is complete before any contract or booking flow.
+// Lead clients are skeleton records — company name, type and PHONE are the
+// only required fields, everything else is optional. Active clients still
+// need the full set (email/industry/source) so the corporate account record
+// is complete before any contract or booking flow. Phone is required in
+// both modes so every client is reachable.
 const fullClientRules = {
   companyName: { required: true, type: 'name', label: 'اسم الشركة', minLength: 2, maxLength: 200 },
   contactPerson: { required: true, type: 'name', label: 'جهة الاتصال', minLength: 2, maxLength: 100 },
@@ -32,7 +33,7 @@ const fullClientRules = {
 const leadClientRules = {
   companyName: { required: true, type: 'name', label: 'اسم الشركة', minLength: 2, maxLength: 200 },
   contactPerson: { required: false, type: 'name', label: 'جهة الاتصال', minLength: 2, maxLength: 100 },
-  phone: { required: false, type: 'phone', label: 'الهاتف' },
+  phone: { required: true, type: 'phone', label: 'الهاتف' },
   email: { required: false, type: 'email', label: 'البريد الإلكتروني' },
   industry: { required: false, type: 'name', label: 'القطاع' },
   clientType: { required: true, label: 'النوع' },

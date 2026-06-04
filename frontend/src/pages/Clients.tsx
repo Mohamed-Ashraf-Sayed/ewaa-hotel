@@ -403,7 +403,7 @@ export default function Clients() {
             </div>
             <div>
               <label className="label">
-                {isAr ? 'رقم الهاتف' : 'Phone Number'}{form.clientType !== 'lead' && ' *'}
+                {isAr ? 'رقم الهاتف' : 'Phone Number'} *
               </label>
               <div className="flex gap-2" dir="ltr">
                 <select className="input w-28" value={form.countryCode}
@@ -457,8 +457,8 @@ export default function Clients() {
                   </optgroup>
                 </select>
                 <input className="input flex-1" type="tel"
-                  required={form.clientType !== 'lead'}
-                  pattern={form.clientType === 'lead' ? undefined : '[\\d\\s\\-]{6,15}'}
+                  required
+                  pattern="[\\d\\s\\-]{6,15}"
                   placeholder="5XXXXXXXX"
                   title={isAr ? 'أرقام فقط (بدون كود الدولة)' : 'Numbers only (no country code)'}
                   value={form.phoneNumber}
