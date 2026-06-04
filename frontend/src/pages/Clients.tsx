@@ -83,6 +83,9 @@ export default function Clients() {
     notes: ''
   };
   const [form, setForm] = useState(emptyForm);
+  // True when the user picks "Other" in the industry dropdown — switches the
+  // field into a free-text input so they can type their own sector.
+  const [otherIndustry, setOtherIndustry] = useState(false);
 
   const BRAND_OPTS = [
     { value: 'muhaidib_serviced', label_ar: 'شقق المهيدب المخدومة', label_en: 'Muhaidib Serviced Apartments' },
@@ -134,6 +137,7 @@ export default function Clients() {
       await clientsApi.create(payload);
       setShowModal(false);
       setForm(emptyForm);
+      setOtherIndustry(false);
       loadClients();
     } catch (err: any) {
       alert(err.response?.data?.message || (isAr ? 'حدث خطأ أثناء إضافة العميل' : 'Error adding client'));
@@ -475,12 +479,31 @@ export default function Clients() {
             </div>
             <div>
               <label className="label">
-                {isAr ? 'القطاع' : 'Industry'}{form.clientType !== 'lead' && ' *'}
+                {isAr ? 'القطاع' : 'Industry'} *
               </label>
-              <select className="input" required={form.clientType !== 'lead'} value={form.industry} onChange={e => setForm(p => ({ ...p, industry: e.target.value }))}>
+              <select className="input" required
+                value={otherIndustry ? '__OTHER__' : form.industry}
+                onChange={e => {
+                  if (e.target.value === '__OTHER__') {
+                    setOtherIndustry(true);
+                    setForm(p => ({ ...p, industry: '' }));
+                  } else {
+                    setOtherIndustry(false);
+                    setForm(p => ({ ...p, industry: e.target.value }));
+                  }
+                }}>
                 <option value="">{isAr ? 'اختر...' : 'Select...'}</option>
-                {INDUSTRY_OPTS.map(i => <option key={i} value={i}>{i}</option>)}
+                {INDUSTRY_OPTS.filter(i => i !== 'أخرى' && i !== 'Other').map(i => (
+                  <option key={i} value={i}>{i}</option>
+                ))}
+                <option value="__OTHER__">{isAr ? 'أخرى' : 'Other'}</option>
               </select>
+              {otherIndustry && (
+                <input className="input mt-2" required minLength={2} maxLength={80}
+                  placeholder={isAr ? 'اكتب اسم القطاع' : 'Type your sector'}
+                  value={form.industry}
+                  onChange={e => setForm(p => ({ ...p, industry: e.target.value }))} />
+              )}
             </div>
             <div>
               <label className="label">{isAr ? 'النوع' : 'Type'} *</label>
@@ -596,7 +619,7 @@ export default function Clients() {
             </div>
           </div>
           <div className="flex gap-3 pt-2">
-            <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>{isAr ? 'إلغاء' : 'Cancel'}</button>
+            <button type="button" className="btn-secondary" onClick={() => { setShowModal(false); setOtherIndustry(false); }}>{isAr ? 'إلغاء' : 'Cancel'}</button>
             <button type="submit" className="btn-primary flex-1 justify-center" disabled={saving}>
               {saving ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'إضافة العميل' : 'Add Client')}
             </button>

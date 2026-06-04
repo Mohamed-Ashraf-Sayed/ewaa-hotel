@@ -473,6 +473,13 @@ const importClients = async (req, res) => {
           continue;
         }
 
+        // Industry/sector is required too — same rule as the create form.
+        const industryRaw = pick(row, COL.industry);
+        if (!industryRaw || !String(industryRaw).trim()) {
+          summary.errors.push({ line: lineNo, message: `سطر ${lineNo} (${companyName}): القطاع مطلوب` });
+          continue;
+        }
+
         // Duplicate detection (mirrors createClient logic with brand-overlap rule)
         const normalizedCompany = normalizeName(companyName);
         const normalizedPhone = (phone || '').replace(/\D/g, '');
@@ -518,7 +525,7 @@ const importClients = async (req, res) => {
             phone,
             email: email || null,
             address: pick(row, COL.address) || null,
-            industry: pick(row, COL.industry) || null,
+            industry: String(industryRaw).trim(),
             clientType,
             source,
             salesRepId: req.user.id,

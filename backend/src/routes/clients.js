@@ -35,7 +35,7 @@ const leadClientRules = {
   contactPerson: { required: false, type: 'name', label: 'جهة الاتصال', minLength: 2, maxLength: 100 },
   phone: { required: true, type: 'phone', label: 'الهاتف' },
   email: { required: false, type: 'email', label: 'البريد الإلكتروني' },
-  industry: { required: false, type: 'name', label: 'القطاع' },
+  industry: { required: true, type: 'name', label: 'القطاع' },
   clientType: { required: true, label: 'النوع' },
   source: { required: false, label: 'مصدر العميل' },
 };
