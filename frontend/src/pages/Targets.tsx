@@ -36,7 +36,9 @@ export default function Targets() {
   const { t, lang } = useLanguage();
   const { user, hasRole } = useAuth();
   const isAr = lang === 'ar';
-  const canManage = hasRole('sales_director', 'general_manager', 'systems_info', 'vice_gm');
+  // assistant_sales (deputy of a sales_director) can also set targets for
+  // their team. Backend enforces the team-scope check.
+  const canManage = hasRole('sales_director', 'assistant_sales', 'general_manager', 'systems_info', 'vice_gm');
 
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());

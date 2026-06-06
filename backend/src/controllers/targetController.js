@@ -50,10 +50,12 @@ const upsertTarget = async (req, res) => {
       return res.status(400).json({ message: 'userId, period, and year are required' });
     }
 
-    // Authorization: sales_director can only set for their subordinates
-    if (req.user.role === 'sales_director') {
-      const subIds = await getSubordinateIds(req.user.id);
-      if (!subIds.includes(parseInt(userId))) {
+    // Authorization: sales_director and assistant_sales (deputy) can only
+    // set targets for people in their team scope — assistant_sales inherits
+    // the manager's team (peers + self), excluding the manager.
+    if (isManagerScope(req.user)) {
+      const allowed = await getAccessUserIds(req.user);
+      if (!allowed.includes(parseInt(userId))) {
         return res.status(403).json({ message: 'You can only set targets for your team members' });
       }
     }

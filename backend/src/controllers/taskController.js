@@ -65,6 +65,16 @@ const createTask = async (req, res) => {
       return res.status(400).json({ message: 'Title and assignee are required' });
     }
 
+    // Authorization: sales_director and assistant_sales (deputy) can only
+    // assign tasks to people in their team scope. Admin-level roles bypass
+    // this check — they can assign across the company.
+    if (isManagerScope(req.user) && !ADMIN_ROLES.includes(req.user.role)) {
+      const allowed = await getAccessUserIds(req.user);
+      if (!allowed.includes(parseInt(assigneeId))) {
+        return res.status(403).json({ message: 'You can only assign tasks to your team members' });
+      }
+    }
+
     const task = await prisma.task.create({
       data: {
         title,

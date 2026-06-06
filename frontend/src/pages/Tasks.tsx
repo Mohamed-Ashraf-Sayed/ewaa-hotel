@@ -36,7 +36,9 @@ export default function Tasks() {
   const { lang } = useLanguage();
   const { hasRole } = useAuth();
   const isAr = lang === 'ar';
-  const canManage = hasRole('sales_director', 'general_manager', 'systems_info', 'vice_gm');
+  // assistant_sales (deputy of a sales_director) can also create/delete
+  // tasks for their team. Backend enforces the team-scope check.
+  const canManage = hasRole('sales_director', 'assistant_sales', 'general_manager', 'systems_info', 'vice_gm');
   const isAdmin = hasRole('general_manager', 'systems_info', 'vice_gm');
   const TASK_TYPES = isAr ? TASK_TYPES_AR : TASK_TYPES_EN;
 
@@ -63,7 +65,10 @@ export default function Tasks() {
 
   useEffect(() => { load(); }, [filter]);
   useEffect(() => {
-    usersApi.getAll().then(r => setUsers(r.data.filter((u: any) => ['sales_rep', 'sales_director'].includes(u.role))));
+    // Include assistant_sales so a deputy can pick themselves (or a peer
+    // who has the same role) as an assignee. The server already filters
+    // users to the caller's scope.
+    usersApi.getAll().then(r => setUsers(r.data.filter((u: any) => ['sales_rep', 'sales_director', 'assistant_sales'].includes(u.role))));
     if (canManage) {
       clientsApi.getAll().then(r => setClients(r.data));
     }
