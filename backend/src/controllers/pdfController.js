@@ -935,17 +935,25 @@ const generateQuote = async (req, res) => {
       return cy + h + 3;
     };
 
+    // Halls-only quote (every item is a meeting hall, no hotel rooms) drops
+    // the room-centric lines: Wi-Fi and meals (benefits), the check-in /
+    // check-out time paragraph (terms 1), and the word "room" in the
+    // cancellation policy bullets.
+    const isHallsOnly = parsedItems.length > 0 && parsedItems.every(i => i.kind === 'meeting');
+
     y += 5;
     y = section(y, t.benefits);
     y = bullet(y, t.benefit1(munTaxRate));
     y = bullet(y, t.benefit2);
-    y = bullet(y, t.benefit3);
-    const mealsLine = t.benefit4(meals);
-    if (mealsLine) y = bullet(y, mealsLine);
+    if (!isHallsOnly) {
+      y = bullet(y, t.benefit3);
+      const mealsLine = t.benefit4(meals);
+      if (mealsLine) y = bullet(y, mealsLine);
+    }
 
     y += 6;
     y = section(y, t.termsTitle);
-    y = para(y, t.terms1);
+    if (!isHallsOnly) y = para(y, t.terms1);
     y = para(y, t.terms2);
     y = para(y, t.terms3);
     y = para(y, t.terms4);
@@ -953,9 +961,16 @@ const generateQuote = async (req, res) => {
     y += 4;
     y = section(y, t.cancellation);
     y = para(y, t.cancelIntro);
-    y = bullet(y, t.cancel1);
-    y = bullet(y, t.cancel2);
-    y = bullet(y, t.cancel3);
+    const cancelText = (s) => {
+      if (!isHallsOnly) return s;
+      return s
+        .replace(/room rate or event charge/gi, 'event charge')
+        .replace(/room rate/gi, 'rate')
+        .replace(/سعر الغرفة/g, 'السعر');
+    };
+    y = bullet(y, cancelText(t.cancel1));
+    y = bullet(y, cancelText(t.cancel2));
+    y = bullet(y, cancelText(t.cancel3));
 
     y += 4;
     y = section(y, t.otherConditions);
@@ -1036,8 +1051,10 @@ const generateQuote = async (req, res) => {
     drawLabel(`${t.signature}:`, 310, y);
     doc.moveTo(370, y + 10).lineTo(555, y + 10).strokeColor(LIGHT).lineWidth(0.5).stroke();
     y += 25;
-    filledField(t.titleField, repTitle, 40, 80, 280);
-    filledField(t.dateField, repDate, 310, 350, 555);
+    // Title field dropped from the prepared-by block per business request —
+    // the rep's name + signature is enough; the role/title is already shown
+    // beside their name elsewhere. Date moves up to the left slot.
+    filledField(t.dateField, repDate, 40, 80, 280);
     y += 25;
     drawLabel(`${t.companyStamp}:`, 40, y);
     y += 30;
