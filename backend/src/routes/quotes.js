@@ -289,6 +289,11 @@ router.get('/:id/pdf', authenticate, async (req, res) => {
         nights: String(i.nights ?? ''),
         rooms: String(i.rooms ?? ''),
         ratePerNight: String(i.rate ?? ''),
+        // Preserve per-item stay window when re-rendering a saved quote.
+        arrivalDate: i.arrivalDate || '',
+        departureDate: i.departureDate || '',
+        hotelId: i.hotelId ?? '',
+        kind: i.kind || 'room',
       })),
       validDays: quote.validDays,
       notes: quote.notes,

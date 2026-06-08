@@ -192,7 +192,7 @@ const QUOTE_T = {
     clientDetails: 'Client Details',
     reference: 'Reference', date: 'Date', validUntil: 'Valid Until', preparedBy: 'Prepared By',
     company: 'Company', contact: 'Contact', phone: 'Phone', email: 'Email',
-    descRoom: 'Description', roomType: 'Room Type', rooms: 'Rooms', nights: 'Nights',
+    descRoom: 'Description', roomType: 'Room Type', stayDates: 'Stay Dates', rooms: 'Rooms', nights: 'Nights',
     rateNight: 'Rate/Night (SAR)', totalCol: 'Total (SAR)',
     hallType: 'Hall Type', persons: 'Persons', duration: 'Duration (days)', rateDay: 'Rate/Day (SAR)',
     roomsHeading: 'Hotel Rooms', meetingsHeading: 'Meeting Rooms',
@@ -262,7 +262,7 @@ const QUOTE_T = {
     clientDetails: 'بيانات العميل',
     reference: 'المرجع', date: 'التاريخ', validUntil: 'صالح حتى', preparedBy: 'أُعدّ بواسطة',
     company: 'الشركة', contact: 'جهة الاتصال', phone: 'الهاتف', email: 'البريد الإلكتروني',
-    descRoom: 'الوصف', roomType: 'نوع الغرفة', rooms: 'الغرف', nights: 'الليالي',
+    descRoom: 'الوصف', roomType: 'نوع الغرفة', stayDates: 'تواريخ الإقامة', rooms: 'الغرف', nights: 'الليالي',
     rateNight: 'السعر / ليلة (ر.س)', totalCol: 'الإجمالي (ر.س)',
     hallType: 'نوع القاعة', persons: 'الأشخاص', duration: 'المدة (يوم)', rateDay: 'السعر / يوم (ر.س)',
     roomsHeading: 'الغرف الفندقية', meetingsHeading: 'قاعات الاجتماعات',
@@ -469,6 +469,11 @@ const generateQuote = async (req, res) => {
         kind,
         hotelId: h ? h.id : null,
         hotelName: h ? (h.name || h.nameEn || '') : '',
+        // Per-item stay window — lets one quote cover multiple arrivals
+        // (e.g. a group splits into two waves, or two sub-groups stay at
+        // different hotels on different dates). Empty strings when missing.
+        arrivalDate: item.arrivalDate || '',
+        departureDate: item.departureDate || '',
       };
     });
     // Both kinds use the same A × B × C shape — just the variable names
@@ -778,20 +783,35 @@ const generateQuote = async (req, res) => {
         const colDur   = isMeet ? t.duration : t.nights;
         const colRate  = isMeet ? t.rateDay  : t.rateNight;
 
+        // Compact "15 May - 20 May" formatter — wider formats overflow the
+        // narrow Stay Dates column in the items table.
+        const fmtShortDay = (raw) => {
+          if (!raw) return '';
+          const d = new Date(raw);
+          if (isNaN(d.getTime())) return '';
+          return `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })}`;
+        };
+        const stayRange = (item) => {
+          const a = fmtShortDay(item.arrivalDate);
+          const dep = fmtShortDay(item.departureDate);
+          if (a && dep) return `${a} - ${dep}`;
+          return a || dep || '-';
+        };
+
         const widthsEn  = isMultiHotel
-          ? [70, 120, 70, 45, 45, 65, 100]
-          : [140, 80, 50, 50, 75, 120];
+          ? [55, 100, 55, 75, 40, 35, 55, 100]
+          : [120, 65, 80, 45, 40, 60, 105];
         const headersEn = isMultiHotel
-          ? [hotelLabel, t.descRoom, colType, colCount, colDur, colRate, t.totalCol]
-          : [t.descRoom, colType, colCount, colDur, colRate, t.totalCol];
+          ? [hotelLabel, t.descRoom, colType, t.stayDates, colCount, colDur, colRate, t.totalCol]
+          : [t.descRoom, colType, t.stayDates, colCount, colDur, colRate, t.totalCol];
         const alignsEn  = isMultiHotel
-          ? ['left', 'left', 'left', 'center', 'center', 'right', 'right']
-          : ['left', 'left', 'center', 'center', 'right', 'right'];
+          ? ['left', 'left', 'left', 'center', 'center', 'center', 'right', 'right']
+          : ['left', 'left', 'center', 'center', 'center', 'right', 'right'];
         const widths  = isAr ? [...widthsEn].reverse()  : widthsEn;
         const headers = isAr ? [...headersEn].reverse() : headersEn;
         const arAligns = isMultiHotel
-          ? ['right', 'right', 'center', 'center', 'center', 'right', 'right']
-          : ['right', 'center', 'center', 'center', 'right', 'right'];
+          ? ['right', 'right', 'center', 'center', 'center', 'center', 'right', 'right']
+          : ['right', 'center', 'center', 'center', 'center', 'right', 'right'];
         const headerAligns = isAr ? arAligns : alignsEn;
         const bodyAligns   = isAr ? arAligns : alignsEn;
 
@@ -801,7 +821,7 @@ const generateQuote = async (req, res) => {
         });
 
         sectionItems.forEach((item, i) => {
-          const baseRowEn = [item.description, item.roomType || '-', item.rooms, item.nights, formatNum(item.rate), formatNum(item.total)];
+          const baseRowEn = [item.description, item.roomType || '-', stayRange(item), item.rooms, item.nights, formatNum(item.rate), formatNum(item.total)];
           const rowEn = isMultiHotel ? [item.hotelName || '-', ...baseRowEn] : baseRowEn;
           const row = isAr ? [...rowEn].reverse() : rowEn;
           y = drawRow(doc, y, row, widths, {

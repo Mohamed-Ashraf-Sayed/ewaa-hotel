@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, FileText, Plus, Clock, MapPin, CreditCard, Receipt, Mail, ExternalLink, BedDouble, Building2, Calendar, Pencil, XCircle, LogIn, LogOut, History, Trash2 } from 'lucide-react';
+import { ArrowRight, FileText, Plus, Clock, MapPin, CreditCard, Receipt, Mail, ExternalLink, BedDouble, Building2, Calendar, Pencil, XCircle, LogIn, LogOut, History, Trash2, User as UserIcon, Phone, Briefcase, Wallet, Hash } from 'lucide-react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { clientsApi, visitsApi, activitiesApi, contractsApi, hotelsApi, paymentsApi, pdfApi, emailApi, attachmentsApi, bookingsApi, usersApi, quotesApi } from '../services/api';
@@ -19,6 +19,29 @@ const activityIcons: Record<string, string> = {
   note: '📝', call: '📞', email: '✉️', meeting: '🤝',
   visit: '🗺️', whatsapp: '💬', contract_upload: '📄', contract_approval: '✅'
 };
+
+// Single-cell field renderer used in the header info grid. Keeps the label
+// tiny + uppercase-ish, the value bold, and lets the value be a link (phone /
+// mailto) when href is provided.
+function InfoCell({ isAr, Icon, label, value, href, dir, truncate }: {
+  isAr: boolean; Icon: any; label: string; value: string;
+  href?: string; dir?: 'ltr' | 'rtl'; truncate?: boolean;
+}) {
+  const valueClasses = `text-sm font-semibold text-brand-900 leading-tight ${truncate ? 'truncate' : ''} ${href ? 'hover:text-brand-600 transition-colors' : ''}`;
+  return (
+    <div className={`flex items-start gap-2.5 min-w-0 ${isAr ? 'flex-row-reverse text-right' : ''}`}>
+      <Icon className="w-4 h-4 text-brand-300 mt-0.5 flex-shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] text-brand-400 font-medium uppercase tracking-wide">{label}</p>
+        {href ? (
+          <a href={href} dir={dir} className={`block ${valueClasses}`}>{value}</a>
+        ) : (
+          <p dir={dir} className={valueClasses}>{value}</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function ClientDetail() {
   const { id } = useParams<{ id: string }>();
@@ -108,10 +131,10 @@ export default function ClientDetail() {
   const [emailFiles, setEmailFiles] = useState<File[]>([]);
   const [emailSending, setEmailSending] = useState(false);
   type QuoteItemKind = 'room' | 'meeting';
-  const [quoteItems, setQuoteItems] = useState([{ description: '', roomType: '', nights: '', rooms: '', ratePerNight: '', hotelId: '', kind: 'room' as QuoteItemKind }]);
+  const [quoteItems, setQuoteItems] = useState([{ description: '', roomType: '', nights: '', rooms: '', ratePerNight: '', hotelId: '', kind: 'room' as QuoteItemKind, arrivalDate: '', departureDate: '' }]);
   type MealKey = 'none' | 'breakfast' | 'lunch' | 'dinner' | 'full_board';
   type QuoteMode = 'rooms' | 'meetings' | 'mixed';
-  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en', meals: ['breakfast'] as MealKey[], paymentTerms: '', arrivalDate: '', multiHotel: false, quoteMode: 'rooms' as QuoteMode });
+  const [quoteForm, setQuoteForm] = useState({ validDays: '30', notes: '', municipalityTaxPercent: '', lang: 'ar' as 'ar' | 'en', meals: ['breakfast'] as MealKey[], paymentTerms: '', multiHotel: false, quoteMode: 'rooms' as QuoteMode });
   const [quoteHotelId, setQuoteHotelId] = useState<number | null>(null);
   const [hotelSearch, setHotelSearch] = useState('');
   const [showHotelDropdown, setShowHotelDropdown] = useState(false);
@@ -394,63 +417,101 @@ export default function ClientDetail() {
 
   const approvedContracts = clientData.contracts?.filter((c: Contract) => c.status === 'approved') || [];
 
+  // Permission to edit the profile (existing rule kept intact, extracted
+  // here so the new header can use it without nesting big conditions).
+  const canEditProfile = hasRole('sales_rep', 'sales_director', 'general_manager', 'systems_info', 'vice_gm', 'admin') ||
+    (hasRole('assistant_sales') && client.salesRepId === user?.id);
+
   return (
-    <div className="space-y-5 max-w-5xl">
-      {/* Header */}
-      <div className={`flex items-start gap-4 ${isAr ? 'flex-row-reverse' : ''}`}>
-        <div className="flex-1">
-          <div className={`flex items-start justify-between flex-wrap gap-3 ${isAr ? 'flex-row-reverse text-right' : ''}`}>
-            <div className={isAr ? 'text-right' : 'text-left'}>
-              <div className={`flex items-center gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
-                <h1 className="text-2xl font-bold text-brand-900">{client.companyName}</h1>
-                {/* Assistant sales can only edit clients assigned to them personally;
-                    they can still SEE the whole team's clients per access filter. */}
-                {hasRole('sales_rep', 'sales_director', 'general_manager', 'systems_info', 'vice_gm', 'admin') ||
-                 (hasRole('assistant_sales') && client.salesRepId === user?.id) ? (
-                  <button onClick={openEditClient}
-                    className="text-xs px-2 py-1 rounded-md bg-brand-50 text-brand-600 hover:bg-brand-100 font-semibold">
-                    ✎ {isAr ? 'تعديل' : 'Edit'}
-                  </button>
-                ) : null}
-                {/* Archive (soft-delete) — admin-level only, gated by backend
-                    too. Goes through a confirm modal because it removes the
-                    client from every list view (visits/contracts/etc stay in
-                    the DB but become invisible). */}
-                {isAdminLevel && (
-                  <button onClick={() => { setShowDeleteModal(true); setDeleteConfirmText(''); }}
-                    className="text-xs px-2 py-1 rounded-md bg-red-50 text-red-600 hover:bg-red-100 font-semibold inline-flex items-center gap-1">
-                    <Trash2 className="w-3 h-3" />
-                    {isAr ? 'حذف' : 'Delete'}
-                  </button>
-                )}
-              </div>
-              {(client as any).companyNameEn && isAr && (
-                <p className="text-sm text-brand-400 mt-0.5">{(client as any).companyNameEn}</p>
-              )}
-              <div className={`flex items-center gap-3 mt-1 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
-                <span className={client.clientType === 'active' ? 'badge-active' : 'badge-lead'}>
-                  {CLIENT_TYPE_LABEL[client.clientType]}
-                </span>
-                {client.industry && <span className="text-sm text-brand-400">{client.industry}</span>}
-                {client.hotel && <span className="text-sm text-brand-400">📍 {client.hotel.name}</span>}
-              </div>
+    <div className="space-y-6 max-w-6xl">
+      {/* === Premium minimalist header card. Single card with the name +
+          inline meta + all contact/business fields grouped below a soft
+          divider. No gradient banners — relies on typography and spacing. === */}
+      <div className="bg-white rounded-2xl border border-brand-100 shadow-sm">
+        <div className={`p-6 md:p-7 flex items-start gap-5 ${isAr ? 'flex-row-reverse text-right' : ''}`}>
+          {/* Compact monogram tile — square, elegant, single solid color */}
+          <div className="w-14 h-14 rounded-xl bg-brand-900 text-white flex items-center justify-center text-xl font-bold flex-shrink-0 tracking-tight">
+            {client.companyName?.charAt(0) || '?'}
+          </div>
+
+          {/* Name + meta block */}
+          <div className="flex-1 min-w-0">
+            <div className={`flex items-center gap-3 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
+              <h1 className="text-2xl md:text-[28px] font-bold text-brand-900 tracking-tight leading-tight">{client.companyName}</h1>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                client.clientType === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${client.clientType === 'active' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                {CLIENT_TYPE_LABEL[client.clientType]}
+              </span>
+            </div>
+            {(client as any).companyNameEn && isAr && (
+              <p className="text-sm text-brand-400 mt-1">{(client as any).companyNameEn}</p>
+            )}
+            <div className={`flex items-center gap-2 mt-2 text-sm text-brand-500 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
+              {client.industry && <span>{client.industry}</span>}
+              {client.industry && client.hotel && <span className="text-brand-300">·</span>}
+              {client.hotel && <span>{client.hotel.name}</span>}
               {(client as any).createdAt && (
-                <div className={`flex items-center gap-1.5 mt-2 text-xs text-brand-400 ${isAr ? 'flex-row-reverse' : ''}`}>
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>
-                    {isAr ? 'تم إنشاء البروفايل في ' : 'Profile created on '}
+                <>
+                  {(client.industry || client.hotel) && <span className="text-brand-300">·</span>}
+                  <span className="text-brand-400">
+                    {isAr ? 'منذ ' : 'Since '}
                     {format(parseISO((client as any).createdAt), 'dd MMM yyyy', { locale })}
-                    {' · '}
-                    {format(parseISO((client as any).createdAt), 'hh:mm a', { locale })}
                   </span>
-                </div>
+                </>
               )}
             </div>
           </div>
+
+          {/* Icon-only actions — subtle, premium */}
+          <div className={`flex items-center gap-0.5 flex-shrink-0 ${isAr ? 'flex-row-reverse' : ''}`}>
+            {canEditProfile && (
+              <button onClick={openEditClient} title={isAr ? 'تعديل' : 'Edit'}
+                className="p-2 rounded-lg text-brand-400 hover:text-brand-700 hover:bg-brand-50 transition-colors">
+                <Pencil className="w-4 h-4" />
+              </button>
+            )}
+            {isAdminLevel && (
+              <button onClick={() => { setShowDeleteModal(true); setDeleteConfirmText(''); }}
+                title={isAr ? 'حذف' : 'Delete'}
+                className="p-2 rounded-lg text-brand-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+            <Link to="/clients" title={isAr ? 'رجوع' : 'Back'}
+              className="p-2 rounded-lg text-brand-400 hover:text-brand-700 hover:bg-brand-50 transition-colors">
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
-        <Link to="/clients" className="p-2 rounded-lg hover:bg-brand-100 text-brand-400 mt-0.5 flex-shrink-0">
-          <ArrowRight className="w-5 h-5" />
-        </Link>
+
+        {/* Inline info grid — every field as a column with subtle label. No
+            colored boxes, just typography and a thin top divider. */}
+        <div className="border-t border-brand-100 px-6 md:px-7 py-5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-4">
+          <InfoCell isAr={isAr} Icon={UserIcon} label={t('client_contact')} value={client.contactPerson} />
+          {client.phone && (
+            <InfoCell isAr={isAr} Icon={Phone} label={t('client_phone')} value={client.phone} href={`tel:${client.phone}`} dir="ltr" />
+          )}
+          {client.email && (
+            <InfoCell isAr={isAr} Icon={Mail} label={t('client_email')} value={client.email} href={`mailto:${client.email}`} dir="ltr" truncate />
+          )}
+          {client.address && (
+            <InfoCell isAr={isAr} Icon={MapPin} label={isAr ? 'العنوان' : 'Address'} value={client.address} />
+          )}
+          {client.salesRep && (
+            <InfoCell isAr={isAr} Icon={Briefcase} label={t('contract_rep')} value={client.salesRep.name} />
+          )}
+          {client.estimatedRooms != null && (
+            <InfoCell isAr={isAr} Icon={BedDouble} label={t('client_estimated_rooms')} value={String(client.estimatedRooms)} />
+          )}
+          {client.annualBudget != null && (
+            <InfoCell isAr={isAr} Icon={Wallet} label={t('client_budget')} value={`${client.annualBudget.toLocaleString()} ${t('sar')}`} />
+          )}
+          {((client as any).commercialRegNo || (client as any).taxCardNo) && (
+            <InfoCell isAr={isAr} Icon={Hash} label={isAr ? 'السجل / الضريبي' : 'CR / Tax'} value={(client as any).commercialRegNo || (client as any).taxCardNo} dir="ltr" truncate />
+          )}
+        </div>
       </div>
 
 
@@ -482,136 +543,141 @@ export default function ClientDetail() {
         </div>
       )}
 
-      {/* Contact Info */}
-      <div className="card p-5">
-        <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 ${isAr ? 'text-right' : 'text-left'}`}>
-          <div><p className="text-xs text-brand-400 mb-1">{t('client_contact')}</p><p className="font-medium text-brand-900">{client.contactPerson}</p></div>
-          {client.phone && <div><p className="text-xs text-brand-400 mb-1">{t('client_phone')}</p><a href={`tel:${client.phone}`} dir="ltr" style={{ unicodeBidi: 'plaintext' }} className="font-medium text-brand-600 inline-block">{client.phone}</a></div>}
-          {client.email && <div><p className="text-xs text-brand-400 mb-1">{t('client_email')}</p><a href={`mailto:${client.email}`} dir="ltr" className="font-medium text-brand-600 truncate block text-xs">{client.email}</a></div>}
-          {client.estimatedRooms && <div><p className="text-xs text-brand-400 mb-1">{t('client_estimated_rooms')}</p><p className="font-medium text-brand-900">{client.estimatedRooms}</p></div>}
-          {client.annualBudget && <div><p className="text-xs text-brand-400 mb-1">{t('client_budget')}</p><p className="font-medium text-brand-900">{client.annualBudget.toLocaleString()} {t('sar')}</p></div>}
-          {client.salesRep && <div><p className="text-xs text-brand-400 mb-1">{t('contract_rep')}</p><p className="font-medium text-brand-900">{client.salesRep.name}</p></div>}
-          {client.address && <div className="col-span-2"><p className="text-xs text-brand-400 mb-1">{lang === 'ar' ? 'العنوان' : 'Address'}</p><p className="font-medium text-brand-900">{client.address}</p></div>}
-          <div className="col-span-2">
-            <p className="text-xs text-brand-400 mb-1">{isAr ? 'الموقع الجغرافي' : 'Geo Location'}</p>
-            <div className={`flex items-center gap-3 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
+      {/* === Slim geo + notes row — minimal, single line each === */}
+      {(client.latitude != null || client.longitude != null || client.notes) && (
+        <div className="bg-white rounded-2xl border border-brand-100 divide-y divide-brand-100">
+          <div className={`flex items-center gap-3 px-5 py-3 ${isAr ? 'flex-row-reverse text-right' : ''}`}>
+            <MapPin className="w-4 h-4 text-brand-300 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] text-brand-400 font-medium uppercase tracking-wide">{isAr ? 'الموقع الجغرافي' : 'Geo Location'}</p>
               {client.latitude != null && client.longitude != null ? (
-                <>
-                  <a href={`https://www.google.com/maps/search/?api=1&query=${client.latitude},${client.longitude}`}
-                    target="_blank" rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 font-medium text-brand-600 hover:underline" dir="ltr">
-                    <MapPin className="w-4 h-4" />
-                    {client.latitude.toFixed(5)}, {client.longitude.toFixed(5)}
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                  {hasRole('admin', 'general_manager', 'systems_info', 'vice_gm') ? (
-                    <>
-                      <button type="button" className="btn-secondary text-xs" onClick={updateLocation} disabled={locUpdating}>
-                        {locUpdating ? (isAr ? 'جاري التحديث...' : 'Updating...') : (isAr ? 'تحديث الموقع' : 'Update location')}
-                      </button>
-                      <button type="button" className="text-xs text-red-500 hover:underline" onClick={clearLocation}>
-                        {isAr ? 'مسح' : 'Clear'}
-                      </button>
-                    </>
-                  ) : (
-                    <span className="text-[11px] text-brand-400 inline-flex items-center gap-1">
-                      🔒 {isAr ? 'الموقع محفوظ ولا يمكن تغييره' : 'Location locked'}
-                    </span>
-                  )}
-                </>
+                <a href={`https://www.google.com/maps/search/?api=1&query=${client.latitude},${client.longitude}`}
+                  target="_blank" rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:text-brand-600" dir="ltr">
+                  {client.latitude.toFixed(5)}, {client.longitude.toFixed(5)}
+                  <ExternalLink className="w-3 h-3" />
+                </a>
               ) : (
-                <>
-                  <span className="text-sm text-brand-400">{isAr ? 'لم يتم تحديد الموقع بعد' : 'Not set'}</span>
-                  <button type="button" className="btn-secondary text-xs" onClick={updateLocation} disabled={locUpdating}>
-                    <MapPin className="w-4 h-4" />
-                    {locUpdating ? (isAr ? 'جاري التقاط الموقع...' : 'Getting location...') : (isAr ? 'التقط موقعي الحالي' : 'Capture current location')}
-                  </button>
-                </>
+                <span className="text-sm text-brand-400">{isAr ? 'لم يتم تحديد الموقع بعد' : 'Not set'}</span>
+              )}
+            </div>
+            <div className={`flex items-center gap-2 ${isAr ? 'flex-row-reverse' : ''}`}>
+              {client.latitude != null && client.longitude != null ? (
+                hasRole('admin', 'general_manager', 'systems_info', 'vice_gm') ? (
+                  <>
+                    <button type="button" className="btn-secondary text-xs" onClick={updateLocation} disabled={locUpdating}>
+                      {locUpdating ? (isAr ? 'جاري التحديث...' : 'Updating...') : (isAr ? 'تحديث' : 'Update')}
+                    </button>
+                    <button type="button" className="text-xs text-red-500 hover:underline" onClick={clearLocation}>
+                      {isAr ? 'مسح' : 'Clear'}
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-[11px] text-brand-400">🔒 {isAr ? 'محفوظ' : 'Locked'}</span>
+                )
+              ) : (
+                <button type="button" className="btn-secondary text-xs" onClick={updateLocation} disabled={locUpdating}>
+                  <MapPin className="w-4 h-4" />
+                  {locUpdating ? (isAr ? 'جاري التقاط...' : 'Getting...') : (isAr ? 'التقط موقعي' : 'Capture')}
+                </button>
               )}
             </div>
           </div>
+          {client.notes && (
+            <div className={`flex items-start gap-3 px-5 py-3 ${isAr ? 'flex-row-reverse text-right' : ''}`}>
+              <FileText className="w-4 h-4 text-brand-300 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] text-brand-400 font-medium uppercase tracking-wide">{t('client_notes')}</p>
+                <p className="text-sm text-brand-700 whitespace-pre-wrap mt-0.5">{client.notes}</p>
+              </div>
+            </div>
+          )}
         </div>
-        {client.notes && (
-          <div className={`mt-4 pt-4 border-t border-brand-100 ${isAr ? 'text-right' : 'text-left'}`}>
-            <p className="text-xs text-brand-400 mb-1">{t('client_notes')}</p>
-            <p className="text-sm text-brand-700">{client.notes}</p>
-          </div>
-        )}
-      </div>
+      )}
 
-      {/* Action buttons — sales activities. Admin and senior management get
-          the same toolbox so they can act on a client when no rep is around. */}
-      {hasRole('sales_rep', 'sales_director', 'assistant_sales', 'admin', 'general_manager', 'systems_info', 'vice_gm') && (
-        <div className={`flex gap-3 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
-          <button className="btn-primary text-sm" onClick={() => setShowContractModal(true)}>
-            <FileText className="w-4 h-4" /> {t('upload_contract')}
-          </button>
-          <button className="btn-secondary text-sm" onClick={() => setShowActivityModal(true)}>
-            <Plus className="w-4 h-4" /> {t('add_note')}
-          </button>
-          <button className="btn-secondary text-sm" onClick={() => setShowVisitModal(true)}>
-            <MapPin className="w-4 h-4" /> {t('log_visit')}
-          </button>
-          {approvedContracts.length > 0 && hasRole('credit_officer', 'admin', 'general_manager', 'systems_info', 'vice_gm') && (
-            <button className="btn-secondary text-sm" onClick={() => setShowPaymentModal(true)}>
-              <CreditCard className="w-4 h-4" /> {t('add_payment')}
+      {/* === Action toolbar — clean and uniform. Primary actions filled,
+          rest outlined. One row, wraps naturally on small screens. === */}
+      {(hasRole('sales_rep', 'sales_director', 'assistant_sales', 'admin', 'general_manager', 'systems_info', 'vice_gm') ||
+        hasRole('reservations', 'admin', 'general_manager', 'systems_info', 'vice_gm')) && (
+        <div className={`flex gap-2 flex-wrap items-center ${isAr ? 'flex-row-reverse' : ''}`}>
+          {hasRole('sales_rep', 'sales_director', 'assistant_sales', 'admin', 'general_manager', 'systems_info', 'vice_gm') && (
+            <button className="btn-primary text-sm" onClick={() => setShowContractModal(true)}>
+              <FileText className="w-4 h-4" /> {t('upload_contract')}
             </button>
           )}
-          <button className="btn-secondary text-sm" onClick={() => {
-            const def = client?.hotelId ? hotels.find(h => h.id === client.hotelId) : null;
-            setQuoteHotelId(def?.id ?? null);
-            setHotelSearch(def?.name || '');
-            setShowQuoteModal(true);
-          }}>
-            <Receipt className="w-4 h-4" /> {isAr ? 'عرض سعر' : 'Price Quote'}
-          </button>
-          <button className="btn-secondary text-sm" onClick={() => {
-            setEmailForm({ to: client?.email || '', cc: '', subject: '', body: '' });
-            setEmailFiles([]);
-            setShowEmailModal(true);
-          }}>
-            <Mail className="w-4 h-4" /> {isAr ? 'إرسال إيميل' : 'Send Email'}
-          </button>
+          {hasRole('reservations', 'admin', 'general_manager', 'systems_info', 'vice_gm') && (
+            <button className="btn-primary text-sm" onClick={() => { setEditingBooking(null); setShowBookingModal(true); }}>
+              <BedDouble className="w-4 h-4" /> {isAr ? 'حجز جديد' : 'New Booking'}
+            </button>
+          )}
+          {hasRole('sales_rep', 'sales_director', 'assistant_sales', 'admin', 'general_manager', 'systems_info', 'vice_gm') && (
+            <>
+              <button className="btn-secondary text-sm" onClick={() => setShowVisitModal(true)}>
+                <MapPin className="w-4 h-4" /> {t('log_visit')}
+              </button>
+              <button className="btn-secondary text-sm" onClick={() => {
+                const def = client?.hotelId ? hotels.find(h => h.id === client.hotelId) : null;
+                setQuoteHotelId(def?.id ?? null);
+                setHotelSearch(def?.name || '');
+                setShowQuoteModal(true);
+              }}>
+                <Receipt className="w-4 h-4" /> {isAr ? 'عرض سعر' : 'Price Quote'}
+              </button>
+              <button className="btn-secondary text-sm" onClick={() => {
+                setEmailForm({ to: client?.email || '', cc: '', subject: '', body: '' });
+                setEmailFiles([]);
+                setShowEmailModal(true);
+              }}>
+                <Mail className="w-4 h-4" /> {isAr ? 'إرسال إيميل' : 'Send Email'}
+              </button>
+              <button className="btn-secondary text-sm" onClick={() => setShowActivityModal(true)}>
+                <Plus className="w-4 h-4" /> {t('add_note')}
+              </button>
+              {approvedContracts.length > 0 && hasRole('credit_officer', 'admin', 'general_manager', 'systems_info', 'vice_gm') && (
+                <button className="btn-secondary text-sm" onClick={() => setShowPaymentModal(true)}>
+                  <CreditCard className="w-4 h-4" /> {t('add_payment')}
+                </button>
+              )}
+            </>
+          )}
         </div>
       )}
 
-      {/* Reservations action: New Booking */}
-      {hasRole('reservations', 'admin', 'general_manager', 'systems_info', 'vice_gm') && (
-        <div className={`flex gap-3 flex-wrap ${isAr ? 'flex-row-reverse' : ''}`}>
-          <button className="btn-primary text-sm" onClick={() => { setEditingBooking(null); setShowBookingModal(true); }}>
-            <BedDouble className="w-4 h-4" /> {isAr ? 'حجز جديد' : 'New Booking'}
-          </button>
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div className="border-b border-brand-200">
-        <div className={`flex gap-6 ${isAr ? 'flex-row-reverse' : ''}`}>
+      {/* === Tabs — underlined, prominent active state. Uses a 2px brand
+          underline + bold text for the active tab so the navigation reads
+          clearly without color overload. === */}
+      <div className="border-b border-brand-100 overflow-x-auto">
+        <div className={`flex gap-1 ${isAr ? 'flex-row-reverse' : ''}`}>
           {tabs.map(tab => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key as any)}
-              className={`pb-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === tab.key ? 'border-brand-500 text-brand-600' : 'border-transparent text-brand-400 hover:text-brand-700'}`}>
+              className={`px-4 py-3 text-sm whitespace-nowrap transition-colors border-b-2 -mb-px ${
+                activeTab === tab.key
+                  ? 'border-brand-900 text-brand-900 font-bold'
+                  : 'border-transparent text-brand-400 hover:text-brand-700 font-medium'
+              }`}>
               {tab.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Overview Tab */}
+      {/* Overview Tab — minimal KPI cards. White background, label up top,
+          big number below. One accent color on the icon, otherwise just
+          typography and weight do the work. */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: t('tab_visits'), value: clientData.visits?.length || 0, icon: '🗺️', color: 'bg-blue-50' },
-            { label: t('tab_contracts'), value: clientData.contracts?.length || 0, icon: '📄', color: 'bg-green-50' },
-            { label: t('tab_activities'), value: clientData.activities?.length || 0, icon: '📌', color: 'bg-amber-50' },
+            { label: t('tab_visits'),     value: clientData.visits?.length || 0,    Icon: MapPin },
+            { label: t('tab_contracts'),  value: clientData.contracts?.length || 0, Icon: FileText },
+            { label: t('tab_activities'), value: clientData.activities?.length || 0, Icon: Clock },
+            { label: isAr ? 'الحجوزات' : 'Bookings', value: bookings.length,         Icon: BedDouble },
           ].map(item => (
-            <div key={item.label} className={`card p-5 ${item.color}`}>
-              <div className={`flex items-center gap-3 ${isAr ? 'flex-row-reverse' : ''}`}>
-                <span className="text-3xl">{item.icon}</span>
-                <div className={isAr ? 'text-right' : ''}>
-                  <p className="text-2xl font-bold text-brand-900">{item.value}</p>
-                  <p className="text-sm text-brand-400">{item.label}</p>
-                </div>
+            <div key={item.label} className="bg-white rounded-xl border border-brand-100 p-5 hover:border-brand-300 hover:shadow-sm transition-all">
+              <div className={`flex items-center justify-between mb-3 ${isAr ? 'flex-row-reverse' : ''}`}>
+                <p className="text-[11px] font-semibold text-brand-500 uppercase tracking-wider">{item.label}</p>
+                <item.Icon className="w-4 h-4 text-brand-300" />
               </div>
+              <p className={`text-3xl font-bold text-brand-900 tracking-tight leading-none ${isAr ? 'text-right' : ''}`}>{item.value}</p>
             </div>
           ))}
         </div>
@@ -1402,7 +1468,6 @@ export default function ClientDetail() {
               lang: quoteForm.lang,
               meals: quoteForm.meals.join(','),
               paymentTerms: quoteForm.paymentTerms,
-              arrivalDate: quoteForm.arrivalDate || null,
             });
             const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
             const a = document.createElement('a'); a.href = url;
@@ -1570,7 +1635,7 @@ export default function ClientDetail() {
               <button type="button" className="text-xs text-brand-600 hover:text-brand-800 font-semibold"
                 onClick={() => {
                   const defaultKind: QuoteItemKind = quoteForm.quoteMode === 'meetings' ? 'meeting' : 'room';
-                  setQuoteItems(p => [...p, { description: '', roomType: '', nights: '', rooms: '', ratePerNight: '', hotelId: '', kind: defaultKind }]);
+                  setQuoteItems(p => [...p, { description: '', roomType: '', nights: '', rooms: '', ratePerNight: '', hotelId: '', kind: defaultKind, arrivalDate: '', departureDate: '' }]);
                 }}>
                 + {isAr ? 'إضافة بند' : 'Add Item'}
               </button>
@@ -1635,6 +1700,42 @@ export default function ClientDetail() {
                         value={item.description} onChange={e => { const n = [...quoteItems]; n[i].description = e.target.value; setQuoteItems(n); }} />
                       <input className="input text-sm" placeholder={labels.type}
                         value={item.roomType} onChange={e => { const n = [...quoteItems]; n[i].roomType = e.target.value; setQuoteItems(n); }} />
+                    </div>
+                    {/* Per-item arrival + departure. When both are filled
+                        the duration (nights) is recomputed automatically so
+                        the rep doesn't have to do the math. Leaving both
+                        empty falls back to the form's top-level arrival. */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-brand-400 font-medium">{isAr ? 'تاريخ الوصول' : 'Arrival'}</label>
+                        <input className="input text-sm" type="date" value={item.arrivalDate || ''}
+                          onChange={e => {
+                            const n = [...quoteItems];
+                            n[i].arrivalDate = e.target.value;
+                            if (n[i].arrivalDate && n[i].departureDate) {
+                              const a = new Date(n[i].arrivalDate).getTime();
+                              const d = new Date(n[i].departureDate).getTime();
+                              const nights = Math.max(0, Math.round((d - a) / 86400000));
+                              n[i].nights = String(nights);
+                            }
+                            setQuoteItems(n);
+                          }} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-brand-400 font-medium">{isAr ? 'تاريخ المغادرة' : 'Departure'}</label>
+                        <input className="input text-sm" type="date" value={item.departureDate || ''}
+                          onChange={e => {
+                            const n = [...quoteItems];
+                            n[i].departureDate = e.target.value;
+                            if (n[i].arrivalDate && n[i].departureDate) {
+                              const a = new Date(n[i].arrivalDate).getTime();
+                              const d = new Date(n[i].departureDate).getTime();
+                              const nights = Math.max(0, Math.round((d - a) / 86400000));
+                              n[i].nights = String(nights);
+                            }
+                            setQuoteItems(n);
+                          }} />
+                      </div>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       <input className="input text-sm" type="number" min="0" placeholder={labels.count}
@@ -1737,12 +1838,9 @@ export default function ClientDetail() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="label">{isAr ? 'تاريخ الوصول' : 'Arrival Date'}</label>
-              <input className="input" type="date" value={quoteForm.arrivalDate}
-                onChange={e => setQuoteForm(p => ({ ...p, arrivalDate: e.target.value }))} />
-            </div>
+          {/* Each item now carries its own arrival / departure dates, so the
+              form no longer asks for a single top-level arrival date. */}
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">{isAr ? 'صلاحية العرض (أيام)' : 'Valid for (days)'}</label>
               <input className="input" type="number" min="1" value={quoteForm.validDays}
